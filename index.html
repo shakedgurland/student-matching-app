@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>שידוך בין סטודנטים | אהבה אמיתית בקמפוס</title>
+    <!-- Fonts: Heebo, Assistant, Rubik -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=Heebo:wght@300;400;700;800;900&family=Rubik:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <a href="#" class="logo" id="homeLogo">שידוך בין סטודנטים</a>
+            <ul class="nav-links">
+                <li><a href="#values">למה אנחנו</a></li>
+                <li><a href="javascript:void(0)" class="btn-nav start-matching-btn">שאלון התאמה</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="app-flow-container">
+        <!-- Screen 1: Welcome / Landing -->
+        <div id="screen-welcome" class="app-screen active">
+            <section class="hero">
+                <div class="container">
+                    <div class="hero-content">
+                        <h1>בואו למצוא אהבה בקמפוס</h1>
+                        <p class="subtitle">אפליקציית התאמות לסטודנטים וסטודנטיות שמחפשים היכרות אמיתית, רגועה ומדויקת — בלי אינסוף החלקות ובלי משחקים.</p>
+                        <button class="btn-hero start-matching-btn">התחל/י שאלון התאמה</button>
+                    </div>
+                    <div class="hero-visual">
+                        <div class="visual-container">
+                            <div class="match-badge-mockup">92% התאמה</div>
+                            <div class="mockup-phone">
+                                <div class="screen">
+                                    <div class="profile-main">
+                                        <div class="profile-pic">✨</div>
+                                        <div class="bar"></div>
+                                        <div class="bar short"></div>
+                                        <div class="bar"></div>
+                                        <div class="bar short" style="width: 30%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="floating-element heart">❤️</div>
+                            <div class="floating-element chat">💬</div>
+                            <div class="floating-element profile-sm">
+                                <div class="circle"></div>
+                                <div class="bar"></div>
+                                <div class="bar short"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Value Cards Section -->
+            <section id="values" class="values" style="background: var(--white);">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>חוויית היכרות אחרת</h2>
+                        <p>אנחנו מאמינים שאיכות תמיד מנצחת כמות. הנה מה שמייחד אותנו:</p>
+                    </div>
+                    <div class="grid-3">
+                        <div class="premium-card value-card">
+                            <div class="icon-wrapper">🎯</div>
+                            <h3>התאמה אחת בכל פעם</h3>
+                            <p>במקום מאות פרופילים, אנחנו נותנים לך את האדם שהכי מתאים לך כרגע. מיקוד מלא בקשר אחד.</p>
+                        </div>
+                        <div class="premium-card value-card">
+                            <div class="icon-wrapper">🖐️</div>
+                            <h3>עד 5 התאמות בחודש</h3>
+                            <p>איכות מעל כמות. אנחנו מגבילים את מספר ההתאמות כדי לוודא שכל אחת מהן מקבלת את תשומת הלב הראויה.</p>
+                        </div>
+                        <div class="premium-card value-card">
+                            <div class="icon-wrapper">⏳</div>
+                            <h3>72 שעות להתחיל שיחה</h3>
+                            <p>יש לכם חלון זמן ברור. אם אף אחד לא כותב תוך 72 שעות, ההתאמה נעלמת והבאה בתור מופיעה.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Problem Section -->
+            <section id="problem">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>די להחלקות האינסופיות</h2>
+                        <p>הגיע הזמן לעבור להיכרויות עם עומק, כוונה ודיוק.</p>
+                    </div>
+                    <div class="grid-3">
+                        <div class="premium-card problem-card">
+                            <div class="icon-wrapper" style="font-size: 2.5rem; margin-bottom: 2rem;">🧠</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">יותר מדי אפשרויות מובילות לשיתוק בחירה.</p>
+                        </div>
+                        <div class="premium-card problem-card">
+                            <div class="icon-wrapper" style="font-size: 2.5rem; margin-bottom: 2rem;">💬</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">הרבה מההתאמות באפליקציות אחרות בכלל לא הופכות לשיחה.</p>
+                        </div>
+                        <div class="premium-card problem-card">
+                            <div class="icon-wrapper" style="font-size: 2.5rem; margin-bottom: 2rem;">✨</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">אנחנו כאן להיכרות רגועה, ממוקדת ועם כוונה אמיתית.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- How It Works Section -->
+            <section id="how-it-works" style="background: var(--white);">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>איך זה עובד?</h2>
+                    </div>
+                    <div class="grid-3">
+                        <div class="premium-card step-card">
+                            <div class="step-num" style="font-size: 3rem; font-weight: 900; color: var(--accent); margin-bottom: 2rem;">1</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">עונים על שאלון התאמה מעמיק ומפורט</p>
+                        </div>
+                        <div class="premium-card step-card">
+                            <div class="step-num" style="font-size: 3rem; font-weight: 900; color: var(--accent); margin-bottom: 2rem;">2</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">האלגוריתם מסנן מועמדים לפי תנאי החובה שלך</p>
+                        </div>
+                        <div class="premium-card step-card">
+                            <div class="step-num" style="font-size: 3rem; font-weight: 900; color: var(--accent); margin-bottom: 2rem;">3</div>
+                            <p style="font-size: 1.2rem; font-weight: 700;">המערכת מחשבת ציון התאמה ובוחרת את הטוב ביותר</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Algorithm Section -->
+            <section id="algorithm">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>האלגוריתם שמוצא לך אהבה</h2>
+                        <p>תהליך חכם ומדויק שנועד למצוא את ההתאמה המושלמת עבורך.</p>
+                    </div>
+                    <div class="grid-4">
+                        <div class="algo-card">
+                            <span class="label">שלב א׳</span>
+                            <h3>תנאי חובה</h3>
+                            <p>סינון קשיח לפי מגדר, גיל, ודת לפני חישוב הציון.</p>
+                        </div>
+                        <div class="algo-card">
+                            <span class="label">שלב ב׳</span>
+                            <h3>ציון התאמה</h3>
+                            <p>שקלול עשרות נתונים אישיים ליצירת התאמה עמוקה.</p>
+                        </div>
+                        <div class="algo-card">
+                            <span class="label">שלב ג׳</span>
+                            <h3>הטוב ביותר</h3>
+                            <p>ההתאמה עם הציון הגבוה ביותר מוצגת לך ראשונה.</p>
+                        </div>
+                        <div class="algo-card">
+                            <span class="label">שלב ד׳</span>
+                            <h3>הגבלה חכמה</h3>
+                            <p>עד 5 התאמות בחודש כדי לשמור על איכות ומיקוד.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Screen 2: Registration -->
+        <div id="screen-registration" class="app-screen">
+            <section class="registration-view">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>יצירת חשבון</h2>
+                        <p>כדי להתחיל את שאלון ההתאמה, צרו חשבון קצר. זהו אבטיפוס בלבד — הנתונים לא נשמרים באמת.</p>
+                    </div>
+
+                    <div class="form-group-card">
+                        <form id="registrationForm">
+                            <div class="form-group">
+                                <label>שם מלא *</label>
+                                <input type="text" id="reg-fullname" required placeholder="ישראל ישראלי">
+                            </div>
+                            <div class="form-group">
+                                <label>אימייל אוניברסיטאי *</label>
+                                <input type="email" id="reg-email" required placeholder="name@university.ac.il">
+                            </div>
+                            <div class="form-group">
+                                <label>שם משתמש *</label>
+                                <input type="text" id="reg-username" required placeholder="username123">
+                            </div>
+                            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                                <div class="form-group">
+                                    <label>סיסמה *</label>
+                                    <input type="password" id="reg-password" required placeholder="••••••••">
+                                </div>
+                                <div class="form-group">
+                                    <label>אישור סיסמה *</label>
+                                    <input type="password" id="reg-confirm" required placeholder="••••••••">
+                                </div>
+                            </div>
+                            <div id="reg-error" class="error-msg" style="display:none; color: #ef4444; font-weight: 700; margin-bottom: 2.5rem; text-align: center; background: #fef2f2; padding: 1rem; border-radius: 12px; border: 1px solid #fecaca;"></div>
+                            <button type="submit" class="btn-primary" style="width: 100%; height: 4rem; font-size: 1.25rem;">המשך לשאלון ההתאמה</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Screen 3: Questionnaire -->
+        <div id="screen-questionnaire" class="app-screen">
+            <section class="questionnaire">
+                <div class="container">
+                    <div class="section-title">
+                        <h2>שאלון התאמה</h2>
+                        <p>בואו נכיר אתכם קצת יותר לעומק כדי למצוא את השידוך המושלם</p>
+                    </div>
+
+                    <div class="progress-container">
+                        <div class="progress-bar-steps">
+                            <div class="step-item-container">
+                                <div class="step-indicator active" data-step="1">1</div>
+                            </div>
+                            <div class="step-item-container">
+                                <div class="step-indicator" data-step="2">2</div>
+                            </div>
+                            <div class="step-item-container">
+                                <div class="step-indicator" data-step="3">3</div>
+                            </div>
+                            <div class="step-item-container">
+                                <div class="step-indicator" data-step="4">4</div>
+                            </div>
+                            <div class="step-item-container">
+                                <div class="step-indicator" data-step="5">5</div>
+                            </div>
+                        </div>
+                        <div class="step-labels">
+                            <span class="active-label">פרטים בסיסיים</span>
+                            <span>דת ואורח חיים</span>
+                            <span>העדפות</span>
+                            <span>אופי ודייטים</span>
+                            <span>תמונות</span>
+                        </div>
+                    </div>
+                    
+                    <form id="matchForm">
+                        <div class="form-group-card">
+                            <!-- Step 1: Core Identity -->
+                            <div class="form-step active" data-step="1">
+                                <div class="form-subsection">
+                                    <h3 class="form-subsection-title">פרטים בסיסיים</h3>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>שם מלא *</label>
+                                            <input type="text" name="fullName" required placeholder="ישראל ישראלי">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>מספר טלפון *</label>
+                                            <input type="tel" name="phone" required placeholder="050-0000000">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>גיל *</label>
+                                            <input type="number" name="age" min="18" max="120" required placeholder="24">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>מגדר *</label>
+                                            <div class="radio-group-modern">
+                                                <label><input type="radio" name="gender" value="נקבה" required> <span>נקבה</span></label>
+                                                <label><input type="radio" name="gender" value="זכר"> <span>זכר</span></label>
+                                                <label><input type="radio" name="gender" value="אחר"> <span>אחר</span></label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>אני מחפש/ת להכיר *</label>
+                                        <div class="radio-group-modern">
+                                            <label><input type="radio" name="seeking" value="בן זוג" required> <span>בן זוג</span></label>
+                                            <label><input type="radio" name="seeking" value="בת זוג"> <span>בת זוג</span></label>
+                                            <label><input type="radio" name="seeking" value="לא משנה לי"> <span>לא משנה</span></label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-navigation">
+                                    <div></div>
+                                    <button type="button" class="btn-primary next-btn">הבא</button>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Religion & Lifestyle -->
+                            <div class="form-step" data-step="2">
+                                <div class="form-subsection">
+                                    <h3 class="form-subsection-title">דת ואורח חיים</h3>
+                                    <div class="form-group">
+                                        <label>מה הדת שלך? *</label>
+                                        <div class="radio-group-modern">
+                                            <label><input type="radio" name="religion_identity" value="יהודי" required> <span>יהודי</span></label>
+                                            <label><input type="radio" name="religion_identity" value="ערבי"> <span>ערבי</span></label>
+                                            <label><input type="radio" name="religion_identity" value="אחר"> <span>אחר</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>אורח חיים דתי *</label>
+                                        <select name="religious_lifestyle" required>
+                                            <option value="" disabled selected>בחרו...</option>
+                                            <option value="חילוני">חילוני</option>
+                                            <option value="מסורתי">מסורתי</option>
+                                            <option value="דתי">דתי</option>
+                                            <option value="חרדי">חרדי</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>עד כמה חשוב לך שבן/בת הזוג יהיה קרוב לדת? *</label>
+                                        <div class="scale-label-container">
+                                            <span>1 = הכי פחות חשוב</span>
+                                            <span>5 = קריטי / הכי חשוב</span>
+                                        </div>
+                                        <div class="radio-group-modern scale">
+                                            <label><input type="radio" name="religion_importance" value="1" required> <span>1</span></label>
+                                            <label><input type="radio" name="religion_importance" value="2"> <span>2</span></label>
+                                            <label><input type="radio" name="religion_importance" value="3"> <span>3</span></label>
+                                            <label><input type="radio" name="religion_importance" value="4"> <span>4</span></label>
+                                            <label><input type="radio" name="religion_importance" value="5"> <span>5</span></label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-navigation">
+                                    <button type="button" class="btn-secondary prev-btn">חזור</button>
+                                    <button type="button" class="btn-primary next-btn">הבא</button>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Preferences -->
+                            <div class="form-step" data-step="3">
+                                <div class="form-subsection">
+                                    <h3 class="form-subsection-title">העדפות היכרות</h3>
+                                    <div class="form-group">
+                                        <label>אופי הקשר *</label>
+                                        <select name="relationship_type" required>
+                                            <option value="" disabled selected>בחרו...</option>
+                                            <option value="קשר רציני">קשר רציני</option>
+                                            <option value="חתונה">חתונה</option>
+                                            <option value="היכרות קלילה">היכרות קלילה</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>גיל מינימלי *</label>
+                                            <input type="number" name="age_range_min" min="18" max="100" required placeholder="18">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>גיל מקסימלי *</label>
+                                            <input type="number" name="age_range_max" min="18" max="100" required placeholder="40">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>האם חשוב שההתאמה תהיה מאותה דת? *</label>
+                                        <div class="radio-group-modern">
+                                            <label><input type="radio" name="same_religion" value="כן" required> <span>כן</span></label>
+                                            <label><input type="radio" name="same_religion" value="לא"> <span>לא</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>מקום מגורים *</label>
+                                        <input type="text" name="location" required placeholder="ירושלים / תל אביב...">
+                                    </div>
+                                </div>
+                                <div class="form-navigation">
+                                    <button type="button" class="btn-secondary prev-btn">חזור</button>
+                                    <button type="button" class="btn-primary next-btn">הבא</button>
+                                </div>
+                            </div>
+
+                            <!-- Step 4: Vibe & Personality -->
+                            <div class="form-step" data-step="4">
+                                <div class="form-subsection">
+                                    <h3 class="form-subsection-title">אופי ודייטים</h3>
+                                    <div class="form-group">
+                                        <label>הפקולטה שלך *</label>
+                                        <select name="user_faculty" required>
+                                            <option value="" disabled selected>בחרו פקולטה...</option>
+                                            <option value="משפטים">משפטים</option>
+                                            <option value="מדמ״ח והנדסה">מדמ״ח והנדסה</option>
+                                            <option value="רפואה">רפואה</option>
+                                            <option value="מדעי הרוח">מדעי הרוח</option>
+                                            <option value="מדעי החברה">מדעי החברה</option>
+                                            <option value="ניהול">ניהול</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>פקולטות מועדפות (ניתן לבחור כמה)</label>
+                                        <div class="checkbox-group-modern">
+                                            <label><input type="checkbox" name="preferred_faculties" value="לא משנה לי"> <span>לא משנה לי</span></label>
+                                            <label><input type="checkbox" name="preferred_faculties" value="משפטים"> <span>משפטים</span></label>
+                                            <label><input type="checkbox" name="preferred_faculties" value="מדמ״ח והנדסה"> <span>מדמ״ח</span></label>
+                                            <label><input type="checkbox" name="preferred_faculties" value="רפואה"> <span>רפואה</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>מה הדייט המושלם בשבילך? *</label>
+                                        <div class="checkbox-group-modern">
+                                            <label><input type="checkbox" name="perfect_date" value="בר שקט"> <span>בר שקט</span></label>
+                                            <label><input type="checkbox" name="perfect_date" value="פיקניק בטבע"> <span>פיקניק</span></label>
+                                            <label><input type="checkbox" name="perfect_date" value="הופעה חיה"> <span>הופעה</span></label>
+                                            <label><input type="checkbox" name="perfect_date" value="מסעדה יוקרתית"> <span>מסעדה</span></label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>ספר/י קצת על עצמך ומה את/ה מחפש/ת *</label>
+                                        <textarea name="partner_type" rows="3" required placeholder="למשל: מישהו מצחיק, שאפתן, אוהב טיולים..."></textarea>
+                                    </div>
+                                </div>
+                                <div class="form-navigation">
+                                    <button type="button" class="btn-secondary prev-btn">חזור</button>
+                                    <button type="button" class="btn-primary next-btn">הבא</button>
+                                </div>
+                            </div>
+
+                            <!-- Step 5: Photos & Final Submit -->
+                            <div class="form-step" data-step="5">
+                                <div class="form-subsection">
+                                    <h3 class="form-subsection-title">תמונות פרופיל</h3>
+                                    <p style="margin-bottom: 2rem;">יש להעלות לפחות תמונה אחת ברורה שלך כדי להמשיך בתהליך ההתאמה.</p>
+                                    <div class="upload-card" id="uploadCard">
+                                        <input type="file" id="photoUpload" multiple accept="image/*" style="display:none;">
+                                        <div class="upload-icon">📸</div>
+                                        <p style="font-weight: 700; color: var(--accent); font-size: 1.2rem;">לחץ/י כאן להעלאת תמונות</p>
+                                        <p style="font-size: 0.9rem; opacity: 0.7; margin-top: 0.5rem;">ניתן להעלות כמה תמונות</p>
+                                    </div>
+                                    <div id="previewContainer" class="preview-grid"></div>
+                                </div>
+                                <div class="form-navigation">
+                                    <button type="button" class="btn-secondary prev-btn">חזור</button>
+                                    <button type="submit" class="btn-primary">סיום ושמירה</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+
+        <!-- Screen 3: Processing -->
+        <div id="screen-processing" class="app-screen">
+            <section class="processing-view">
+                <div class="container">
+                    <div class="processing-card">
+                        <div class="loader-circle"></div>
+                        <h2 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 2rem;">בודקים התאמה עבורך...</h2>
+                        <p id="processing-status" style="font-size: 1.2rem; color: var(--accent); font-weight: 800; margin-bottom: 4rem; min-height: 1.5em;">מתחילים בסריקת המערכת...</p>
+                        <div class="loading-bar-container"><div class="loading-bar-fill"></div></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Screen 4: Result (Match Profile) -->
+        <div id="screen-result" class="app-screen">
+            <section class="result-view">
+                <div class="container">
+                    <div class="result-header-text">
+                        <h2>ההתאמה שלך</h2>
+                        <p>מצאנו התאמה שעברה את תנאי החובה וקיבלה את הציון הגבוה ביותר עבורך.</p>
+                    </div>
+
+                    <div class="match-profile-container">
+                        <!-- Left: Photos -->
+                        <div class="match-gallery">
+                            <div class="main-photo-card">
+                                <div class="match-score-badge">92%</div>
+                                <div id="match-main-img" class="profile-img-large"></div>
+                            </div>
+                            <div class="thumbnail-grid">
+                                <div class="thumb-img"></div>
+                                <div class="thumb-img"></div>
+                                <div class="thumb-img"></div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Details -->
+                        <div class="match-details-card">
+                            <div class="details-header">
+                                <h3 id="match-name-title">נועה, 24</h3>
+                                <p id="match-tagline">שנה ב׳, משפטים</p>
+                            </div>
+
+                            <div class="info-grid-modern">
+                                <div class="info-item-modern">
+                                    <span class="icon">📍</span>
+                                    <div>
+                                        <span class="label">מגורים</span>
+                                        <span class="value" id="match-location">ירושלים</span>
+                                    </div>
+                                </div>
+                                <div class="info-item-modern">
+                                    <span class="icon">🕍</span>
+                                    <div>
+                                        <span class="label">אורח חיים</span>
+                                        <span class="value" id="match-lifestyle">חילונית</span>
+                                    </div>
+                                </div>
+                                <div class="info-item-modern">
+                                    <span class="icon">🔍</span>
+                                    <div>
+                                        <span class="label">מחפשת</span>
+                                        <span class="value" id="match-intent">קשר רציני</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="why-match-section">
+                                <h4>למה זו התאמה טובה</h4>
+                                <div class="why-match-grid">
+                                    <div class="why-card">
+                                        <span class="icon">🎯</span>
+                                        <span class="text" id="why-1">שניכם מחפשים קשר רציני</span>
+                                    </div>
+                                    <div class="why-card">
+                                        <span class="icon">✨</span>
+                                        <span class="text" id="why-2">התאמה גבוהה באורח החיים</span>
+                                    </div>
+                                    <div class="why-card">
+                                        <span class="icon">🍷</span>
+                                        <span class="text" id="why-3">העדפות הדייטים שלכם קרובות</span>
+                                    </div>
+                                    <div class="why-card">
+                                        <span class="icon">❤️</span>
+                                        <span class="text" id="why-4">שפות האהבה שלכם משלימות</span>
+                                    </div>
+                                    <div class="why-card" style="grid-column: span 2;">
+                                        <span class="icon">✅</span>
+                                        <span class="text" id="why-5">עומד/ת בכל תנאי החובה שהגדרת</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="score-breakdown-modern">
+                                <h4>פירוט ציון ההתאמה</h4>
+                                <div id="score-items-container">
+                                    <!-- Dynamic items -->
+                                </div>
+                            </div>
+
+                            <div class="match-actions">
+                                <button class="btn-primary start-chat-btn">התחל/י שיחה 💬</button>
+                                <button class="btn-secondary" onclick="location.reload()">חזרה לדף הבית</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Screen 5: Chat (Realistic Mockup) -->
+        <div id="screen-chat" class="app-screen">
+            <section class="chat-view">
+                <div class="container">
+                    <div class="chat-card">
+                        <!-- Chat Header -->
+                        <div class="chat-header-main">
+                            <div class="chat-header-top">
+                                <button class="back-to-profile" title="חזרה לפרופיל">←</button>
+                                <div class="chat-match-info">
+                                    <div class="chat-avatar-small" id="chat-avatar-val">👩‍💼</div>
+                                    <div class="chat-user-meta">
+                                        <span class="chat-user-name" id="chat-name-val">נועה</span>
+                                        <span class="chat-user-score">92% התאמה</span>
+                                    </div>
+                                </div>
+                                <div class="match-status-badge active" id="match-status-badge">התאמה פעילה</div>
+                            </div>
+                            <div class="chat-header-timer" id="chat-timer-area">
+                                <span class="timer-icon">⏳</span>
+                                <span id="timer-text">נותרו 71:59:42 להתחיל שיחה</span>
+                            </div>
+                        </div>
+
+                        <!-- 72h Rule Notice -->
+                        <div class="rule-notice-panel" id="rule-notice">
+                            <p><strong>כלל 72 השעות:</strong> אם אף אחד מהצדדים לא שולח הודעה תוך 72 שעות, ההתאמה נסגרת ועוברים להתאמה הבאה.</p>
+                        </div>
+
+                        <!-- Chat Body -->
+                        <div class="chat-messages-container" id="chat-messages-container">
+                            <div class="chat-empty-state" id="chat-empty-state">
+                                <div class="empty-icon">✉️</div>
+                                <p>אין הודעות עדיין.</p>
+                                <p class="empty-sub">כתבו הודעה ראשונה כדי לשמור על ההתאמה פעילה.</p>
+                            </div>
+                            <div class="typing-indicator" id="typing-indicator"><span>●</span> <span>●</span> <span>●</span></div>
+                        </div>
+
+                        <!-- Input Area -->
+                        <div class="chat-input-wrapper" id="chat-input-wrapper">
+                            <textarea id="chat-textarea" placeholder="כתבו הודעה לנועה..." rows="1"></textarea>
+                            <button class="send-btn-modern" id="send-msg-btn">שליחה</button>
+                        </div>
+
+                        <!-- Simulation Controls -->
+                        <div class="chat-simulation-footer">
+                            <button class="btn-simulation" id="simulate-close-btn">💡 סימולציית סגירת התאמה</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <span class="footer-logo">שידוך בין סטודנטים</span>
+                <ul class="footer-links">
+                    <li><a href="#values">למה אנחנו</a></li>
+                    <li><a href="#problem">הפתרון</a></li>
+                    <li><a href="#algorithm">האלגוריתם</a></li>
+                    <li><a href="javascript:void(0)" class="start-matching-btn">שאלון התאמה</a></li>
+                </ul>
+                <div class="footer-bottom">
+                    <p>&copy; 2026. נבנה עבור קורס Vibe Coding. כל הזכויות שמורות.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
