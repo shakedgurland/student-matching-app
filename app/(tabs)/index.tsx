@@ -1,98 +1,115 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export default function HomeScreen() {
+export default function WelcomeScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
+    <ThemedView style={styles.container}>
+      <View style={styles.content}>
+        <ThemedText type="title" style={styles.appName}>
+          UniMatch
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        <View style={styles.textSection}>
+          <ThemedText type="title" style={styles.headline}>
+            ההתאמה הסטודנטיאלית שלך מתחילה כאן
+          </ThemedText>
+          <ThemedText style={styles.subtitle}>
+            מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין, ערכים, פקולטה ומה שבאמת חשוב.
+          </ThemedText>
+        </View>
+
+        <View style={styles.buttonSection}>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: Colors[colorScheme].tint }]}
+            activeOpacity={0.8}>
+            <ThemedText style={styles.primaryButtonText}>התחל התאמה</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryButton}>
+            <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
+              כבר יש לי חשבון
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+
+        <ThemedText style={styles.trustNote}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
+      </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 48,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  appName: {
+    fontSize: 40,
+    fontWeight: '900',
+    letterSpacing: -1,
+    color: '#0a7ea4',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
+  textSection: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  headline: {
+    textAlign: 'center',
+    fontSize: 32,
+    lineHeight: 40,
+  },
+  subtitle: {
+    textAlign: 'center',
+    fontSize: 18,
+    lineHeight: 26,
+    opacity: 0.7,
+  },
+  buttonSection: {
+    width: '100%',
+    gap: 16,
+    marginTop: 20,
+  },
+  primaryButton: {
+    height: 64,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    height: 56,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 18,
+  },
+  trustNote: {
+    fontSize: 14,
+    opacity: 0.5,
     position: 'absolute',
+    bottom: 40,
+    textAlign: 'center',
   },
 });
