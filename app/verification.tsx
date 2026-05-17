@@ -14,15 +14,66 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FAFBFC',
-  primary: '#2EC4B6',
-  secondary: '#3D348B',
-  accent: '#FF6B6B',
+  bg: '#FCFCFD',
+  primary: '#2EC4B6', // Main brand color (Turquoise)
+  accent: '#FF7A6B', // Emotional accent (Coral)
+  secondary: '#5B4DFF', // Branding accent (Indigo)
   text: '#172033',
   textLight: '#667085',
-  border: '#E7ECF2',
+  border: '#E7EAF0',
   card: '#FFFFFF',
-  softBg: '#F3F7F8',
+  surface: '#F7F7FB',
+};
+
+const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?: boolean }) => {
+  const strokeWidth = size * 0.2;
+  const innerSize = size - strokeWidth;
+  const sparkSize = size * 0.14;
+
+  return (
+    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
+      <View style={{
+        width: innerSize,
+        height: innerSize,
+        borderBottomLeftRadius: innerSize / 2,
+        borderBottomRightRadius: innerSize / 2,
+        borderWidth: strokeWidth,
+        borderColor: UI_COLORS.secondary,
+        borderTopWidth: 0,
+      }}>
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          left: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          right: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+      </View>
+      {showSpark && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          width: sparkSize,
+          height: sparkSize,
+          borderRadius: sparkSize / 2,
+          backgroundColor: UI_COLORS.accent,
+        }} />
+      )}
+    </View>
+  );
 };
 
 export default function VerificationScreen() {
@@ -36,7 +87,7 @@ export default function VerificationScreen() {
     text: isDark ? '#F1F5F9' : UI_COLORS.text,
     textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
-    softBg: isDark ? 'rgba(46, 196, 182, 0.1)' : UI_COLORS.softBg,
+    surface: isDark ? 'rgba(46, 196, 182, 0.1)' : UI_COLORS.surface,
   };
 
   return (
@@ -45,9 +96,15 @@ export default function VerificationScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
-              אימות סטודנט
-            </ThemedText>
+            <View style={styles.topIcon}>
+              <BrandMark size={36} />
+            </View>
+            <View style={styles.titleContainer}>
+              <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
+                אימות סטודנט
+              </ThemedText>
+              <View style={[styles.titleDot, { backgroundColor: UI_COLORS.accent }]} />
+            </View>
             <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight }]}>
               UniMatch מיועדת לסטודנטים וסטודנטיות בלבד. בשלב הראשון נאמת את הסטטוס שלך באמצעות מייל אוניברסיטאי.
             </ThemedText>
@@ -94,15 +151,18 @@ export default function VerificationScreen() {
           </View>
 
           <View style={styles.privacySection}>
-            <ThemedText style={[styles.privacyNote, { color: dynamicColors.textLight }]}>
-              האימות נועד לשמור על קהילה סטודנטיאלית בטוחה. מידע רגיש לא יוצג למשתמשים אחרים.
-            </ThemedText>
+            <View style={styles.privacyContent}>
+               <View style={[styles.badgeDot, { backgroundColor: UI_COLORS.accent }]} />
+               <ThemedText style={[styles.privacyNote, { color: dynamicColors.textLight }]}>
+                האימות נועד לשמור על קהילה סטודנטיאלית בטוחה.
+              </ThemedText>
+            </View>
           </View>
           
           <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}>
-              <ThemedText style={[styles.backButtonText, { color: UI_COLORS.secondary }]}>
+              <ThemedText style={[styles.backButtonText, { color: UI_COLORS.text }]}>
                 חזרה
               </ThemedText>
           </TouchableOpacity>
@@ -125,12 +185,26 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 20,
   },
+  topIcon: {
+    marginBottom: 4,
+  },
+  titleContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
     textAlign: 'right',
     letterSpacing: -0.5,
     lineHeight: 36,
+  },
+  titleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -169,6 +243,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    shadowColor: '#2EC4B6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',
@@ -203,6 +282,17 @@ const styles = StyleSheet.create({
   },
   privacySection: {
     marginTop: 8,
+    alignItems: 'center',
+  },
+  privacyContent: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   privacyNote: {
     fontSize: 13,

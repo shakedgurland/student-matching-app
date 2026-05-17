@@ -15,14 +15,65 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FAFBFC',
-  primary: '#2EC4B6',
-  secondary: '#3D348B',
-  accent: '#FF6B6B',
+  bg: '#FCFCFD',
+  primary: '#2EC4B6', // Main brand color (Turquoise)
+  accent: '#FF7A6B', // Emotional accent (Coral)
+  secondary: '#5B4DFF', // Branding accent (Indigo)
   text: '#172033',
   textLight: '#667085',
-  border: '#E7ECF2',
+  border: '#E7EAF0',
   card: '#FFFFFF',
+};
+
+const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?: boolean }) => {
+  const strokeWidth = size * 0.2;
+  const innerSize = size - strokeWidth;
+  const sparkSize = size * 0.14;
+
+  return (
+    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
+      <View style={{
+        width: innerSize,
+        height: innerSize,
+        borderBottomLeftRadius: innerSize / 2,
+        borderBottomRightRadius: innerSize / 2,
+        borderWidth: strokeWidth,
+        borderColor: UI_COLORS.secondary,
+        borderTopWidth: 0,
+      }}>
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          left: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          right: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+      </View>
+      {showSpark && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          width: sparkSize,
+          height: sparkSize,
+          borderRadius: sparkSize / 2,
+          backgroundColor: UI_COLORS.accent,
+        }} />
+      )}
+    </View>
+  );
 };
 
 export default function SignupScreen() {
@@ -82,9 +133,15 @@ export default function SignupScreen() {
         style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
-              יצירת חשבון
-            </ThemedText>
+            <View style={styles.topIcon}>
+              <BrandMark size={36} />
+            </View>
+            <View style={styles.titleContainer}>
+              <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
+                יצירת חשבון
+              </ThemedText>
+              <View style={[styles.titleDot, { backgroundColor: UI_COLORS.accent }]} />
+            </View>
             <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight }]}>
               נתחיל בכמה פרטים בסיסיים לפני שאלון ההתאמה
             </ThemedText>
@@ -168,7 +225,7 @@ export default function SignupScreen() {
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => router.back()}>
-              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.secondary }]}>
+              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
                 כבר יש לי חשבון
               </ThemedText>
             </TouchableOpacity>
@@ -193,13 +250,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingTop: 20,
   },
+  topIcon: {
+    marginBottom: 16,
+  },
+  titleContainer: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
-    marginBottom: 8,
     textAlign: 'right',
     letterSpacing: -0.5,
     lineHeight: 36,
+  },
+  titleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -239,9 +310,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
     shadowColor: '#2EC4B6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',

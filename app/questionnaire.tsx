@@ -22,18 +22,68 @@ type Step = 1 | 2 | 3 | 4 | 5;
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FAFBFC', // Almost-white clean background
-  softBg: '#F3F7F8', // Subtle surface
-  selectedBg: '#E8F8F6', // Selected background for chips/cards
-  primary: '#2EC4B6', // Fresh turquoise/aqua
-  secondary: '#3D348B', // Premium indigo
-  accent: '#FF6B6B', // Coral emotional accent
-  text: '#172033', // Deep navy
-  textLight: '#667085', // Soft gray-blue
-  selectedText: '#0F766E', // Text color for selected state
-  border: '#E7ECF2', // Border color
+  bg: '#FCFCFD',
+  primary: '#2EC4B6', // Main action color (Turquoise)
+  accent: '#FF7A6B', // Emotional accent (Coral)
+  secondary: '#5B4DFF', // Premium Branding accent (Indigo)
+  text: '#172033',
+  textLight: '#667085',
+  border: '#E7EAF0',
   card: '#FFFFFF',
-  progressInactive: '#E7ECF2',
+  progressInactive: '#E7EAF0',
+  selectedBg: '#E8F8F6', // Subtle aqua for selection
+  selectedText: '#0F766E',
+};
+
+const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?: boolean }) => {
+  const strokeWidth = size * 0.2;
+  const innerSize = size - strokeWidth;
+  const sparkSize = size * 0.14;
+
+  return (
+    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
+      <View style={{
+        width: innerSize,
+        height: innerSize,
+        borderBottomLeftRadius: innerSize / 2,
+        borderBottomRightRadius: innerSize / 2,
+        borderWidth: strokeWidth,
+        borderColor: UI_COLORS.secondary,
+        borderTopWidth: 0,
+      }}>
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          left: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          right: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+      </View>
+      {showSpark && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          width: sparkSize,
+          height: sparkSize,
+          borderRadius: sparkSize / 2,
+          backgroundColor: UI_COLORS.accent,
+        }} />
+      )}
+    </View>
+  );
 };
 
 export default function QuestionnaireScreen() {
@@ -48,7 +98,6 @@ export default function QuestionnaireScreen() {
     text: isDark ? '#F1F5F9' : UI_COLORS.text,
     textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
-    softBg: isDark ? 'rgba(46, 196, 182, 0.1)' : UI_COLORS.softBg,
     selectedBg: isDark ? 'rgba(46, 196, 182, 0.2)' : UI_COLORS.selectedBg,
   };
 
@@ -122,18 +171,24 @@ export default function QuestionnaireScreen() {
   };
 
   const renderProgress = () => (
-    <View style={styles.progressContainer}>
-      {[1, 2, 3, 4, 5].map((step) => (
-        <View
-          key={step}
-          style={[
-            styles.progressSegment,
-            { 
-              backgroundColor: step <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive,
-            },
-          ]}
-        />
-      ))}
+    <View style={styles.progressHeader}>
+      <View style={styles.progressContainer}>
+        {[1, 2, 3, 4, 5].map((step) => (
+          <View
+            key={step}
+            style={[
+              styles.progressSegment,
+              { 
+                backgroundColor: step <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive,
+              },
+            ]}
+          />
+        ))}
+      </View>
+      <View style={styles.headerBadge}>
+        <BrandMark size={20} />
+        <ThemedText style={styles.badgeText}>התאמה חכמה</ThemedText>
+      </View>
     </View>
   );
 
@@ -168,7 +223,10 @@ export default function QuestionnaireScreen() {
     <View style={styles.stepContent}>
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1</ThemedText>
-        <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.secondary }]}>מי אני כסטודנט/ית</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>מי אני כסטודנט/ית</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
       </View>
 
       <View style={styles.formGroup}>
@@ -232,7 +290,7 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>7. קמפוס</ThemedText>
-        {renderSingleSelect('campus', ['הר הצופים', 'גבעת רם', 'עין כרם', 'רחובות', 'אחר'])}
+        {renderSingleSelect('campus', ['הצופים', 'גבעת רם', 'עין כרם', 'רחובות', 'אחר'])}
       </View>
     </View>
   );
@@ -241,7 +299,10 @@ export default function QuestionnaireScreen() {
     <View style={styles.stepContent}>
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 2</ThemedText>
-        <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.secondary }]}>מה אני מחפש/ת ב-UniMatch</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>מה אני מחפש/ת ב-UniMatch</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
       </View>
 
       <View style={styles.formGroup}>
@@ -320,7 +381,10 @@ export default function QuestionnaireScreen() {
     <View style={styles.stepContent}>
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 3</ThemedText>
-        <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.secondary }]}>אופי וסגנון חברתי</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>אופי וסגנון חברתי</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
       </View>
       
       <View style={styles.formGroup}>
@@ -372,7 +436,10 @@ export default function QuestionnaireScreen() {
     <View style={styles.stepContent}>
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 4</ThemedText>
-        <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.secondary }]}>ערכים, תקשורת וסגנון קשר</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>ערכים, תקשורת וסגנון קשר</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
       </View>
 
       <View style={styles.formGroup}>
@@ -447,7 +514,10 @@ export default function QuestionnaireScreen() {
     <View style={styles.stepContent}>
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 5</ThemedText>
-        <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.secondary }]}>העדפות, גבולות ודיל־ברייקרים</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>העדפות, גבולות ודיל־ברייקרים</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
       </View>
 
       <View style={styles.formGroup}>
@@ -546,7 +616,7 @@ export default function QuestionnaireScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.navButton} onPress={prevStep}>
-                <ThemedText style={[styles.secondaryNavText, { color: UI_COLORS.secondary }]}>חזרה</ThemedText>
+                <ThemedText style={[styles.secondaryNavText, { color: UI_COLORS.primary }]}>חזרה</ThemedText>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -560,14 +630,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  progressHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginTop: 20,
+    marginBottom: 10,
+  },
   progressContainer: {
     flexDirection: 'row-reverse',
     height: 4,
-    width: '100%',
-    paddingHorizontal: 24,
-    gap: 8,
-    marginTop: 20,
-    marginBottom: 10,
+    flex: 1,
+    gap: 6,
+  },
+  headerBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 16,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E7EAF0',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#667085',
   },
   progressSegment: {
     flex: 1,
@@ -589,12 +681,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: 0.5,
   },
+  subtitleContainer: {
+    alignItems: 'flex-end',
+  },
   stepSubtitle: {
     fontSize: 26,
     fontWeight: '800',
     textAlign: 'right',
     letterSpacing: -0.5,
     lineHeight: 34,
+  },
+  subtitleLine: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
+    marginTop: 4,
   },
   formGroup: {
     gap: 16,
@@ -684,8 +785,8 @@ const styles = StyleSheet.create({
   primaryNav: {
     shadowColor: '#2EC4B6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
     elevation: 2,
   },
   primaryNavText: {

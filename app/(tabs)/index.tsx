@@ -5,13 +5,73 @@ import { ThemedView } from '@/components/themed-view';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FAFBFC',
-  primary: '#2EC4B6',
-  secondary: '#3D348B',
-  accent: '#FF6B6B',
+  bg: '#FCFCFD',
+  primary: '#2EC4B6', // Main brand color (Turquoise)
+  accent: '#FF7A6B', // Emotional accent (Coral)
+  secondary: '#5B4DFF', // Premium Branding accent (Indigo)
   text: '#172033',
   textLight: '#667085',
-  border: '#E7ECF2',
+  border: '#E7EAF0',
+};
+
+const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?: boolean }) => {
+  const strokeWidth = size * 0.2;
+  const innerSize = size - strokeWidth;
+  const sparkSize = size * 0.14;
+
+  return (
+    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
+      {/* Geometric Rounded U / Magnet Shape */}
+      <View style={{
+        width: innerSize,
+        height: innerSize,
+        borderBottomLeftRadius: innerSize / 2,
+        borderBottomRightRadius: innerSize / 2,
+        borderWidth: strokeWidth,
+        borderColor: UI_COLORS.secondary, // Using Indigo for the magnet base
+        borderTopWidth: 0,
+      }}>
+        {/* Magnet Poles */}
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          left: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+        <View style={{
+          position: 'absolute',
+          top: -strokeWidth/2,
+          right: -strokeWidth,
+          width: strokeWidth,
+          height: strokeWidth,
+          backgroundColor: UI_COLORS.secondary,
+          borderTopLeftRadius: strokeWidth * 0.2,
+          borderTopRightRadius: strokeWidth * 0.2,
+        }} />
+      </View>
+
+      {/* Connection spark between poles */}
+      {showSpark && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          width: sparkSize,
+          height: sparkSize,
+          borderRadius: sparkSize / 2,
+          backgroundColor: UI_COLORS.accent,
+          shadowColor: UI_COLORS.accent,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.4,
+          shadowRadius: 6,
+          elevation: 2,
+        }} />
+      )}
+    </View>
+  );
 };
 
 export default function WelcomeScreen() {
@@ -20,13 +80,20 @@ export default function WelcomeScreen() {
   return (
     <ThemedView style={[styles.container, { backgroundColor: UI_COLORS.bg }]}>
       <View style={styles.content}>
-        <ThemedText style={[styles.appName, { color: UI_COLORS.primary }]}>
-          UniMatch
-        </ThemedText>
+        <View style={styles.logoContainer}>
+          <BrandMark size={56} />
+          <ThemedText style={[styles.appName, { color: UI_COLORS.text }]}>
+            UniMatch
+          </ThemedText>
+        </View>
 
         <View style={styles.textSection}>
+          <View style={[styles.badge, { backgroundColor: UI_COLORS.accent + '15', borderColor: UI_COLORS.accent + '30' }]}>
+            <ThemedText style={[styles.badgeText, { color: UI_COLORS.accent }]}>התאמה משמעותית אחת בכל פעם</ThemedText>
+          </View>
+          
           <ThemedText style={[styles.headline, { color: UI_COLORS.text }]}>
-            ההתאמה הסטודנטיאלית שלך מתחילה כאן
+            החיבור הסטודנטיאלי שלך מתחיל כאן
           </ThemedText>
           <ThemedText style={[styles.subtitle, { color: UI_COLORS.textLight }]}>
             מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין, ערכים, פקולטה ומה שבאמת חשוב.
@@ -42,15 +109,15 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1 }]}>
-            <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.secondary }]}>
+            style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1, backgroundColor: '#FFF' }]}>
+            <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
               כבר יש לי חשבון
             </ThemedText>
           </TouchableOpacity>
         </View>
 
         <View style={styles.trustSection}>
-          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.accent }]} />
+          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.primary }]} />
           <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
         </View>
       </View>
@@ -69,14 +136,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 40,
   },
+  logoContainer: {
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 32,
+  },
   appName: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '900',
-    letterSpacing: -1.5,
+    letterSpacing: -1,
+    lineHeight: 40,
+    textAlign: 'center',
   },
   textSection: {
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
+  },
+  badge: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   headline: {
     textAlign: 'center',
@@ -103,9 +188,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#2EC4B6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',
