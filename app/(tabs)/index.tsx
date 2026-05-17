@@ -1,4 +1,5 @@
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
@@ -6,6 +7,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function WelcomeScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const router = useRouter();
 
   return (
     <ThemedView style={styles.container}>
@@ -26,7 +28,8 @@ export default function WelcomeScreen() {
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: Colors[colorScheme].tint }]}
-            activeOpacity={0.8}>
+            activeOpacity={0.8}
+            onPress={() => router.push('/signup')}>
             <ThemedText style={styles.primaryButtonText}>התחל התאמה</ThemedText>
           </TouchableOpacity>
 
