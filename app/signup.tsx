@@ -7,17 +7,36 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+// Design Constants for Premium UniMatch Style
+const UI_COLORS = {
+  bg: '#FAFBFC',
+  primary: '#2EC4B6',
+  secondary: '#3D348B',
+  accent: '#FF6B6B',
+  text: '#172033',
+  textLight: '#667085',
+  border: '#E7ECF2',
+  card: '#FFFFFF',
+};
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
+
+  const isDark = colorScheme === 'dark';
+  const dynamicColors = {
+    bg: isDark ? '#0F172A' : UI_COLORS.bg,
+    card: isDark ? '#1E293B' : UI_COLORS.card,
+    text: isDark ? '#F1F5F9' : UI_COLORS.text,
+    textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
+    border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
+  };
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -51,97 +70,96 @@ export default function SignupScreen() {
 
   const handleSignup = () => {
     if (validate()) {
-      // For now, navigate to the verification screen
       router.push('/verification');
     }
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <ThemedText type="title" style={styles.title}>
+            <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
               יצירת חשבון
             </ThemedText>
-            <ThemedText style={styles.subtitle}>
+            <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight }]}>
               נתחיל בכמה פרטים בסיסיים לפני שאלון ההתאמה
             </ThemedText>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>שם משתמש</ThemedText>
+              <ThemedText style={[styles.label, { color: dynamicColors.text }]}>שם משתמש</ThemedText>
               <TextInput
                 style={[
                   styles.input,
-                  { color: Colors[colorScheme].text, borderColor: errors.username ? '#ff4444' : '#ccc' },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.username ? UI_COLORS.accent : dynamicColors.border },
                 ]}
                 placeholder="הזן שם משתמש"
-                placeholderTextColor="#999"
+                placeholderTextColor={dynamicColors.textLight}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
               />
-              {errors.username && <ThemedText style={styles.errorText}>{errors.username}</ThemedText>}
+              {errors.username && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.username}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>אימייל</ThemedText>
+              <ThemedText style={[styles.label, { color: dynamicColors.text }]}>אימייל</ThemedText>
               <TextInput
                 style={[
                   styles.input,
-                  { color: Colors[colorScheme].text, borderColor: errors.email ? '#ff4444' : '#ccc' },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.email ? UI_COLORS.accent : dynamicColors.border },
                 ]}
                 placeholder="example@univ.ac.il"
-                placeholderTextColor="#999"
+                placeholderTextColor={dynamicColors.textLight}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              {errors.email && <ThemedText style={styles.errorText}>{errors.email}</ThemedText>}
+              {errors.email && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.email}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>סיסמה</ThemedText>
+              <ThemedText style={[styles.label, { color: dynamicColors.text }]}>סיסמה</ThemedText>
               <TextInput
                 style={[
                   styles.input,
-                  { color: Colors[colorScheme].text, borderColor: errors.password ? '#ff4444' : '#ccc' },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.password ? UI_COLORS.accent : dynamicColors.border },
                 ]}
                 placeholder="לפחות 6 תווים"
-                placeholderTextColor="#999"
+                placeholderTextColor={dynamicColors.textLight}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
               />
-              {errors.password && <ThemedText style={styles.errorText}>{errors.password}</ThemedText>}
+              {errors.password && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.password}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
-              <ThemedText style={styles.label}>אימות סיסמה</ThemedText>
+              <ThemedText style={[styles.label, { color: dynamicColors.text }]}>אימות סיסמה</ThemedText>
               <TextInput
                 style={[
                   styles.input,
-                  { color: Colors[colorScheme].text, borderColor: errors.confirmPassword ? '#ff4444' : '#ccc' },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.confirmPassword ? UI_COLORS.accent : dynamicColors.border },
                 ]}
                 placeholder="הזן את הסיסמה שנית"
-                placeholderTextColor="#999"
+                placeholderTextColor={dynamicColors.textLight}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
               />
               {errors.confirmPassword && (
-                <ThemedText style={styles.errorText}>{errors.confirmPassword}</ThemedText>
+                <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.confirmPassword}</ThemedText>
               )}
             </View>
 
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: Colors[colorScheme].tint }]}
+              style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
               activeOpacity={0.8}
               onPress={handleSignup}>
               <ThemedText style={styles.primaryButtonText}>המשך לאימות סטודנט</ThemedText>
@@ -150,7 +168,7 @@ export default function SignupScreen() {
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => router.back()}>
-              <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
+              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.secondary }]}>
                 כבר יש לי חשבון
               </ThemedText>
             </TouchableOpacity>
@@ -168,73 +186,77 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
-    paddingTop: 80,
+    paddingTop: 60,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: 32,
     alignItems: 'flex-start',
+    paddingTop: 20,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     marginBottom: 8,
     textAlign: 'right',
+    letterSpacing: -0.5,
+    lineHeight: 36,
   },
   subtitle: {
-    fontSize: 18,
-    opacity: 0.7,
+    fontSize: 16,
     textAlign: 'right',
     lineHeight: 24,
   },
   form: {
-    gap: 20,
+    gap: 16,
   },
   inputContainer: {
-    gap: 8,
+    gap: 6,
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'right',
   },
   input: {
-    height: 56,
+    height: 52,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 16,
     fontSize: 16,
     textAlign: 'right',
   },
   errorText: {
-    color: '#ff4444',
-    fontSize: 12,
+    fontSize: 13,
     textAlign: 'right',
+    fontWeight: '500',
+    marginTop: -2,
   },
   primaryButton: {
-    height: 56,
+    height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    marginTop: 16,
+    shadowColor: '#2EC4B6',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 2,
   },
   primaryButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   secondaryButton: {
-    height: 56,
+    height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secondaryButtonText: {
     fontSize: 16,
-    color: '#0a7ea4',
+    fontWeight: '600',
   },
 });

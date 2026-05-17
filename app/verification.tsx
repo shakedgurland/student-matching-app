@@ -9,70 +9,92 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+
+// Design Constants for Premium UniMatch Style
+const UI_COLORS = {
+  bg: '#FAFBFC',
+  primary: '#2EC4B6',
+  secondary: '#3D348B',
+  accent: '#FF6B6B',
+  text: '#172033',
+  textLight: '#667085',
+  border: '#E7ECF2',
+  card: '#FFFFFF',
+  softBg: '#F3F7F8',
+};
 
 export default function VerificationScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
 
+  const isDark = colorScheme === 'dark';
+  const dynamicColors = {
+    bg: isDark ? '#0F172A' : UI_COLORS.bg,
+    card: isDark ? '#1E293B' : UI_COLORS.card,
+    text: isDark ? '#F1F5F9' : UI_COLORS.text,
+    textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
+    border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
+    softBg: isDark ? 'rgba(46, 196, 182, 0.1)' : UI_COLORS.softBg,
+  };
+
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <ThemedText type="title" style={styles.title}>
+            <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
               אימות סטודנט
             </ThemedText>
-            <ThemedText style={styles.subtitle}>
+            <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight }]}>
               UniMatch מיועדת לסטודנטים וסטודנטיות בלבד. בשלב הראשון נאמת את הסטטוס שלך באמצעות מייל אוניברסיטאי.
             </ThemedText>
           </View>
 
-          <View style={styles.mainCard}>
+          <View style={[styles.mainCard, { backgroundColor: dynamicColors.card, borderColor: UI_COLORS.primary }]}>
             <View style={styles.cardHeader}>
-              <IconSymbol name="envelope.fill" size={24} color={Colors[colorScheme].tint} />
-              <ThemedText style={styles.cardTitle}>אימות עם מייל אוניברסיטאי</ThemedText>
+              <IconSymbol name="envelope.fill" size={24} color={UI_COLORS.primary} />
+              <ThemedText style={[styles.cardTitle, { color: dynamicColors.text }]}>אימות עם מייל אוניברסיטאי</ThemedText>
             </View>
-            <ThemedText style={styles.cardDescription}>
+            <ThemedText style={[styles.cardDescription, { color: dynamicColors.textLight }]}>
               נשלח קישור אימות למייל המוסדי שלך. לאחר האימות תוכלי להמשיך לשאלון ההתאמה.
             </ThemedText>
             <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: Colors[colorScheme].tint }]}
+              style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
               activeOpacity={0.8}
-              onPress={() => console.log('Send verification email')}>
+              onPress={() => router.push('/questionnaire')}>
               <ThemedText style={styles.primaryButtonText}>שלח מייל אימות</ThemedText>
             </TouchableOpacity>
           </View>
 
           <View style={styles.futureSection}>
-            <ThemedText style={styles.sectionTitle}>אפשרויות אימות נוספות בהמשך</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>אפשרויות אימות נוספות בהמשך</ThemedText>
             
-            <View style={styles.disabledCard}>
+            <View style={[styles.disabledCard, { backgroundColor: dynamicColors.card, borderColor: UI_COLORS.border }]}>
               <View style={styles.cardHeader}>
-                <IconSymbol name="person.text.rectangle.fill" size={20} color="#999" />
-                <ThemedText style={styles.disabledCardTitle}>תעודת סטודנט / אישור לימודים</ThemedText>
+                <IconSymbol name="person.text.rectangle.fill" size={20} color={dynamicColors.textLight} />
+                <ThemedText style={[styles.disabledCardTitle, { color: dynamicColors.textLight }]}>תעודת סטודנט / אישור לימודים</ThemedText>
               </View>
-              <ThemedText style={styles.disabledCardDescription}>
+              <ThemedText style={[styles.disabledCardDescription, { color: dynamicColors.textLight }]}>
                 בשלב מתקדם יותר ניתן יהיה לאמת סטטוס סטודנט גם באמצעות מסמך לימודים.
               </ThemedText>
             </View>
 
-            <View style={styles.disabledCard}>
+            <View style={[styles.disabledCard, { backgroundColor: dynamicColors.card, borderColor: UI_COLORS.border }]}>
               <View style={styles.cardHeader}>
-                <IconSymbol name="checkmark.shield.fill" size={20} color="#999" />
-                <ThemedText style={styles.disabledCardTitle}>בדיקה ידנית</ThemedText>
+                <IconSymbol name="checkmark.shield.fill" size={20} color={dynamicColors.textLight} />
+                <ThemedText style={[styles.disabledCardTitle, { color: dynamicColors.textLight }]}>בדיקה ידנית</ThemedText>
               </View>
-              <ThemedText style={styles.disabledCardDescription}>
+              <ThemedText style={[styles.disabledCardDescription, { color: dynamicColors.textLight }]}>
                 למקרים שבהם אין מייל מוסדי או שהאימות לא הצליח.
               </ThemedText>
             </View>
           </View>
 
           <View style={styles.privacySection}>
-            <ThemedText style={styles.privacyNote}>
+            <ThemedText style={[styles.privacyNote, { color: dynamicColors.textLight }]}>
               האימות נועד לשמור על קהילה סטודנטיאלית בטוחה. מידע רגיש לא יוצג למשתמשים אחרים.
             </ThemedText>
           </View>
@@ -80,7 +102,7 @@ export default function VerificationScreen() {
           <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}>
-              <ThemedText type="defaultSemiBold" style={styles.backButtonText}>
+              <ThemedText style={[styles.backButtonText, { color: UI_COLORS.secondary }]}>
                 חזרה
               </ThemedText>
           </TouchableOpacity>
@@ -101,25 +123,30 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 12,
+    paddingTop: 20,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'right',
+    letterSpacing: -0.5,
+    lineHeight: 36,
   },
   subtitle: {
-    fontSize: 18,
-    opacity: 0.7,
+    fontSize: 16,
     textAlign: 'right',
-    lineHeight: 26,
+    lineHeight: 24,
   },
   mainCard: {
-    backgroundColor: 'rgba(10, 126, 164, 0.05)',
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 24,
     gap: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 126, 164, 0.2)',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row-reverse',
@@ -127,18 +154,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
     textAlign: 'right',
   },
   cardDescription: {
-    fontSize: 16,
-    opacity: 0.8,
+    fontSize: 15,
     textAlign: 'right',
     lineHeight: 22,
   },
   primaryButton: {
-    height: 56,
+    height: 52,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -147,53 +173,49 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   futureSection: {
     gap: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     textAlign: 'right',
     marginBottom: 4,
   },
   disabledCard: {
-    backgroundColor: 'rgba(153, 153, 153, 0.05)',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(153, 153, 153, 0.1)',
   },
   disabledCardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#666',
     textAlign: 'right',
   },
   disabledCardDescription: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 13,
     textAlign: 'right',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   privacySection: {
     marginTop: 8,
   },
   privacyNote: {
-    fontSize: 14,
-    opacity: 0.5,
+    fontSize: 13,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   backButton: {
-    height: 56,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
   },
   backButtonText: {
     fontSize: 16,
-    color: '#0a7ea4',
+    fontWeight: '600',
   },
 });

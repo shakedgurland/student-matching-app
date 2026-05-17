@@ -29,10 +29,15 @@
 1. **Welcome Screen**
 2. **Signup Screen:** Username and password fields.
 3. **Student Verification Demo Screen**
-4. **Matching Questionnaire Screen**
+4. **Matching Questionnaire Screen:** Smart, multi-step personality and values assessment.
 5. **Match Result Screen**
 6. **72-hour Active Match Screen**
 7. **Demo Chat Screen**
+
+## Questionnaire Strategy
+- **Direction:** Precise matching based on personality, values, social style, and intent.
+- **Signals:** Spontaneity, social confidence, communication style, values, relationship goals, boundaries.
+- **UX:** Card-based selection, progress tracking, pleasant and playful but professional.
 
 ## Design Rules
 - **Hebrew RTL:** Native right-to-left flow.
