@@ -6,9 +6,9 @@ import { ThemedView } from '@/components/themed-view';
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
   bg: '#FCFCFD',
-  primary: '#2EC4B6', // Main brand color (Turquoise)
+  primary: '#19B8A8', // Main action color (Turquoise)
   accent: '#FF7A6B', // Emotional accent (Coral)
-  secondary: '#5B4DFF', // Premium Branding accent (Indigo)
+  branding: '#C9365A', // Refined Berry-Red for Logo and Wordmark
   text: '#172033',
   textLight: '#667085',
   border: '#E7EAF0',
@@ -28,7 +28,7 @@ const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?:
         borderBottomLeftRadius: innerSize / 2,
         borderBottomRightRadius: innerSize / 2,
         borderWidth: strokeWidth,
-        borderColor: UI_COLORS.secondary, // Using Indigo for the magnet base
+        borderColor: UI_COLORS.branding,
         borderTopWidth: 0,
       }}>
         {/* Magnet Poles */}
@@ -38,7 +38,7 @@ const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?:
           left: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -48,7 +48,7 @@ const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?:
           right: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -82,13 +82,13 @@ export default function WelcomeScreen() {
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <BrandMark size={56} />
-          <ThemedText style={[styles.appName, { color: UI_COLORS.text }]}>
+          <ThemedText style={[styles.appName, { color: UI_COLORS.branding }]}>
             UniMatch
           </ThemedText>
         </View>
 
         <View style={styles.textSection}>
-          <View style={[styles.badge, { backgroundColor: UI_COLORS.accent + '15', borderColor: UI_COLORS.accent + '30' }]}>
+          <View style={[styles.badge, { backgroundColor: UI_COLORS.accent + '15', borderColor: UI_COLORS.accent + '35' }]}>
             <ThemedText style={[styles.badgeText, { color: UI_COLORS.accent }]}>התאמה משמעותית אחת בכל פעם</ThemedText>
           </View>
           
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     gap: 12,
-    paddingTop: 32,
+    paddingTop: 40,
   },
   appName: {
     fontSize: 32,
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 1.2,
     marginBottom: 4,
   },
   badgeText: {
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#2EC4B6',
+    shadowColor: '#19B8A8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

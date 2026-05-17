@@ -16,9 +16,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
   bg: '#FCFCFD',
-  primary: '#2EC4B6', // Main brand color (Turquoise)
+  primary: '#19B8A8', // Main brand color (Turquoise)
   accent: '#FF7A6B', // Emotional accent (Coral)
-  secondary: '#5B4DFF', // Branding accent (Indigo)
+  branding: '#C9365A', // Branding accent (Berry-Red)
   text: '#172033',
   textLight: '#667085',
   border: '#E7EAF0',
@@ -38,7 +38,7 @@ const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?:
         borderBottomLeftRadius: innerSize / 2,
         borderBottomRightRadius: innerSize / 2,
         borderWidth: strokeWidth,
-        borderColor: UI_COLORS.secondary,
+        borderColor: UI_COLORS.branding,
         borderTopWidth: 0,
       }}>
         <View style={{
@@ -47,7 +47,7 @@ const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?:
           left: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -57,7 +57,7 @@ const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?:
           right: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
-    shadowColor: '#2EC4B6',
+    shadowColor: '#19B8A8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

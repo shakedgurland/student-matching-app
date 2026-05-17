@@ -23,15 +23,15 @@ type Step = 1 | 2 | 3 | 4 | 5;
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
   bg: '#FCFCFD',
-  primary: '#2EC4B6', // Main action color (Turquoise)
+  primary: '#19B8A8', // Main action color (Turquoise)
   accent: '#FF7A6B', // Emotional accent (Coral)
-  secondary: '#5B4DFF', // Premium Branding accent (Indigo)
+  branding: '#C9365A', // Branding accent (Berry-Red)
   text: '#172033',
   textLight: '#667085',
   border: '#E7EAF0',
   card: '#FFFFFF',
   progressInactive: '#E7EAF0',
-  selectedBg: '#E8F8F6', // Subtle aqua for selection
+  selectedBg: '#E8F8F6',
   selectedText: '#0F766E',
 };
 
@@ -48,7 +48,7 @@ const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?:
         borderBottomLeftRadius: innerSize / 2,
         borderBottomRightRadius: innerSize / 2,
         borderWidth: strokeWidth,
-        borderColor: UI_COLORS.secondary,
+        borderColor: UI_COLORS.branding,
         borderTopWidth: 0,
       }}>
         <View style={{
@@ -57,7 +57,7 @@ const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?:
           left: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -67,7 +67,7 @@ const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?:
           right: -strokeWidth,
           width: strokeWidth,
           height: strokeWidth,
-          backgroundColor: UI_COLORS.secondary,
+          backgroundColor: UI_COLORS.branding,
           borderTopLeftRadius: strokeWidth * 0.2,
           borderTopRightRadius: strokeWidth * 0.2,
         }} />
@@ -138,8 +138,7 @@ export default function QuestionnaireScreen() {
   const nextStep = () => {
     if (currentStep < 5) setCurrentStep((currentStep + 1) as Step);
     else {
-      Alert.alert('בהכנה', 'מצא/י לי התאמה - פיצ׳ר בהכנה!');
-      router.replace('/(tabs)');
+      router.replace('/match-result');
     }
   };
 
@@ -366,7 +365,7 @@ export default function QuestionnaireScreen() {
                   formData.sameFacultyImportance === val && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
                 ]}
                 onPress={() => setFormData({ ...formData, sameFacultyImportance: val })}>
-                <ThemedText style={[styles.scaleCircleText, { color: dynamicColors.text }, formData.sameFacultyImportance === val && { color: UI_COLORS.selectedText }]}>
+                <ThemedText style={[styles.scaleCircleText, { color: dynamicColors.text }, formData.sameFacultyImportance === val && { color: UI_COLORS.primary }]}>
                   {val}
                 </ThemedText>
               </TouchableOpacity>
@@ -783,11 +782,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryNav: {
-    shadowColor: '#2EC4B6',
+    shadowColor: '#19B8A8',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 2,
+    elevation: 3,
   },
   primaryNavText: {
     color: '#fff',
