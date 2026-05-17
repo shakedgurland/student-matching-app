@@ -51,10 +51,8 @@ export default function SignupScreen() {
 
   const handleSignup = () => {
     if (validate()) {
-      // For now, just show an alert or placeholder for the next step
-      Alert.alert('הצלחה', 'החשבון נוצר בהצלחה! השלב הבא: אימות סטודנט.', [
-        { text: 'המשך', onPress: () => console.log('Navigate to verification') },
-      ]);
+      // For now, navigate to the verification screen
+      router.push('/verification');
     }
   };
 

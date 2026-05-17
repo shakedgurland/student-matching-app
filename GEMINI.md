@@ -21,7 +21,8 @@
 
 ## Student Verification
 - **Verification Required:** Only verified students can use the real app.
-- **Methods:** University email, student card upload, proof of studies, manual review.
+- **MVP Method:** University email verification (primary).
+- **Future Methods:** Student card upload, proof of studies, manual review (to be added in later stages).
 - **Privacy Rule:** Do not store sensitive ID information unless absolutely necessary. Design for privacy and security.
 
 ## Screens to Implement
