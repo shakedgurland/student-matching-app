@@ -7,7 +7,6 @@ import { ThemedView } from '@/components/themed-view';
 const UI_COLORS = {
   bg: '#FFF9F6',
   primary: '#FF4D3D', // Solid vivid red-coral for CTAs
-  premium: '#7C3AED', // Secondary Premium Accent
   accent: '#FF8A00', // Small spark accent
   branding: '#FF3D57', // Main branding color
   surface: '#FFF0EA', // Soft romantic surface

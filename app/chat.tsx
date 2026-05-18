@@ -52,14 +52,15 @@ export default function ChatScreen() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+    <ThemedView style={[styles.container, { backgroundColor: isDark ? dynamicColors.bg : UI_COLORS.bg }]}>
       <Stack.Screen options={{ 
         headerShown: true, 
         headerTitle: "השיחה עם נועה",
         headerTitleAlign: 'center',
         headerBackTitleVisible: false,
         headerTintColor: UI_COLORS.branding,
-        headerStyle: { backgroundColor: dynamicColors.bg },
+        headerStyle: { backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' },
+        headerTitleStyle: { color: isDark ? '#FFFFFF' : UI_COLORS.text },
       }} />
       
       <SafeAreaView style={{ flex: 1 }}>
@@ -68,7 +69,7 @@ export default function ChatScreen() {
           style={{ flex: 1 }}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
           
-          <View style={[styles.matchHeader, { borderBottomColor: dynamicColors.border }]}>
+          <View style={[styles.matchHeader, { borderBottomColor: dynamicColors.border, backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' }]}>
             <View style={styles.avatarGroup}>
                <View style={[styles.smallAvatar, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding }]}>
                  <ThemedText style={[styles.avatarText, { color: UI_COLORS.branding }]}>ש</ThemedText>
@@ -91,12 +92,12 @@ export default function ChatScreen() {
             <MockMessage text="אז השאלה החשובה: איזה שיר היית בוחרת לדואט" isMe={true} />
           </ScrollView>
 
-          <View style={[styles.inputArea, { borderTopColor: dynamicColors.border, backgroundColor: dynamicColors.bg }]}>
+          <View style={[styles.inputArea, { borderTopColor: dynamicColors.border, backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' }]}>
             <TouchableOpacity style={[styles.sendButton, { backgroundColor: UI_COLORS.branding }]}>
                <ThemedText style={styles.sendButtonText}>שלח</ThemedText>
             </TouchableOpacity>
             <TextInput 
-              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              style={[styles.input, { color: isDark ? '#FFFFFF' : UI_COLORS.text, backgroundColor: isDark ? dynamicColors.card : '#F7F8FA', borderColor: dynamicColors.border }]}
               placeholder="כתבו הודעה..."
               placeholderTextColor={dynamicColors.textLight}
               textAlign="right"

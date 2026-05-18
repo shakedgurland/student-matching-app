@@ -16,6 +16,16 @@ export const Colors = {
     icon: '#667085',
     tabIconDefault: '#667085',
     tabIconSelected: tintColorLight,
+    
+    // Premium Palette Extensions
+    surface: '#FFFFFF',
+    romanticSurface: '#FFF0EA',
+    border: '#E9E4E0',
+    secondaryText: '#667085',
+    branding: '#FF3D57',
+    accent: '#FF8A00',
+    primaryCTA: '#FF4D3D',
+    chatBg: '#F7F8FA',
   },
   dark: {
     text: '#FFFFFF',
@@ -24,6 +34,16 @@ export const Colors = {
     icon: '#98A2B3',
     tabIconDefault: '#98A2B3',
     tabIconSelected: tintColorDark,
+    
+    // Premium Palette Extensions (Dark defaults for safety)
+    surface: '#1D2939',
+    romanticSurface: '#1D2433',
+    border: 'rgba(255, 255, 255, 0.1)',
+    secondaryText: '#98A2B3',
+    branding: '#FF3D57',
+    accent: '#FF8A00',
+    primaryCTA: '#FF4D3D',
+    chatBg: '#101828',
   },
 };
 

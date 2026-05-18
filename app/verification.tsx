@@ -16,7 +16,6 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 const UI_COLORS = {
   bg: '#FFF9F6',
   primary: '#FF4D3D', // Solid vivid red-coral
-  premium: '#7C3AED', // Secondary Premium Accent
   accent: '#FF8A00', // Small spark accent
   branding: '#FF3D57', // Main branding color
   surface: '#FFF0EA', // Soft romantic surface
@@ -128,7 +127,7 @@ export default function VerificationScreen() {
           </View>
 
           <View style={styles.futureSection}>
-            <TitleWithDot color={UI_COLORS.premium} text="אפשרויות אימות נוספות בהמשך" />
+            <TitleWithDot color={UI_COLORS.accent} text="אפשרויות אימות נוספות בהמשך" />
             
             <View style={[styles.disabledCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
               <View style={styles.cardHeader}>

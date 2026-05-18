@@ -16,7 +16,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 const UI_COLORS = {
   bg: '#FFF9F6',
   primary: '#FF4D3D', // Solid vivid red-coral
-  premium: '#7C3AED', // Secondary Premium Accent
   accent: '#FF8A00', // Small spark accent
   branding: '#FF3D57', // Main branding color
   surface: '#FFF0EA', // Soft romantic surface
@@ -41,8 +40,8 @@ const ConnectionVisual = () => {
       </View>
 
       {/* Matched User Avatar */}
-      <View style={[styles.avatarCircle, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.premium }]}>
-        <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.premium }]}>נ</ThemedText>
+      <View style={[styles.avatarCircle, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.accent }]}>
+        <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.accent }]}>נ</ThemedText>
       </View>
     </View>
   );

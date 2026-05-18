@@ -24,7 +24,6 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const UI_COLORS = {
   bg: '#FFF9F6',
   primary: '#FF4D3D', // Solid vivid red-coral
-  premium: '#7C3AED', // Secondary Premium Accent
   accent: '#FF8A00', // Small spark accent
   branding: '#FF3D57', // Main branding color
   surface: '#FFF0EA', // Soft romantic surface
@@ -784,7 +783,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryNav: {
-    shadowColor: '#FF5A5F',
+    shadowColor: '#FF4D3D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
