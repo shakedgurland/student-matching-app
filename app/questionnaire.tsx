@@ -20,21 +20,21 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
-// Design Constants for Premium UniMatch Style
+// Design Constants for Bright Premium Style
 const UI_COLORS = {
-  bg: '#FCFBFA',
-  primary: '#E84A5F', // Romantic Rose
-  premium: '#6C4DFF', // Premium Depth
-  accent: '#FF8A65', // Soft Emotional
-  branding: '#E84A5F', // Vivid Summer Coral-Red
-  surface: '#FFF1EC', // Soft romantic surface
+  bg: '#FFF9F6',
+  primary: '#FF4D3D', // Solid vivid red-coral
+  premium: '#7C3AED', // Secondary Premium Accent
+  accent: '#FF8A00', // Small spark accent
+  branding: '#FF3D57', // Main branding color
+  surface: '#FFF0EA', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E8E4E1',
+  border: '#E9E4E0',
   card: '#FFFFFF',
-  progressInactive: '#E8E4E1',
-  selectedBg: '#FFF1EC',
-  selectedText: '#E84A5F',
+  progressInactive: '#E9E4E0',
+  selectedBg: '#FFF0EA',
+  selectedText: '#FF3D57',
 };
 
 const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?: boolean }) => {
@@ -95,12 +95,12 @@ export default function QuestionnaireScreen() {
   
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
-    bg: isDark ? '#0F172A' : UI_COLORS.bg,
-    card: isDark ? '#1E293B' : UI_COLORS.card,
-    text: isDark ? '#F1F5F9' : UI_COLORS.text,
-    textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
+    bg: isDark ? '#101828' : UI_COLORS.bg,
+    card: isDark ? '#1D2939' : UI_COLORS.card,
+    text: isDark ? '#FFFFFF' : UI_COLORS.text,
+    textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
-    selectedBg: isDark ? 'rgba(232, 74, 95, 0.2)' : UI_COLORS.selectedBg,
+    selectedBg: isDark ? 'rgba(255, 61, 87, 0.2)' : UI_COLORS.selectedBg,
   };
 
   const [formData, setFormData] = useState({
@@ -655,12 +655,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E7EAF0',
+    borderColor: UI_COLORS.border,
   },
   badgeText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#667085',
+    color: UI_COLORS.textLight,
   },
   progressSegment: {
     flex: 1,
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryNav: {
-    shadowColor: '#E84A5F',
+    shadowColor: '#FF5A5F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

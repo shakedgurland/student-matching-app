@@ -11,6 +11,30 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+const UniMatchTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: '#FF3D57',
+    background: '#FFF9F6',
+    card: '#FFFFFF',
+    text: '#172033',
+    border: '#E9E4E0',
+  },
+};
+
+const UniMatchDarkTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: '#FF3D57',
+    background: '#101828',
+    card: '#1D2939',
+    text: '#FFFFFF',
+    border: 'rgba(255, 255, 255, 0.1)',
+  },
+};
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -19,17 +43,19 @@ export default function RootLayout() {
     if (!I18nManager.isRTL) {
       I18nManager.allowRTL(true);
       I18nManager.forceRTL(true);
-      // Note: A full app restart might be required for RTL to take effect on some devices.
     }
   }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === 'dark' ? UniMatchDarkTheme : UniMatchTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="verification" options={{ headerShown: false }} />
         <Stack.Screen name="questionnaire" options={{ headerShown: false }} />
+        <Stack.Screen name="match-result" options={{ headerShown: false }} />
+        <Stack.Screen name="active-match" options={{ headerShown: false }} />
+        <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />

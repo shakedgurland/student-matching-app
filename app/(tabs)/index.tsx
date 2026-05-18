@@ -3,17 +3,17 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-// Design Constants for Premium UniMatch Style
+// Design Constants for Bright Premium Style
 const UI_COLORS = {
-  bg: '#FCFBFA',
-  primary: '#E84A5F', // Romantic Rose for main actions
-  premium: '#6C4DFF', // Premium Depth supporting color
-  accent: '#FF8A65', // Soft Emotional spark accent
-  branding: '#E84A5F', // Main branding color
-  surface: '#FFF1EC', // Soft romantic surface
+  bg: '#FFF9F6',
+  primary: '#FF4D3D', // Solid vivid red-coral for CTAs
+  premium: '#7C3AED', // Secondary Premium Accent
+  accent: '#FF8A00', // Small spark accent
+  branding: '#FF3D57', // Main branding color
+  surface: '#FFF0EA', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E8E4E1',
+  border: '#E9E4E0',
 };
 
 const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?: boolean }) => {
@@ -67,9 +67,9 @@ const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?:
           backgroundColor: UI_COLORS.accent,
           shadowColor: UI_COLORS.accent,
           shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
-          shadowRadius: 6,
-          elevation: 2,
+          shadowOpacity: 0.6,
+          shadowRadius: 8,
+          elevation: 4,
         }} />
       )}
     </View>
@@ -83,7 +83,7 @@ export default function WelcomeScreen() {
     <ThemedView style={[styles.container, { backgroundColor: UI_COLORS.bg }]}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <BrandMark size={56} />
+          <BrandMark size={64} />
           <ThemedText style={[styles.appName, { color: UI_COLORS.branding }]}>
             UniMatch
           </ThemedText>
@@ -111,7 +111,8 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1, backgroundColor: '#FFF' }]}>
+            style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1, backgroundColor: '#FFFFFF' }]}
+            onPress={() => Alert.alert('בקרוב', 'חיבור לחשבון קיים יהיה זמין בגרסה הבאה')}>
             <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
               כבר יש לי חשבון
             </ThemedText>
@@ -119,7 +120,7 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.trustSection}>
-          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.premium }]} />
+          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.branding }]} />
           <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
         </View>
       </View>
@@ -140,36 +141,36 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    gap: 12,
-    paddingTop: 40,
+    gap: 16,
+    paddingTop: 20,
   },
   appName: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '900',
     letterSpacing: -1,
-    lineHeight: 40,
+    lineHeight: 44,
     textAlign: 'center',
   },
   textSection: {
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
   badge: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1.2,
     marginBottom: 4,
   },
   badgeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   headline: {
     textAlign: 'center',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
-    lineHeight: 36,
+    lineHeight: 38,
     letterSpacing: -0.5,
   },
   subtitle: {
@@ -184,15 +185,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   primaryButton: {
-    height: 52,
-    borderRadius: 16,
+    height: 56,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#E84A5F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowColor: '#FF4D3D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 3,
+    elevation: 4,
   },
   primaryButtonText: {
     color: '#fff',
@@ -201,8 +202,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   secondaryButton: {
-    height: 52,
-    borderRadius: 16,
+    height: 56,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

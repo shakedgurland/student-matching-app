@@ -12,17 +12,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-// Design Constants for Premium UniMatch Style
+// Design Constants for Bright Premium Style
 const UI_COLORS = {
-  bg: '#FCFBFA',
-  primary: '#E84A5F', // Romantic Rose
-  premium: '#6C4DFF', // Premium Depth
-  accent: '#FF8A65', // Soft Emotional
-  branding: '#E84A5F', // Vivid Summer Coral-Red
-  surface: '#FFF1EC', // Soft romantic surface
+  bg: '#FFF9F6',
+  primary: '#FF4D3D', // Solid vivid red-coral
+  premium: '#7C3AED', // Secondary Premium Accent
+  accent: '#FF8A00', // Small spark accent
+  branding: '#FF3D57', // Main branding color
+  surface: '#FFF0EA', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E8E4E1',
+  border: '#E9E4E0',
   card: '#FFFFFF',
 };
 
@@ -34,14 +34,14 @@ const ConnectionVisual = () => {
         <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.branding }]}>ש</ThemedText>
       </View>
       
-      {/* Small Yellow Spark in Middle */}
+      {/* Small Warm Spark in Middle */}
       <View style={styles.sparkContainer}>
          <View style={[styles.sparkDot, { backgroundColor: UI_COLORS.accent }]} />
          <View style={[styles.sparkLine, { backgroundColor: UI_COLORS.accent + '40' }]} />
       </View>
 
       {/* Matched User Avatar */}
-      <View style={[styles.avatarCircle, { backgroundColor: '#F5F2FF', borderColor: UI_COLORS.premium }]}>
+      <View style={[styles.avatarCircle, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.premium }]}>
         <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.premium }]}>נ</ThemedText>
       </View>
     </View>
@@ -54,15 +54,22 @@ export default function MatchResultScreen() {
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
-    bg: isDark ? '#0F172A' : UI_COLORS.bg,
-    card: isDark ? '#1E293B' : UI_COLORS.card,
-    text: isDark ? '#F1F5F9' : UI_COLORS.text,
-    textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
+    bg: isDark ? '#101828' : UI_COLORS.bg,
+    card: isDark ? '#1D2939' : UI_COLORS.card,
+    text: isDark ? '#FFFFFF' : UI_COLORS.text,
+    textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
   };
 
   const startChat = () => {
-    Alert.alert('בהכנה', 'מסך הצ׳אט ייבנה בשלב הבא');
+    router.push('/chat');
+  };
+
+  const nextMatch = () => {
+    Alert.alert(
+      'התאמה הבאה',
+      'בגרסה האמיתית נציג כאן את ההתאמה הבאה עם הציון הגבוה ביותר, עד 5 התאמות בחודש.'
+    );
   };
 
   return (
@@ -125,7 +132,7 @@ export default function MatchResultScreen() {
 
           <View style={styles.ruleBox}>
              <ThemedText style={[styles.ruleText, { color: dynamicColors.textLight }]}>
-               יש לך 72 שעות להתחיל שיחה. אם לא תתחיל/י שיחה בזמן, ההתאמה תפוג ונחפש לך התאמה חדשה.
+               אם תבחר/י לא להתחיל שיחה, נציג לך את ההתאמה הבאה לפי הציון — עד 5 התאמות בחודש.
              </ThemedText>
           </View>
 
@@ -139,8 +146,8 @@ export default function MatchResultScreen() {
 
              <TouchableOpacity 
                style={styles.secondaryButton}
-               onPress={() => router.replace('/(tabs)')}>
-               <ThemedText style={[styles.secondaryButtonText, { color: dynamicColors.textLight }]}>לא עכשיו</ThemedText>
+               onPress={nextMatch}>
+               <ThemedText style={[styles.secondaryButtonText, { color: dynamicColors.textLight }]}>הבא/י לי התאמה אחרת</ThemedText>
              </TouchableOpacity>
           </View>
         </ScrollView>
@@ -320,7 +327,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#E84A5F',
+    shadowColor: '#FF4D3D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
