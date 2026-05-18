@@ -5,13 +5,15 @@ import { ThemedView } from '@/components/themed-view';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FCFCFD',
-  primary: '#19B8A8', // Main action color (Turquoise)
-  accent: '#FF7A6B', // Emotional accent (Coral)
-  branding: '#C9365A', // Refined Berry-Red for Logo and Wordmark
+  bg: '#FCFBFA',
+  primary: '#E84A5F', // Romantic Rose for main actions
+  premium: '#6C4DFF', // Premium Depth supporting color
+  accent: '#FF8A65', // Soft Emotional spark accent
+  branding: '#E84A5F', // Main branding color
+  surface: '#FFF1EC', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E7EAF0',
+  border: '#E8E4E1',
 };
 
 const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?: boolean }) => {
@@ -88,8 +90,8 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.textSection}>
-          <View style={[styles.badge, { backgroundColor: UI_COLORS.accent + '15', borderColor: UI_COLORS.accent + '35' }]}>
-            <ThemedText style={[styles.badgeText, { color: UI_COLORS.accent }]}>התאמה משמעותית אחת בכל פעם</ThemedText>
+          <View style={[styles.badge, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding + '20' }]}>
+            <ThemedText style={[styles.badgeText, { color: UI_COLORS.branding }]}>התאמה משמעותית אחת בכל פעם</ThemedText>
           </View>
           
           <ThemedText style={[styles.headline, { color: UI_COLORS.text }]}>
@@ -117,7 +119,7 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.trustSection}>
-          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.primary }]} />
+          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.premium }]} />
           <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
         </View>
       </View>
@@ -186,7 +188,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#19B8A8',
+    shadowColor: '#E84A5F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

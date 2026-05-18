@@ -14,13 +14,15 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FCFCFD',
-  primary: '#19B8A8', // Turquoise
-  accent: '#FF7A6B', // Coral
-  branding: '#C9365A', // Berry-Red
+  bg: '#FCFBFA',
+  primary: '#E84A5F', // Romantic Rose
+  premium: '#6C4DFF', // Premium Depth
+  accent: '#FF8A65', // Soft Emotional
+  branding: '#E84A5F', // Vivid Summer Coral-Red
+  surface: '#FFF1EC', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E7EAF0',
+  border: '#E8E4E1',
   card: '#FFFFFF',
 };
 
@@ -28,19 +30,19 @@ const ConnectionVisual = () => {
   return (
     <View style={styles.matchVisual}>
       {/* Current User Avatar */}
-      <View style={[styles.avatarCircle, { backgroundColor: '#F0EFFF', borderColor: UI_COLORS.branding }]}>
+      <View style={[styles.avatarCircle, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding }]}>
         <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.branding }]}>ש</ThemedText>
       </View>
       
-      {/* Small Coral Spark in Middle */}
+      {/* Small Yellow Spark in Middle */}
       <View style={styles.sparkContainer}>
          <View style={[styles.sparkDot, { backgroundColor: UI_COLORS.accent }]} />
-         <View style={[styles.sparkLine, { backgroundColor: UI_COLORS.accent + '30' }]} />
+         <View style={[styles.sparkLine, { backgroundColor: UI_COLORS.accent + '40' }]} />
       </View>
 
       {/* Matched User Avatar */}
-      <View style={[styles.avatarCircle, { backgroundColor: '#E8F8F6', borderColor: UI_COLORS.primary }]}>
-        <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.primary }]}>נ</ThemedText>
+      <View style={[styles.avatarCircle, { backgroundColor: '#F5F2FF', borderColor: UI_COLORS.premium }]}>
+        <ThemedText style={[styles.avatarInitial, { color: UI_COLORS.premium }]}>נ</ThemedText>
       </View>
     </View>
   );
@@ -69,7 +71,7 @@ export default function MatchResultScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-             <ThemedText style={[styles.preTitle, { color: UI_COLORS.accent }]}>ההתאמה שלך מוכנה</ThemedText>
+             <ThemedText style={[styles.preTitle, { color: UI_COLORS.branding }]}>ההתאמה שלך מוכנה</ThemedText>
              <ThemedText style={[styles.title, { color: dynamicColors.text }]}>מצאנו התאמה שיכולה להיות מעניינת עבורך</ThemedText>
           </View>
 
@@ -78,8 +80,8 @@ export default function MatchResultScreen() {
           <View style={[styles.profileCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
             <View style={styles.profileHeader}>
               <ThemedText style={[styles.profileName, { color: dynamicColors.text }]}>נועה, 23</ThemedText>
-              <View style={[styles.scoreBadge, { backgroundColor: UI_COLORS.primary + '15' }]}>
-                <ThemedText style={[styles.scoreText, { color: UI_COLORS.primary }]}>87% התאמה</ThemedText>
+              <View style={[styles.scoreBadge, { backgroundColor: UI_COLORS.surface }]}>
+                <ThemedText style={[styles.scoreText, { color: UI_COLORS.branding }]}>87% התאמה</ThemedText>
               </View>
             </View>
             
@@ -107,14 +109,14 @@ export default function MatchResultScreen() {
                  'יש לכם פתיחות להכיר אנשים מפקולטות אחרות',
                ].map((bullet, idx) => (
                  <View key={idx} style={styles.bulletItem}>
-                    <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.primary }]} />
+                    <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.branding }]} />
                     <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>{bullet}</ThemedText>
                  </View>
                ))}
             </View>
           </View>
 
-          <View style={[styles.comparisonBox, { backgroundColor: '#F0F4FF', borderColor: UI_COLORS.branding + '20' }]}>
+          <View style={[styles.comparisonBox, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding + '20' }]}>
              <ThemedText style={[styles.comparisonTitle, { color: UI_COLORS.branding }]}>משהו קטן שכבר אפשר לפתוח איתו שיחה</ThemedText>
              <ThemedText style={[styles.comparisonText, { color: UI_COLORS.text }]}>
                "את/ה כתבת שבקריוקי תעלה/י רק אם עוד מישהו מצטרף. נועה כתבה שהיא כבר בוחרת שיר. אולי זו התחלה טובה לדואט"
@@ -318,7 +320,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#19B8A8',
+    shadowColor: '#E84A5F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

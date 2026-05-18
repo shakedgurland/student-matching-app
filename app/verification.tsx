@@ -14,15 +14,16 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FCFCFD',
-  primary: '#19B8A8', // Main brand color (Turquoise)
-  accent: '#FF7A6B', // Emotional accent (Coral)
-  branding: '#C9365A', // Branding accent (Berry-Red)
+  bg: '#FCFBFA',
+  primary: '#E84A5F', // Romantic Rose
+  premium: '#6C4DFF', // Premium Depth
+  accent: '#FF8A65', // Soft Emotional
+  branding: '#E84A5F', // Vivid Summer Coral-Red
+  surface: '#FFF1EC', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E7EAF0',
+  border: '#E8E4E1',
   card: '#FFFFFF',
-  surface: '#F7F7FB',
 };
 
 const BrandMark = ({ size = 32, showSpark = true }: { size?: number, showSpark?: boolean }) => {
@@ -87,7 +88,7 @@ export default function VerificationScreen() {
     text: isDark ? '#F1F5F9' : UI_COLORS.text,
     textLight: isDark ? '#94A3B8' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
-    surface: isDark ? 'rgba(46, 196, 182, 0.1)' : UI_COLORS.surface,
+    surface: isDark ? 'rgba(232, 74, 95, 0.1)' : UI_COLORS.surface,
   };
 
   return (
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: '#19B8A8',
+    shadowColor: '#E84A5F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

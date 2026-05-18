@@ -15,13 +15,15 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Design Constants for Premium UniMatch Style
 const UI_COLORS = {
-  bg: '#FCFCFD',
-  primary: '#19B8A8', // Main brand color (Turquoise)
-  accent: '#FF7A6B', // Emotional accent (Coral)
-  branding: '#C9365A', // Branding accent (Berry-Red)
+  bg: '#FCFBFA',
+  primary: '#E84A5F', // Romantic Rose
+  premium: '#6C4DFF', // Premium Depth
+  accent: '#FF8A65', // Soft Emotional
+  branding: '#E84A5F', // Vivid Summer Coral-Red
+  surface: '#FFF1EC', // Soft romantic surface
   text: '#172033',
   textLight: '#667085',
-  border: '#E7EAF0',
+  border: '#E8E4E1',
   card: '#FFFFFF',
 };
 
@@ -153,7 +155,7 @@ export default function SignupScreen() {
               <TextInput
                 style={[
                   styles.input,
-                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.username ? UI_COLORS.accent : dynamicColors.border },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.username ? UI_COLORS.branding : dynamicColors.border },
                 ]}
                 placeholder="הזן שם משתמש"
                 placeholderTextColor={dynamicColors.textLight}
@@ -161,7 +163,7 @@ export default function SignupScreen() {
                 onChangeText={setUsername}
                 autoCapitalize="none"
               />
-              {errors.username && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.username}</ThemedText>}
+              {errors.username && <ThemedText style={[styles.errorText, { color: UI_COLORS.branding }]}>{errors.username}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
@@ -169,7 +171,7 @@ export default function SignupScreen() {
               <TextInput
                 style={[
                   styles.input,
-                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.email ? UI_COLORS.accent : dynamicColors.border },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.email ? UI_COLORS.branding : dynamicColors.border },
                 ]}
                 placeholder="example@univ.ac.il"
                 placeholderTextColor={dynamicColors.textLight}
@@ -178,7 +180,7 @@ export default function SignupScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              {errors.email && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.email}</ThemedText>}
+              {errors.email && <ThemedText style={[styles.errorText, { color: UI_COLORS.branding }]}>{errors.email}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
@@ -186,7 +188,7 @@ export default function SignupScreen() {
               <TextInput
                 style={[
                   styles.input,
-                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.password ? UI_COLORS.accent : dynamicColors.border },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.password ? UI_COLORS.branding : dynamicColors.border },
                 ]}
                 placeholder="לפחות 6 תווים"
                 placeholderTextColor={dynamicColors.textLight}
@@ -194,7 +196,7 @@ export default function SignupScreen() {
                 onChangeText={setPassword}
                 secureTextEntry
               />
-              {errors.password && <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.password}</ThemedText>}
+              {errors.password && <ThemedText style={[styles.errorText, { color: UI_COLORS.branding }]}>{errors.password}</ThemedText>}
             </View>
 
             <View style={styles.inputContainer}>
@@ -202,7 +204,7 @@ export default function SignupScreen() {
               <TextInput
                 style={[
                   styles.input,
-                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.confirmPassword ? UI_COLORS.accent : dynamicColors.border },
+                  { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: errors.confirmPassword ? UI_COLORS.branding : dynamicColors.border },
                 ]}
                 placeholder="הזן את הסיסמה שנית"
                 placeholderTextColor={dynamicColors.textLight}
@@ -211,7 +213,7 @@ export default function SignupScreen() {
                 secureTextEntry
               />
               {errors.confirmPassword && (
-                <ThemedText style={[styles.errorText, { color: UI_COLORS.accent }]}>{errors.confirmPassword}</ThemedText>
+                <ThemedText style={[styles.errorText, { color: UI_COLORS.branding }]}>{errors.confirmPassword}</ThemedText>
               )}
             </View>
 
@@ -308,7 +310,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
-    shadowColor: '#19B8A8',
+    shadowColor: '#E84A5F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
