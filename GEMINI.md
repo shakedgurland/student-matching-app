@@ -56,3 +56,7 @@
     - Summarize changes after editing.
 - **Execution:** Ensure the app can run with `npx expo start`.
 - **Dependencies:** Avoid unnecessary libraries; prefer built-in Expo/React Native solutions or well-established ones only when they clearly help.
+
+## Long-term Architecture
+- **Architecture:** Expo mobile app + Render backend API + Supabase Auth/Postgres/Storage/Realtime.
+- **Documentation:** See `ARCHITECTURE.md` for full details.
