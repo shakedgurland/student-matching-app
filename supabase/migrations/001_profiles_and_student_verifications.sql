@@ -1,91 +1,125 @@
--- 001_profiles_and_student_verifications.sql
--- Description: Initial schema setup for profiles and student verifications
+-- idempotent migration for profiles and student verifications
 
--- 1. Create custom types
-create type public.student_verification_status as enum ('pending', 'verified', 'rejected');
+-- 1. Enum: student_verification_status
+DO $$ BEGIN
+    CREATE TYPE public.student_verification_status AS ENUM (
+        'not_started', 'email_pending', 'verified', 'manual_review', 'rejected'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- 2. Create public.profiles table
-create table public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  username text unique,
-  full_name text,
-  avatar_url text,
-  faculty text,
-  year_of_study integer,
-  bio text,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 2. Table: public.profiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username text UNIQUE,
+    email text,
+    full_name text,
+    gender text,
+    birth_year integer,
+    university text,
+    faculty text,
+    year_of_study text,
+    campus text,
+    bio text,
+    avatar_url text,
+    onboarding_completed boolean NOT NULL DEFAULT false,
+    student_verification_status public.student_verification_status NOT NULL DEFAULT 'not_started',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- 3. Create public.student_verifications table
-create table public.student_verifications (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users on delete cascade not null,
-  student_email text not null,
-  status public.student_verification_status default 'pending'::public.student_verification_status not null,
-  verification_method text not null, -- e.g., 'email'
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+-- 3. Table: public.student_verifications
+CREATE TABLE IF NOT EXISTS public.student_verifications (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL UNIQUE REFERENCES public.profiles(id) ON DELETE CASCADE,
+    university_email text,
+    status public.student_verification_status NOT NULL DEFAULT 'email_pending',
+    verified_at timestamptz,
+    rejection_reason text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- 4. Set up updated_at function
-create or replace function public.set_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+-- 4. Function: set_updated_at()
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- 5. Set up updated_at triggers
-create trigger set_profiles_updated_at
-  before update on public.profiles
-  for each row execute function public.set_updated_at();
+-- 5. Triggers: updated_at
+DROP TRIGGER IF EXISTS set_profiles_updated_at ON public.profiles;
+CREATE TRIGGER set_profiles_updated_at
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.set_updated_at();
 
-create trigger set_student_verifications_updated_at
-  before update on public.student_verifications
-  for each row execute function public.set_updated_at();
+DROP TRIGGER IF EXISTS set_student_verifications_updated_at ON public.student_verifications;
+CREATE TRIGGER set_student_verifications_updated_at
+    BEFORE UPDATE ON public.student_verifications
+    FOR EACH ROW
+    EXECUTE FUNCTION public.set_updated_at();
 
--- 6. Create handle_new_user function
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, username, full_name, avatar_url)
-  values (new.id, new.raw_user_meta_data->>'username', new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
-  return new;
-end;
-$$ language plpgsql security definer;
+-- 6. Function: handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (id, email, username)
+    VALUES (
+        new.id,
+        new.email,
+        new.raw_user_meta_data ->> 'username'
+    )
+    ON CONFLICT (id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 7. Create on_auth_user_created trigger
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+-- Trigger: on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user();
 
--- 8. Enable Row Level Security (RLS)
-alter table public.profiles enable row level security;
-alter table public.student_verifications enable row level security;
+-- 7. Enable RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_verifications ENABLE ROW LEVEL SECURITY;
 
--- 9. Profiles RLS Policies
-create policy "Users can view their own profile."
-  on public.profiles for select
-  using ( auth.uid() = id );
+-- 8. Policies: Profiles
+DROP POLICY IF EXISTS "Users can select their own profile" ON public.profiles;
+CREATE POLICY "Users can select their own profile"
+    ON public.profiles FOR SELECT
+    USING (auth.uid() = id);
 
-create policy "Users can update their own profile."
-  on public.profiles for update
-  using ( auth.uid() = id );
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile"
+    ON public.profiles FOR UPDATE
+    USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
 
-create policy "Users can insert their own profile."
-  on public.profiles for insert
-  with check ( auth.uid() = id );
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile"
+    ON public.profiles FOR INSERT
+    WITH CHECK (auth.uid() = id);
 
--- 10. Student Verifications RLS Policies
-create policy "Users can view their own verification request."
-  on public.student_verifications for select
-  using ( auth.uid() = user_id );
+-- 9. Policies: Student Verifications
+DROP POLICY IF EXISTS "Users can select their own verification" ON public.student_verifications;
+CREATE POLICY "Users can select their own verification"
+    ON public.student_verifications FOR SELECT
+    USING (auth.uid() = user_id);
 
-create policy "Users can create their own verification request."
-  on public.student_verifications for insert
-  with check ( auth.uid() = user_id );
+DROP POLICY IF EXISTS "Users can insert their own verification request" ON public.student_verifications;
+CREATE POLICY "Users can insert their own verification request"
+    ON public.student_verifications FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
 
--- 11. Create Indexes
-create index profiles_username_idx on public.profiles (username);
-create index student_verifications_user_id_idx on public.student_verifications (user_id);
+-- 10. Indexes
+CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(email);
+CREATE INDEX IF NOT EXISTS profiles_university_idx ON public.profiles(university);
+CREATE INDEX IF NOT EXISTS profiles_faculty_idx ON public.profiles(faculty);
+CREATE INDEX IF NOT EXISTS student_verifications_user_id_idx ON public.student_verifications(user_id);
+CREATE INDEX IF NOT EXISTS student_verifications_status_idx ON public.student_verifications(status);
