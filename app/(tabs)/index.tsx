@@ -1,115 +1,89 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { router } from 'expo-router';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function WelcomeScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-
+export default function HomeScreen() {
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.content}>
-        <ThemedText type="title" style={styles.appName}>
-          UniMatch
-        </ThemedText>
+    <View style={styles.container}>
+      <Text style={styles.logo}>UniMatch</Text>
 
-        <View style={styles.textSection}>
-          <ThemedText type="title" style={styles.headline}>
-            ההתאמה הסטודנטיאלית שלך מתחילה כאן
-          </ThemedText>
-          <ThemedText style={styles.subtitle}>
-            מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין, ערכים, פקולטה ומה שבאמת חשוב.
-          </ThemedText>
-        </View>
+      <Text style={styles.title}>ההתאמה הסטודנטיאלית שלך מתחילה כאן</Text>
 
-        <View style={styles.buttonSection}>
-          <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: Colors[colorScheme].tint }]}
-            activeOpacity={0.8}>
-            <ThemedText style={styles.primaryButtonText}>התחל התאמה</ThemedText>
-          </TouchableOpacity>
+      <Text style={styles.subtitle}>
+        מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין,
+        ערכים, פקולטה ומה שבאמת חשוב.
+      </Text>
 
-          <TouchableOpacity style={styles.secondaryButton}>
-            <ThemedText type="defaultSemiBold" style={styles.secondaryButtonText}>
-              כבר יש לי חשבון
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={() => router.push('/signup')}
+      >
+        <Text style={styles.primaryButtonText}>התחל התאמה</Text>
+      </TouchableOpacity>
 
-        <ThemedText style={styles.trustNote}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
-      </View>
-    </ThemedView>
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => router.push('/login')}
+      >
+        <Text style={styles.secondaryButtonText}>כבר יש לי חשבון</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.footer}>מיועד לסטודנטים מאומתים בלבד</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  content: {
-    flex: 1,
     padding: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 48,
+    backgroundColor: '#FFFFFF',
   },
-  appName: {
-    fontSize: 40,
-    fontWeight: '900',
-    letterSpacing: -1,
-    color: '#0a7ea4',
+  logo: {
+    fontSize: 34,
+    fontWeight: 'bold',
+    color: '#477D9B',
+    marginBottom: 40,
   },
-  textSection: {
-    alignItems: 'center',
-    gap: 16,
-  },
-  headline: {
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
     textAlign: 'center',
-    fontSize: 32,
-    lineHeight: 40,
+    marginBottom: 16,
+    color: '#111111',
   },
   subtitle: {
+    fontSize: 16,
     textAlign: 'center',
-    fontSize: 18,
-    lineHeight: 26,
-    opacity: 0.7,
-  },
-  buttonSection: {
-    width: '100%',
-    gap: 16,
-    marginTop: 20,
+    marginBottom: 48,
+    lineHeight: 24,
+    color: '#666666',
   },
   primaryButton: {
-    height: 64,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: '100%',
+    backgroundColor: '#477D9B',
+    padding: 18,
+    borderRadius: 18,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    marginBottom: 20,
   },
   primaryButtonText: {
-    color: '#fff',
-    fontSize: 20,
+    color: 'white',
+    fontSize: 18,
     fontWeight: '700',
   },
   secondaryButton: {
-    height: 56,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 12,
   },
   secondaryButtonText: {
-    fontSize: 18,
+    color: '#111111',
+    fontSize: 17,
+    fontWeight: '600',
   },
-  trustNote: {
+  footer: {
+    marginTop: 80,
     fontSize: 14,
-    opacity: 0.5,
-    position: 'absolute',
-    bottom: 40,
-    textAlign: 'center',
+    color: '#999999',
   },
 });
