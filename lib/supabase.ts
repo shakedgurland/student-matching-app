@@ -14,6 +14,32 @@ if (!supabasePublishableKey) {
   throw new Error('Missing EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
 }
 
+// Custom storage wrapper for AsyncStorage to ensure compatibility and handle potential "Native module is null" errors
+const expoStorage = {
+  getItem: async (key: string) => {
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch (e) {
+      console.error('AsyncStorage getItem error:', e);
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string) => {
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (e) {
+      console.error('AsyncStorage setItem error:', e);
+    }
+  },
+  removeItem: async (key: string) => {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch (e) {
+      console.error('AsyncStorage removeItem error:', e);
+    }
+  },
+};
+
 const webStorage = {
   getItem: (key: string) => {
     if (typeof window === 'undefined') {
@@ -35,7 +61,7 @@ const webStorage = {
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
-    storage: Platform.OS === 'web' ? webStorage : AsyncStorage,
+    storage: Platform.OS === 'web' ? webStorage : expoStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

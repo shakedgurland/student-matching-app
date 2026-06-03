@@ -1,4 +1,4 @@
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -106,12 +106,12 @@ export default function WelcomeScreen() {
             style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
             activeOpacity={0.8}
             onPress={() => router.push('/signup')}>
-            <ThemedText style={styles.primaryButtonText}>התחלת התאמה</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>הרשמה + התחלת התאמה</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1, backgroundColor: '#FFFFFF' }]}
-            onPress={() => Alert.alert('בקרוב', 'חיבור לחשבון קיים יהיה זמין בגרסה הבאה')}>
+            onPress={() => router.push('/login')}>
             <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
               כבר יש לי חשבון
             </ThemedText>

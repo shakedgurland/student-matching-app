@@ -1,6 +1,18 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
 
 export default function SignupScreen() {
@@ -9,6 +21,10 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const handleSignup = async () => {
     if (!username.trim()) {
@@ -67,64 +83,96 @@ export default function SignupScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
-      <Text style={styles.title}>הרשמה</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.flex}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.container}>
+            <Text style={styles.logo}>UniMatch</Text>
+            <Text style={styles.title}>הרשמה</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="שם משתמש"
-        value={username}
-        onChangeText={setUsername}
-        textAlign="right"
-      />
+            <TextInput
+              style={styles.input}
+              placeholder="שם משתמש"
+              value={username}
+              onChangeText={setUsername}
+              textAlign="right"
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
+              blurOnSubmit={false}
+            />
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימייל"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        textAlign="right"
-      />
+            <TextInput
+              ref={emailRef}
+              style={styles.input}
+              placeholder="אימייל"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              textAlign="right"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
+            />
 
-      <TextInput
-        style={styles.input}
-        placeholder="סיסמה"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+            <TextInput
+              ref={passwordRef}
+              style={styles.input}
+              placeholder="סיסמה"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textAlign="right"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+              blurOnSubmit={false}
+            />
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימות סיסמה"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+            <TextInput
+              ref={confirmPasswordRef}
+              style={styles.input}
+              placeholder="אימות סיסמה"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              textAlign="right"
+              returnKeyType="done"
+              onSubmitEditing={handleSignup}
+            />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, loading && styles.disabledButton]}
-        onPress={handleSignup}
-        disabled={loading}
-      >
-        <Text style={styles.primaryButtonText}>
-          {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
-        </Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && styles.disabledButton]}
+              onPress={handleSignup}
+              disabled={loading}
+            >
+              <Text style={styles.primaryButtonText}>
+                {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
+              </Text>
+            </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה</Text>
-      </TouchableOpacity>
-    </View>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.link}>חזרה</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
     padding: 24,
