@@ -68,6 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_check_active_matches ON public.matches;
 CREATE TRIGGER trigger_check_active_matches
     BEFORE INSERT OR UPDATE ON public.matches
     FOR EACH ROW EXECUTE FUNCTION public.check_active_matches();
