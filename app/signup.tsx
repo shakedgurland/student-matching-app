@@ -65,9 +65,6 @@ export default function SignupScreen() {
         },
       });
 
-      console.log('Signup data:', data);
-      console.log('Signup error:', error);
-
       if (error) {
         Alert.alert('שגיאה בהרשמה', error.message);
         return;

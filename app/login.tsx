@@ -41,9 +41,6 @@ export default function LoginScreen() {
         password,
       });
 
-      console.log('Login data:', data);
-      console.log('Login error:', error);
-
       if (error) {
         Alert.alert('שגיאה בכניסה', error.message);
         return;

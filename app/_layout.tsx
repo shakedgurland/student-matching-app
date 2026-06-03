@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { I18nManager, View, ActivityIndicator } from 'react-native';
@@ -44,6 +44,7 @@ export default function RootLayout() {
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const router = useRouter();
   const segments = useSegments();
+  const { mode } = useGlobalSearchParams<{ mode: string }>();
 
   useEffect(() => {
     // Force RTL for Hebrew
@@ -101,7 +102,7 @@ export default function RootLayout() {
     const isWelcome = segments[0] === 'welcome';
     const isLoginOrSignup = segments[0] === 'login' || segments[0] === 'signup';
 
-    console.log(`[Auth] Session: ${!!session}, Onboarding: ${onboardingCompleted}, Path: ${segments.join('/')}`);
+    console.log(`[Auth] Session: ${!!session}, Onboarding: ${onboardingCompleted}, Path: ${segments.join('/')}, Mode: ${mode}`);
 
     if (!session) {
       // If not logged in, only allow welcome/login/signup
@@ -115,13 +116,19 @@ export default function RootLayout() {
         router.replace('/questionnaire');
       }
     } else if (onboardingCompleted === true) {
-      // If logged in and onboarding completed, don't allow welcome/login/signup/questionnaire
-      const isForbidden = isWelcome || isLoginOrSignup || segments[0] === 'questionnaire';
+      // If logged in and onboarding completed, don't allow welcome/login/signup
+      let isForbidden = isWelcome || isLoginOrSignup;
+      
+      // Also forbid questionnaire UNLESS mode is edit
+      if (segments[0] === 'questionnaire' && mode !== 'edit') {
+        isForbidden = true;
+      }
+      
       if (isForbidden) {
         router.replace('/(tabs)');
       }
     }
-  }, [session, initialized, onboardingCompleted, segments]);
+  }, [session, initialized, onboardingCompleted, segments, mode]);
 
   if (!initialized) {
     return (
