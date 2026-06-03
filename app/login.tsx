@@ -3,19 +3,12 @@ import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../lib/supabase';
 
-export default function SignupScreen() {
-  const [username, setUsername] = useState('');
+export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async () => {
-    if (!username.trim()) {
-      Alert.alert('שגיאה', 'יש להזין שם משתמש');
-      return;
-    }
-
+  const handleLogin = async () => {
     if (!email.trim()) {
       Alert.alert('שגיאה', 'יש להזין אימייל');
       return;
@@ -26,41 +19,26 @@ export default function SignupScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('שגיאה', 'הסיסמה חייבת להכיל לפחות 6 תווים');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('שגיאה', 'הסיסמאות אינן תואמות');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
-        options: {
-          data: {
-            username: username.trim(),
-          },
-        },
       });
 
-      console.log('Signup data:', data);
-      console.log('Signup error:', error);
+      console.log('Login data:', data);
+      console.log('Login error:', error);
 
       if (error) {
-        Alert.alert('שגיאה בהרשמה', error.message);
+        Alert.alert('שגיאה בכניסה', error.message);
         return;
       }
 
-      router.replace('/student-verification');
+      router.replace('/questionnaire');
     } catch (err) {
-      console.log('Unexpected signup error:', err);
-      Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בהרשמה');
+      console.log('Unexpected login error:', err);
+      Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בכניסה');
     } finally {
       setLoading(false);
     }
@@ -69,15 +47,7 @@ export default function SignupScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.logo}>UniMatch</Text>
-      <Text style={styles.title}>הרשמה</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="שם משתמש"
-        value={username}
-        onChangeText={setUsername}
-        textAlign="right"
-      />
+      <Text style={styles.title}>כניסה לחשבון קיים</Text>
 
       <TextInput
         style={styles.input}
@@ -98,22 +68,13 @@ export default function SignupScreen() {
         textAlign="right"
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימות סיסמה"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        textAlign="right"
-      />
-
       <TouchableOpacity
         style={[styles.primaryButton, loading && styles.disabledButton]}
-        onPress={handleSignup}
+        onPress={handleLogin}
         disabled={loading}
       >
         <Text style={styles.primaryButtonText}>
-          {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
+          {loading ? 'מתחברת...' : 'כניסה'}
         </Text>
       </TouchableOpacity>
 
