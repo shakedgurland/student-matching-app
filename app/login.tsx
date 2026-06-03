@@ -1,12 +1,26 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const passwordRef = useRef<TextInput>(null);
 
   const handleLogin = async () => {
     if (!email.trim()) {
@@ -35,7 +49,7 @@ export default function LoginScreen() {
         return;
       }
 
-      router.replace('/questionnaire');
+      // Root layout will handle redirection based on onboarding status
     } catch (err) {
       console.log('Unexpected login error:', err);
       Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בכניסה');
@@ -45,47 +59,71 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
-      <Text style={styles.title}>כניסה לחשבון קיים</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.flex}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.container}>
+            <Text style={styles.logo}>UniMatch</Text>
+            <Text style={styles.title}>כניסה לחשבון קיים</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימייל"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        textAlign="right"
-      />
+            <TextInput
+              style={styles.input}
+              placeholder="אימייל"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              textAlign="right"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
+            />
 
-      <TextInput
-        style={styles.input}
-        placeholder="סיסמה"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+            <TextInput
+              ref={passwordRef}
+              style={styles.input}
+              placeholder="סיסמה"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textAlign="right"
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+            />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, loading && styles.disabledButton]}
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        <Text style={styles.primaryButtonText}>
-          {loading ? 'מתחברת...' : 'כניסה'}
-        </Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, loading && styles.disabledButton]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              <Text style={styles.primaryButtonText}>
+                {loading ? 'מתחברת...' : 'כניסה'}
+              </Text>
+            </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה</Text>
-      </TouchableOpacity>
-    </View>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.link}>חזרה</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
     padding: 24,
@@ -112,6 +150,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#E9E4E0',
   },
   primaryButton: {
     backgroundColor: '#477D9B',

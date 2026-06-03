@@ -1,128 +1,168 @@
-import { StyleSheet, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  ScrollView,
+  SafeAreaView,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { supabase } from '@/lib/supabase';
 
-// Design Constants for Bright Premium Style
+// Design Constants
 const UI_COLORS = {
   bg: '#FFF9F6',
-  primary: '#FF4D3D', // Solid vivid red-coral for CTAs
-  accent: '#FF8A00', // Small spark accent
-  branding: '#FF3D57', // Main branding color
-  surface: '#FFF0EA', // Soft romantic surface
+  primary: '#FF4D3D',
+  accent: '#FF8A00',
+  branding: '#FF3D57',
+  surface: '#FFF0EA',
   text: '#172033',
   textLight: '#667085',
   border: '#E9E4E0',
+  card: '#FFFFFF',
 };
 
-const BrandMark = ({ size = 48, showSpark = true }: { size?: number, showSpark?: boolean }) => {
-  const strokeWidth = size * 0.2;
-  const innerSize = size - strokeWidth;
-  const sparkSize = size * 0.14;
-
-  return (
-    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
-      {/* Geometric Rounded U / Magnet Shape */}
-      <View style={{
-        width: innerSize,
-        height: innerSize,
-        borderBottomLeftRadius: innerSize / 2,
-        borderBottomRightRadius: innerSize / 2,
-        borderWidth: strokeWidth,
-        borderColor: UI_COLORS.branding,
-        borderTopWidth: 0,
-      }}>
-        {/* Magnet Poles */}
-        <View style={{
-          position: 'absolute',
-          top: -strokeWidth/2,
-          left: -strokeWidth,
-          width: strokeWidth,
-          height: strokeWidth,
-          backgroundColor: UI_COLORS.branding,
-          borderTopLeftRadius: strokeWidth * 0.2,
-          borderTopRightRadius: strokeWidth * 0.2,
-        }} />
-        <View style={{
-          position: 'absolute',
-          top: -strokeWidth/2,
-          right: -strokeWidth,
-          width: strokeWidth,
-          height: strokeWidth,
-          backgroundColor: UI_COLORS.branding,
-          borderTopLeftRadius: strokeWidth * 0.2,
-          borderTopRightRadius: strokeWidth * 0.2,
-        }} />
-      </View>
-
-      {/* Connection spark between poles */}
-      {showSpark && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          width: sparkSize,
-          height: sparkSize,
-          borderRadius: sparkSize / 2,
-          backgroundColor: UI_COLORS.accent,
-          shadowColor: UI_COLORS.accent,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.6,
-          shadowRadius: 8,
-          elevation: 4,
-        }} />
-      )}
-    </View>
-  );
-};
-
-export default function WelcomeScreen() {
+export default function MatchSelectionScreen() {
+  const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [currentMatch, setCurrentMatch] = useState<any>(null);
+  const [otherUser, setOtherUser] = useState<any>(null);
+
+  const isDark = colorScheme === 'dark';
+  const dynamicColors = {
+    bg: isDark ? '#101828' : UI_COLORS.bg,
+    card: isDark ? '#1D2939' : UI_COLORS.card,
+    text: isDark ? '#FFFFFF' : UI_COLORS.text,
+    textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
+    border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
+  };
+
+  useEffect(() => {
+    fetchCurrentMatch();
+  }, []);
+
+  const fetchCurrentMatch = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch active match
+      const { data: matches, error } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (matches && matches.length > 0) {
+        const match = matches[0];
+        setCurrentMatch(match);
+
+        // Fetch other user profile
+        const otherUserId = match.user_a_id === user.id ? match.user_b_id : match.user_a_id;
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', otherUserId)
+          .single();
+
+        if (profileError) throw profileError;
+        setOtherUser(profile);
+      }
+    } catch (error) {
+      console.error('Error fetching match:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartChat = () => {
+    router.push('/match-result');
+  };
+
+  const handleProfile = () => {
+    router.push('/(tabs)/my-profile');
+  };
+
+  if (loading) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg, justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={UI_COLORS.primary} />
+      </ThemedView>
+    );
+  }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: UI_COLORS.bg }]}>
-      <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          <BrandMark size={64} />
-          <ThemedText style={[styles.appName, { color: UI_COLORS.branding }]}>
-            UniMatch
-          </ThemedText>
-        </View>
-
-        <View style={styles.textSection}>
-          <View style={[styles.badge, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding + '20' }]}>
-            <ThemedText style={[styles.badgeText, { color: UI_COLORS.branding }]}>התאמה משמעותית אחת בכל פעם</ThemedText>
+    <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleProfile}>
+               <IconSymbol name="person.crop.circle" size={32} color={UI_COLORS.branding} />
+            </TouchableOpacity>
+            <ThemedText style={[styles.logo, { color: UI_COLORS.branding }]}>UniMatch</ThemedText>
+            <View style={{ width: 32 }} />
           </View>
-          
-          <ThemedText style={[styles.headline, { color: UI_COLORS.text }]}>
-            החיבור הסטודנטיאלי שלך מתחיל כאן
-          </ThemedText>
-          <ThemedText style={[styles.subtitle, { color: UI_COLORS.textLight }]}>
-            מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין, ערכים, פקולטה ומה שבאמת חשוב.
-          </ThemedText>
-        </View>
 
-        <View style={styles.buttonSection}>
-          <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
-            activeOpacity={0.8}
-            onPress={() => router.push('/signup')}>
-            <ThemedText style={styles.primaryButtonText}>הרשמה + התחלת התאמה</ThemedText>
-          </TouchableOpacity>
+          {currentMatch && otherUser ? (
+            <View style={styles.matchCardContainer}>
+              <View style={[styles.card, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
+                <ThemedText style={[styles.cardLabel, { color: UI_COLORS.branding }]}>התאמה פעילה</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: dynamicColors.text }]}>הכירו את {otherUser.username || 'ההתאמה שלך'}</ThemedText>
+                
+                <View style={styles.visualContainer}>
+                   <View style={[styles.avatarPlaceholder, { borderColor: UI_COLORS.branding }]}>
+                      <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
+                   </View>
+                </View>
 
-          <TouchableOpacity 
-            style={[styles.secondaryButton, { borderColor: UI_COLORS.border, borderWidth: 1, backgroundColor: '#FFFFFF' }]}
-            onPress={() => router.push('/login')}>
-            <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
-              כבר יש לי חשבון
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
+                <ThemedText style={[styles.matchScore, { color: UI_COLORS.primary }]}>
+                   {currentMatch.compatibility_score}% התאמה
+                </ThemedText>
 
-        <View style={styles.trustSection}>
-          <View style={[styles.trustDot, { backgroundColor: UI_COLORS.branding }]} />
-          <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>מיועד לסטודנטים מאומתים בלבד</ThemedText>
-        </View>
-      </View>
+                <TouchableOpacity 
+                  style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
+                  onPress={handleStartChat}>
+                  <ThemedText style={styles.primaryButtonText}>צפייה בהתאמה</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>מחפשים לך התאמה...</ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
+                מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.
+              </ThemedText>
+              <TouchableOpacity 
+                style={[styles.outlineButton, { borderColor: UI_COLORS.border }]}
+                onPress={fetchCurrentMatch}>
+                <ThemedText style={[styles.outlineButtonText, { color: dynamicColors.text }]}>רענון</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.tipContainer}>
+             <ThemedText style={[styles.tipTitle, { color: dynamicColors.text }]}>טיפ קטן</ThemedText>
+             <ThemedText style={[styles.tipText, { color: dynamicColors.textLight }]}>
+               פרופיל עם תמונה וביו מעניין מקבל התאמות מדויקות יותר. כדאי לוודא שהפרופיל שלך מעודכן!
+             </ThemedText>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
@@ -131,99 +171,133 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
     padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 40,
+    gap: 32,
   },
-  logoContainer: {
+  header: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 16,
-    paddingTop: 20,
+    paddingTop: 10,
   },
-  appName: {
-    fontSize: 36,
+  logo: {
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: -1,
-    lineHeight: 44,
-    textAlign: 'center',
   },
-  textSection: {
+  matchCardContainer: {
+    marginTop: 20,
+  },
+  card: {
+    borderRadius: 24,
+    padding: 32,
+    borderWidth: 1,
     alignItems: 'center',
     gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  badge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.2,
-    marginBottom: 4,
-  },
-  badgeText: {
+  cardLabel: {
     fontSize: 14,
     fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  headline: {
-    textAlign: 'center',
-    fontSize: 30,
+  cardTitle: {
+    fontSize: 24,
     fontWeight: '800',
-    lineHeight: 38,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
     textAlign: 'center',
-    fontSize: 16,
-    lineHeight: 24,
-    paddingHorizontal: 10,
   },
-  buttonSection: {
-    width: '100%',
-    gap: 12,
-    marginTop: 10,
+  visualContainer: {
+    marginVertical: 10,
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF0EA',
+  },
+  avatarText: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FF3D57',
+  },
+  matchScore: {
+    fontSize: 18,
+    fontWeight: '700',
   },
   primaryButton: {
+    width: '100%',
     height: 56,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#FF4D3D',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
+    marginTop: 8,
   },
   primaryButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
-  secondaryButton: {
-    height: 56,
-    borderRadius: 18,
+  emptyContainer: {
+    alignItems: 'center',
+    paddingTop: 40,
+    gap: 20,
+  },
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#FFF0EA',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 10,
   },
-  secondaryButtonText: {
-    fontSize: 17,
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  outlineButton: {
+    paddingHorizontal: 24,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  outlineButtonText: {
+    fontSize: 16,
     fontWeight: '600',
   },
-  trustSection: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
+  tipContainer: {
+    marginTop: 20,
+    padding: 20,
+    borderRadius: 20,
+    backgroundColor: '#F8F9FA',
     gap: 8,
-    position: 'absolute',
-    bottom: 50,
   },
-  trustDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  tipTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
   },
-  trustNote: {
-    fontSize: 13,
-    fontWeight: '500',
+  tipText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'right',
   },
 });

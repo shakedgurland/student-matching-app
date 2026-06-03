@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -10,15 +10,24 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { decode } from 'base64-arraybuffer';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 // Design Constants for Bright Premium Style
 const UI_COLORS = {
@@ -90,7 +99,14 @@ const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?:
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
+  const { mode } = useLocalSearchParams<{ mode: string }>();
+  const isEditMode = mode === 'edit';
+  const totalSteps = isEditMode ? 5 : 6;
+  
   const [currentStep, setCurrentStep] = useState<Step>(1);
+  const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [photos, setPhotos] = useState<{ uri: string }[]>([]);
   
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -136,10 +152,170 @@ export default function QuestionnaireScreen() {
     personalNuance: '',
   });
 
+  useEffect(() => {
+    if (isEditMode) {
+      loadAnswers();
+    } else {
+      setDataLoaded(true);
+    }
+  }, [isEditMode]);
+
+  const loadAnswers = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase.from('questionnaire_answers').select('answers').eq('user_id', user.id).single();
+      if (data?.answers) {
+        setFormData(prev => ({ ...prev, ...data.answers }));
+      }
+    } catch (e) {
+      console.error('Failed to load answers for edit', e);
+    } finally {
+      setLoading(false);
+      setDataLoaded(true);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 5],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setPhotos([...photos, { uri: result.assets[0].uri }]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('שגיאה', 'לא הצלחנו לבחור תמונה');
+    }
+  };
+
+  const removeLocalPhoto = (index: number) => {
+    setPhotos(photos.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
+    if (!isEditMode && photos.length === 0) {
+      Alert.alert('חסרה תמונה', 'כדי למצוא התאמה טובה, חובה להוסיף לפחות תמונה אחת לפרופיל.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('שגיאה', 'משתמש לא מחובר');
+        return;
+      }
+
+      // 1. Save questionnaire answers
+      const { error: answersError } = await supabase
+        .from('questionnaire_answers')
+        .upsert({
+          user_id: user.id,
+          answers: formData,
+        }, { onConflict: 'user_id' });
+
+      if (answersError) throw answersError;
+
+      if (!isEditMode) {
+        // 2. Upload Photos
+        const uploadedUrls: string[] = [];
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          
+          // Compress and resize
+          const manipResult = await ImageManipulator.manipulateAsync(
+            photo.uri,
+            [{ resize: { width: 1200 } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+
+          if (!manipResult.base64) continue;
+
+          const fileName = `${user.id}/${Date.now()}_${i}.jpg`;
+          const { error: storageError } = await supabase.storage
+            .from('profile-photos')
+            .upload(fileName, decode(manipResult.base64), {
+              contentType: 'image/jpeg',
+              cacheControl: '3600',
+              upsert: false,
+            });
+
+          if (storageError) throw storageError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(fileName);
+
+          uploadedUrls.push(publicUrl);
+
+          // Save to profile_photos table
+          await supabase
+            .from('profile_photos')
+            .insert({
+              user_id: user.id,
+              url: publicUrl,
+              display_order: i,
+            });
+        }
+
+        // 3. Update profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            onboarding_completed: true,
+            birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
+            gender: formData.gender,
+            university: formData.university,
+            faculty: formData.faculty,
+            year_of_study: formData.year,
+            campus: formData.campus,
+            avatar_url: uploadedUrls[0] || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (profileError) throw profileError;
+
+        router.replace('/(tabs)');
+      } else {
+        // Edit mode: Just update basic profile fields and go back
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
+            gender: formData.gender,
+            university: formData.university,
+            faculty: formData.faculty,
+            year_of_study: formData.year,
+            campus: formData.campus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (profileError) throw profileError;
+
+        Alert.alert('הצלחה', 'השאלון עודכן בהצלחה');
+        router.back();
+      }
+    } catch (error: any) {
+      console.error('Error saving questionnaire:', error);
+      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const nextStep = () => {
-    if (currentStep < 5) setCurrentStep((currentStep + 1) as Step);
+    if (currentStep < totalSteps) setCurrentStep((currentStep + 1) as Step);
     else {
-      router.replace('/match-result');
+      handleSubmit();
     }
   };
 
@@ -173,7 +349,7 @@ export default function QuestionnaireScreen() {
   const renderProgress = () => (
     <View style={styles.progressHeader}>
       <View style={styles.progressContainer}>
-        {[1, 2, 3, 4, 5].map((step) => (
+        {[1, 2, 3, 4, 5, 6].map((step) => (
           <View
             key={step}
             style={[
@@ -197,6 +373,7 @@ export default function QuestionnaireScreen() {
       {options.map((opt) => (
         <TouchableOpacity
           key={opt}
+          activeOpacity={0.7}
           style={[
             styles.optionButton,
             { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
@@ -205,7 +382,10 @@ export default function QuestionnaireScreen() {
               backgroundColor: dynamicColors.selectedBg,
             },
           ]}
-          onPress={() => setFormData({ ...formData, [field]: opt })}>
+          onPress={() => {
+            Keyboard.dismiss();
+            setFormData({ ...formData, [field]: opt });
+          }}>
           <ThemedText
             style={[
               styles.optionText,
@@ -238,6 +418,8 @@ export default function QuestionnaireScreen() {
           keyboardType="number-pad"
           value={formData.age}
           onChangeText={(v) => setFormData({ ...formData, age: v })}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
         />
       </View>
 
@@ -319,12 +501,16 @@ export default function QuestionnaireScreen() {
           ].map((opt) => (
             <TouchableOpacity
               key={opt}
+              activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 formData.intent.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
-              onPress={() => toggleMultiSelect(opt)}>
+              onPress={() => {
+                Keyboard.dismiss();
+                toggleMultiSelect(opt);
+              }}>
               <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.intent.includes(opt) && { color: UI_COLORS.selectedText }]}>
                 {opt}
               </ThemedText>
@@ -360,12 +546,16 @@ export default function QuestionnaireScreen() {
             {[1, 2, 3, 4, 5].map((val) => (
               <TouchableOpacity
                 key={val}
+                activeOpacity={0.7}
                 style={[
                   styles.scaleCircle,
                   { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                   formData.sameFacultyImportance === val && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
                 ]}
-                onPress={() => setFormData({ ...formData, sameFacultyImportance: val })}>
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setFormData({ ...formData, sameFacultyImportance: val });
+                }}>
                 <ThemedText style={[styles.scaleCircleText, { color: dynamicColors.text }, formData.sameFacultyImportance === val && { color: UI_COLORS.primary }]}>
                   {val}
                 </ThemedText>
@@ -450,12 +640,16 @@ export default function QuestionnaireScreen() {
           ].map((opt) => (
             <TouchableOpacity
               key={opt}
+              activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 formData.importantInPartner.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
-              onPress={() => toggleMultiSelectField('importantInPartner', opt, 4)}>
+              onPress={() => {
+                Keyboard.dismiss();
+                toggleMultiSelectField('importantInPartner', opt, 4);
+              }}>
               <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.importantInPartner.includes(opt) && { color: UI_COLORS.selectedText }]}>
                 {opt}
               </ThemedText>
@@ -483,12 +677,16 @@ export default function QuestionnaireScreen() {
           ].map((opt) => (
             <TouchableOpacity
               key={opt}
+              activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 formData.careLanguage.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
-              onPress={() => toggleMultiSelectField('careLanguage', opt)}>
+              onPress={() => {
+                Keyboard.dismiss();
+                toggleMultiSelectField('careLanguage', opt);
+              }}>
               <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.careLanguage.includes(opt) && { color: UI_COLORS.selectedText }]}>
                 {opt}
               </ThemedText>
@@ -528,12 +726,16 @@ export default function QuestionnaireScreen() {
           ].map((opt) => (
             <TouchableOpacity
               key={opt}
+              activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 formData.dealbreakers.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
-              onPress={() => toggleMultiSelectField('dealbreakers', opt, 4)}>
+              onPress={() => {
+                Keyboard.dismiss();
+                toggleMultiSelectField('dealbreakers', opt, 4);
+              }}>
               <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.dealbreakers.includes(opt) && { color: UI_COLORS.selectedText }]}>
                 {opt}
               </ThemedText>
@@ -550,12 +752,16 @@ export default function QuestionnaireScreen() {
           ].map((opt) => (
             <TouchableOpacity
               key={opt}
+              activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 formData.comfortNeeds.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
-              onPress={() => toggleMultiSelectField('comfortNeeds', opt)}>
+              onPress={() => {
+                Keyboard.dismiss();
+                toggleMultiSelectField('comfortNeeds', opt);
+              }}>
               <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.comfortNeeds.includes(opt) && { color: UI_COLORS.selectedText }]}>
                 {opt}
               </ThemedText>
@@ -586,7 +792,45 @@ export default function QuestionnaireScreen() {
           multiline
           value={formData.personalNuance}
           onChangeText={(v) => setFormData({ ...formData, personalNuance: v })}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
         />
+      </View>
+    </View>
+  );
+
+  const renderStep6 = () => (
+    <View style={styles.stepContent}>
+      <View>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 6</ThemedText>
+        <View style={styles.subtitleContainer}>
+          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>תמונות פרופיל</ThemedText>
+          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        </View>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>הוספת תמונות (לפחות אחת חובה)</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight, textAlign: 'right' }]}>
+           תמונות ברורות עוזרות לקבל התאמות טובות יותר.
+        </ThemedText>
+        
+        <View style={styles.photoGrid}>
+          {photos.map((photo, index) => (
+            <View key={index} style={styles.photoWrapper}>
+              <Image source={{ uri: photo.uri }} style={styles.gridPhoto} />
+              <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removeLocalPhoto(index)}>
+                <IconSymbol name="xmark" size={12} color="white" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          {photos.length < 6 && (
+            <TouchableOpacity style={[styles.addPhotoPlaceholder, { borderColor: dynamicColors.border }]} onPress={pickImage}>
+              <IconSymbol name="plus" size={32} color={dynamicColors.textLight} />
+              <ThemedText style={{ color: dynamicColors.textLight, marginTop: 8 }}>הוספה</ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -597,25 +841,41 @@ export default function QuestionnaireScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}>
+          style={styles.flex}
+        >
           {renderProgress()}
-          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent} 
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
             {currentStep === 4 && renderStep4()}
             {currentStep === 5 && renderStep5()}
+            {currentStep === 6 && renderStep6()}
 
             <View style={styles.navigation}>
               <TouchableOpacity
                 style={[styles.navButton, styles.primaryNav, { backgroundColor: UI_COLORS.primary }]}
-                onPress={nextStep}>
-                <ThemedText style={styles.primaryNavText}>
-                  {currentStep === 5 ? 'מצא/י לי התאמה' : 'המשך'}
-                </ThemedText>
+                activeOpacity={0.8}
+                onPress={nextStep}
+                disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <ThemedText style={styles.primaryNavText}>
+                    {currentStep === 6 ? 'סיום והתחלה' : 'המשך'}
+                  </ThemedText>
+                )}
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.navButton} onPress={prevStep}>
+              <TouchableOpacity 
+                style={styles.navButton} 
+                activeOpacity={0.6}
+                onPress={prevStep} 
+                disabled={loading}>
                 <ThemedText style={[styles.secondaryNavText, { color: UI_COLORS.primary }]}>חזרה</ThemedText>
               </TouchableOpacity>
             </View>
@@ -627,6 +887,9 @@ export default function QuestionnaireScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
@@ -706,6 +969,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     lineHeight: 24,
   },
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
   input: {
     height: 52,
     borderWidth: 1,
@@ -771,6 +1038,44 @@ const styles = StyleSheet.create({
   scaleCircleText: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  photoGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 10,
+  },
+  photoWrapper: {
+    width: '30%',
+    aspectRatio: 0.8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#eee',
+  },
+  gridPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  deletePhotoBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPhotoPlaceholder: {
+    width: '30%',
+    aspectRatio: 0.8,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
   },
   navigation: {
     marginTop: 48,

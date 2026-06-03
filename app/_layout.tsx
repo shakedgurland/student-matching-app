@@ -1,11 +1,13 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { I18nManager } from 'react-native';
+import { useEffect, useState } from 'react';
+import { I18nManager, View, ActivityIndicator } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
+import { Session } from '@supabase/supabase-js';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -37,6 +39,11 @@ const UniMatchDarkTheme = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [session, setSession] = useState<Session | null>(null);
+  const [initialized, setInitialized] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const router = useRouter();
+  const segments = useSegments();
 
   useEffect(() => {
     // Force RTL for Hebrew
@@ -44,12 +51,91 @@ export default function RootLayout() {
       I18nManager.allowRTL(true);
       I18nManager.forceRTL(true);
     }
+
+    // Initialize session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        checkOnboarding(session.user.id);
+      } else {
+        setInitialized(true);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) {
+        checkOnboarding(session.user.id);
+      } else {
+        setOnboardingCompleted(null);
+        setInitialized(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const checkOnboarding = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      setOnboardingCompleted(data?.onboarding_completed || false);
+    } catch (error) {
+      console.error('Error checking onboarding:', error);
+      setOnboardingCompleted(false);
+    } finally {
+      setInitialized(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!initialized) return;
+
+    const inAuthGroup = segments[0] === '(tabs)';
+    const isWelcome = segments[0] === 'welcome';
+    const isLoginOrSignup = segments[0] === 'login' || segments[0] === 'signup';
+
+    console.log(`[Auth] Session: ${!!session}, Onboarding: ${onboardingCompleted}, Path: ${segments.join('/')}`);
+
+    if (!session) {
+      // If not logged in, only allow welcome/login/signup
+      if (!isWelcome && !isLoginOrSignup) {
+        router.replace('/welcome');
+      }
+    } else if (onboardingCompleted === false) {
+      // If logged in but onboarding not completed, force questionnaire
+      const isOnboardingScreen = segments[0] === 'questionnaire' || segments[0] === 'verification' || segments[0] === 'student-verification';
+      if (!isOnboardingScreen) {
+        router.replace('/questionnaire');
+      }
+    } else if (onboardingCompleted === true) {
+      // If logged in and onboarding completed, don't allow welcome/login/signup/questionnaire
+      const isForbidden = isWelcome || isLoginOrSignup || segments[0] === 'questionnaire';
+      if (isForbidden) {
+        router.replace('/(tabs)');
+      }
+    }
+  }, [session, initialized, onboardingCompleted, segments]);
+
+  if (!initialized) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF9F6' }}>
+        <ActivityIndicator size="large" color="#FF3D57" />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? UniMatchDarkTheme : UniMatchTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="welcome" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="student-verification" options={{ headerShown: false }} />
