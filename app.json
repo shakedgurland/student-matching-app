@@ -10,10 +10,13 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unimatch.app"
+      "bundleIdentifier": "com.gurland17.unimatch",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.unimatch.app",
+      "package": "com.gurland17.unimatch",
       "adaptiveIcon": {
         "backgroundColor": "#FFF9F6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
