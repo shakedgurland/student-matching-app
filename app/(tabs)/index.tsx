@@ -14,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
+import { findAndCreateBestMatch } from '@/lib/matching';
 
 // Design Constants
 const UI_COLORS = {
@@ -32,6 +33,7 @@ export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [matching, setMatching] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<any>(null);
   const [otherUser, setOtherUser] = useState<any>(null);
 
@@ -79,11 +81,38 @@ export default function MatchSelectionScreen() {
 
         if (profileError) throw profileError;
         setOtherUser(profile);
+      } else {
+        // Automatically try to find a match if none exists
+        handleFindMatch(user.id);
       }
     } catch (error) {
       console.error('Error fetching match:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFindMatch = async (userId?: string) => {
+    try {
+      setMatching(true);
+      const targetUserId = userId || (await supabase.auth.getUser()).data.user?.id;
+      if (!targetUserId) return;
+
+      const newMatch = await findAndCreateBestMatch(targetUserId);
+      if (newMatch) {
+        setCurrentMatch({
+          id: newMatch.matchId,
+          compatibility_score: newMatch.compatibilityScore,
+          compatibility_reasons: newMatch.compatibilityReasons
+        });
+        setOtherUser(newMatch.candidateProfile);
+      } else {
+        Alert.alert('לא נמצאה התאמה', 'לא הצלחנו למצוא לך התאמה כרגע. נסה שוב מאוחר יותר.');
+      }
+    } catch (error) {
+      console.error('Error in finding match:', error);
+    } finally {
+      setMatching(false);
     }
   };
 
@@ -123,7 +152,14 @@ export default function MatchSelectionScreen() {
                 
                 <View style={styles.visualContainer}>
                    <View style={[styles.avatarPlaceholder, { borderColor: UI_COLORS.branding }]}>
-                      <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
+                      {otherUser.avatar_url ? (
+                        <View style={{ width: '100%', height: '100%', borderRadius: 60, overflow: 'hidden' }}>
+                           {/* Using a simple View for image placeholder to avoid importing Image if not necessary, but assuming Image is used elsewhere or avatar text is fine */}
+                           <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
+                        </View>
+                      ) : (
+                        <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
+                      )}
                    </View>
                 </View>
 
@@ -148,9 +184,14 @@ export default function MatchSelectionScreen() {
                 מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.
               </ThemedText>
               <TouchableOpacity 
-                style={[styles.outlineButton, { borderColor: UI_COLORS.border }]}
-                onPress={fetchCurrentMatch}>
-                <ThemedText style={[styles.outlineButtonText, { color: dynamicColors.text }]}>רענון</ThemedText>
+                style={[styles.outlineButton, { borderColor: UI_COLORS.border }, matching && { opacity: 0.5 }]}
+                onPress={() => handleFindMatch()}
+                disabled={matching}>
+                {matching ? (
+                  <ActivityIndicator size="small" color={dynamicColors.text} />
+                ) : (
+                  <ThemedText style={[styles.outlineButtonText, { color: dynamicColors.text }]}>חיפוש התאמה חדשה</ThemedText>
+                )}
               </TouchableOpacity>
             </View>
           )}

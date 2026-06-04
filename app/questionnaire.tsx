@@ -96,6 +96,24 @@ const BrandMark = ({ size = 28, showSpark = true }: { size?: number, showSpark?:
   );
 };
 
+const GENDER_OPTIONS = [
+  { label: 'אישה', value: 'woman' },
+  { label: 'גבר', value: 'man' },
+  { label: 'אחר', value: 'other' }
+];
+
+const INTERESTED_IN_OPTIONS = [
+  { label: 'נשים', value: 'woman' },
+  { label: 'גברים', value: 'man' },
+  { label: 'לא משנה לי', value: 'any' }
+];
+
+const HEIGHT_PREF_OPTIONS = [
+  { label: 'לא חשוב לי', value: 'none' },
+  { label: 'נחמד אם כן, אבל לא חובה', value: 'nice_to_have' },
+  { label: 'חשוב לי מאוד', value: 'must_have' }
+];
+
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -122,6 +140,7 @@ export default function QuestionnaireScreen() {
     // Step 1: Profile
     age: '',
     gender: '',
+    heightCm: '',
     university: '',
     faculty: '',
     year: '',
@@ -130,8 +149,10 @@ export default function QuestionnaireScreen() {
     // Step 2: Intent
     intent: [] as string[],
     connectionDepth: '',
-    interestedIn: '',
+    interestedInGenders: [] as string[],
     sameFacultyImportance: 3,
+    heightPreferenceImportance: '',
+    minPreferredHeightCm: '',
     
     // Step 3: Social Style
     spontaneity: '',
@@ -200,6 +221,20 @@ export default function QuestionnaireScreen() {
   };
 
   const handleSubmit = async () => {
+    // 1. Mandatory Fields Validation
+    if (!formData.gender) {
+      Alert.alert('שדה חובה', 'יש לבחור מגדר כדי להמשיך.');
+      return;
+    }
+    if (!formData.heightCm) {
+      Alert.alert('שדה חובה', 'יש להזין גובה כדי להמשיך.');
+      return;
+    }
+    if (!formData.interestedInGenders || formData.interestedInGenders.length === 0) {
+      Alert.alert('שדה חובה', 'יש לבחור במי את/ה מעוניין/ת כדי להמשיך.');
+      return;
+    }
+
     if (!isEditMode && photos.length === 0) {
       Alert.alert('חסרה תמונה', 'כדי למצוא התאמה טובה, חובה להוסיף לפחות תמונה אחת לפרופיל.');
       return;
@@ -272,6 +307,8 @@ export default function QuestionnaireScreen() {
             onboarding_completed: true,
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
+            height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
+            interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
             year_of_study: formData.year,
@@ -291,6 +328,8 @@ export default function QuestionnaireScreen() {
           .update({
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
+            height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
+            interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
             year_of_study: formData.year,
@@ -368,6 +407,37 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
+  const renderEnumSelect = (field: keyof typeof formData, options: {label: string, value: string}[]) => (
+    <View style={styles.optionList}>
+      {options.map((opt) => (
+        <TouchableOpacity
+          key={opt.value}
+          activeOpacity={0.7}
+          style={[
+            styles.optionButton,
+            { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+            formData[field] === opt.value && {
+              borderColor: UI_COLORS.primary,
+              backgroundColor: dynamicColors.selectedBg,
+            },
+          ]}
+          onPress={() => {
+            Keyboard.dismiss();
+            setFormData({ ...formData, [field]: opt.value });
+          }}>
+          <ThemedText
+            style={[
+              styles.optionText,
+              { color: dynamicColors.text },
+              formData[field] === opt.value && { color: UI_COLORS.selectedText, fontWeight: '700' },
+            ]}>
+            {opt.label}
+          </ThemedText>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
   const renderSingleSelect = (field: keyof typeof formData, options: string[]) => (
     <View style={styles.optionList}>
       {options.map((opt) => (
@@ -425,7 +495,21 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>3. מגדר</ThemedText>
-        {renderSingleSelect('gender', ['אישה', 'גבר', 'אחר'])}
+        {renderEnumSelect('gender', GENDER_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>3.5. גובה (בס״מ)</ThemedText>
+        <TextInput
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+          placeholder="למשל: 170"
+          placeholderTextColor={dynamicColors.textLight}
+          keyboardType="number-pad"
+          value={formData.heightCm}
+          onChangeText={(v) => setFormData({ ...formData, heightCm: v })}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+        />
       </View>
 
       <View style={styles.formGroup}>
@@ -532,8 +616,57 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>10. את מי היית רוצה להכיר?</ThemedText>
-        {renderSingleSelect('interestedIn', ['נשים', 'גברים', 'לא משנה לי', 'מעדיף/ה לא להגדיר כרגע'])}
+        <View style={styles.chipGrid}>
+          {INTERESTED_IN_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              activeOpacity={0.7}
+              style={[
+                styles.chip,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+                formData.interestedInGenders.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
+              ]}
+              onPress={() => {
+                Keyboard.dismiss();
+                if (opt.value === 'any') {
+                   setFormData({ ...formData, interestedInGenders: ['any'] });
+                } else {
+                   const newList = formData.interestedInGenders.filter(v => v !== 'any');
+                   if (newList.includes(opt.value)) {
+                      setFormData({ ...formData, interestedInGenders: newList.filter(v => v !== opt.value) });
+                   } else {
+                      setFormData({ ...formData, interestedInGenders: [...newList, opt.value] });
+                   }
+                }
+              }}>
+              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.interestedInGenders.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
+                {opt.label}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>10.5. האם יש לך העדפת גובה?</ThemedText>
+        {renderEnumSelect('heightPreferenceImportance', HEIGHT_PREF_OPTIONS)}
+      </View>
+
+      {(formData.heightPreferenceImportance === 'nice_to_have' || formData.heightPreferenceImportance === 'must_have') && (
+        <View style={styles.formGroup}>
+          <ThemedText style={[styles.label, { color: dynamicColors.text }]}>גובה מינימלי מועדף (בס״מ)</ThemedText>
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="למשל: 175"
+            placeholderTextColor={dynamicColors.textLight}
+            keyboardType="number-pad"
+            value={formData.minPreferredHeightCm}
+            onChangeText={(v) => setFormData({ ...formData, minPreferredHeightCm: v })}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+        </View>
+      )}
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>11. עד כמה חשוב לך שההתאמה תהיה מאותה פקולטה?</ThemedText>
