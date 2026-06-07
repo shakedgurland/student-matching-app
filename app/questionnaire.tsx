@@ -24,7 +24,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '../lib/supabase';
-import { logScreenView, logEvent, logFormSubmit, logError } from '@/lib/analytics';
+import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '@/lib/analytics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -115,6 +115,94 @@ const HEIGHT_PREF_OPTIONS = [
   { label: 'חשוב לי מאוד', value: 'must_have' }
 ];
 
+const REGION_OPTIONS = [
+  { label: 'צפון', value: 'north' },
+  { label: 'דרום', value: 'south' },
+  { label: 'מרכז', value: 'center' },
+  { label: 'ירושלים והסביבה', value: 'jerusalem' },
+  { label: 'חיפה והקריות', value: 'haifa' },
+];
+
+const DEGREE_STAGE_OPTIONS = [
+  { label: 'שנה א׳', value: 'year_1' },
+  { label: 'שנה ב׳', value: 'year_2' },
+  { label: 'שנה ג׳', value: 'year_3' },
+  { label: 'שנה ד׳', value: 'year_4' },
+  { label: 'תואר שני', value: 'masters' },
+  { label: 'אחר', value: 'other' },
+];
+
+const HOBBY_OPTIONS = [
+  { label: 'אקסטרים', value: 'extreme' },
+  { label: 'אופנוע ים', value: 'jet_ski' },
+  { label: 'ים', value: 'beach' },
+  { label: 'יוגה', value: 'yoga' },
+  { label: 'ספורט', value: 'sports' },
+  { label: 'לטייל', value: 'travel' },
+  { label: 'טניס', value: 'tennis' },
+  { label: 'קמפינג', value: 'camping' },
+];
+
+const INTENT_OPTIONS = [
+  { label: 'קשר רציני בלבד.', value: 'serious' },
+  { label: 'קשר שיכול להתפתח, בלי לחץ.', value: 'evolve' },
+  { label: 'להכיר אנשים ולראות לאן זה הולך.', value: 'explore' },
+  { label: 'לא בטוח/ה עדיין.', value: 'unsure' },
+  { label: 'משהו קליל ולא מחייב.', value: 'casual' },
+];
+
+const PACE_OPTIONS = [
+  { label: 'לדבר הרבה ולהיפגש מהר.', value: 'fast' },
+  { label: 'לבנות בהדרגה אבל לשמור על רצף.', value: 'gradual' },
+  { label: 'לאט, בלי לחץ.', value: 'slow' },
+  { label: 'קודם להכיר בהתכתבות ואז להיפגש.', value: 'text_first' },
+  { label: 'להיפגש יחסית מהר כי רק פנים מול פנים יודעים.', value: 'face_to_face' },
+];
+
+const CONFLICT_OPTIONS = [
+  { label: 'לדבר מיד ולפתור.', value: 'immediate' },
+  { label: 'לקחת קצת זמן להירגע ואז לדבר.', value: 'cooldown' },
+  { label: 'לכתוב הודעה כי ככה קל לי להתנסח.', value: 'texting' },
+  { label: 'לקבל חיבוק/הרגעה קודם ואז לדבר.', value: 'physical_comfort' },
+  { label: 'להתרחק לזמן קצר ולא להרגיש שלוחצים עליי.', value: 'space' },
+];
+
+const RESPECT_OPTIONS = [
+  { label: 'שאיפות לימודיות/קריירה.', value: 'career' },
+  { label: 'משפחה ומסורת.', value: 'family' },
+  { label: 'חופש ועצמאות.', value: 'freedom' },
+  { label: 'חיים חברתיים וחברים.', value: 'social' },
+  { label: 'יציבות וביטחון.', value: 'stability' },
+  { label: 'התפתחות אישית.', value: 'growth' },
+];
+
+const INTEREST_SIGNAL_OPTIONS = [
+  { label: 'הוא/היא יוזם/ת שיחות ומפגשים.', value: 'initiative' },
+  { label: 'הוא/היא זוכר/ת דברים קטנים עליי.', value: 'memory' },
+  { label: 'הוא/היא אומר/ת במילים מה הוא/היא מרגיש/ה.', value: 'verbal' },
+  { label: 'הוא/היא מפנה לי זמן איכות.', value: 'quality_time' },
+  { label: 'הוא/היא עושה דברים קטנים בשבילי.', value: 'service' },
+  { label: 'יש חום, קרבה ונוכחות.', value: 'warmth' },
+];
+
+const CONVERSATION_OPTIONS = [
+  { label: 'שיחה עמוקה ואישית.', value: 'deep' },
+  { label: 'צחוקים וקלילות.', value: 'funny' },
+  { label: 'שיחה אינטלקטואלית.', value: 'intellectual' },
+  { label: 'סיפורים וחוויות.', value: 'stories' },
+  { label: 'פלרטוט ומשחקיות עדינה.', value: 'flirty' },
+  { label: 'שיחה רגועה וטבעית בלי מאמץ.', value: 'natural' },
+];
+
+const COMPROMISE_OPTIONS = [
+  { label: 'אמון ונאמנות.', value: 'trust' },
+  { label: 'תקשורת.', value: 'communication' },
+  { label: 'שאיפות לעתיד.', value: 'ambition' },
+  { label: 'אורח חיים.', value: 'lifestyle' },
+  { label: 'משפחה/דת/מסורת.', value: 'tradition' },
+  { label: 'מרחב אישי.', value: 'space' },
+];
+
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -146,30 +234,37 @@ export default function QuestionnaireScreen() {
     heightCm: '',
     university: '',
     faculty: '',
-    year: '',
+    degree_stage: '',
     campus: '',
-    
-    // Step 2: Intent
-    intent: [] as string[],
-    connectionDepth: '',
+    region: '',
+    hobbies: [] as string[],
+
+    // Core Dynamics & Connection
+    intent_type: '',
+    relationship_pace: '',
+    conflict_style: '',
+    respect_priority: '',
+    interest_signals: '',
+    conversation_style: '',
+    compromise_area: '',
+
+    // Preferences & Hard Filters
     interestedInGenders: [] as string[],
-    sameFacultyImportance: 3,
-    heightPreferenceImportance: '',
+    heightPreferenceImportance: 'none',
     minPreferredHeightCm: '',
-    
-    // Step 3: Social Style
+
+    // Step 3: Social Style (Deep)
     spontaneity: '',
     elevatorScenario: '',
     karaokeChance: '',
     familiarFace: '',
-    
-    // Step 4: Values & Communication
+
+    // Deep questionnaire extras (legacy or additional)
     importantInPartner: [] as string[],
     communicationStyle: '',
     careLanguage: [] as string[],
     connectWith: '',
-    
-    // Step 5: Preferences & Boundaries
+
     dealbreakers: [] as string[],
     comfortNeeds: [] as string[],
     meetingStyle: '',
@@ -206,6 +301,7 @@ export default function QuestionnaireScreen() {
 
   const pickImage = async () => {
     try {
+      logButtonTap('Questionnaire', 'add_profile_photo');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -217,6 +313,7 @@ export default function QuestionnaireScreen() {
         setPhotos([...photos, { uri: result.assets[0].uri }]);
       }
     } catch (error) {
+      logError('Questionnaire', 'pickImage_failed', error);
       console.error('Error picking image:', error);
       Alert.alert('שגיאה', 'לא הצלחנו לבחור תמונה');
     }
@@ -227,6 +324,7 @@ export default function QuestionnaireScreen() {
   };
 
   const handleSubmit = async () => {
+    logButtonTap('Questionnaire', isEditMode ? 'save_questionnaire_edit' : 'submit_questionnaire');
     // 1. Mandatory Fields Validation
     if (!formData.gender) {
       logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'gender' } });
@@ -333,8 +431,10 @@ export default function QuestionnaireScreen() {
             interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
-            year_of_study: formData.year,
+            year_of_study: formData.degree_stage,
             campus: formData.campus,
+            region: formData.region,
+            hobbies: formData.hobbies,
             avatar_storage_path: firstPhotoPath,
             updated_at: new Date().toISOString(),
           })
@@ -358,8 +458,10 @@ export default function QuestionnaireScreen() {
             interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
-            year_of_study: formData.year,
+            year_of_study: formData.degree_stage,
             campus: formData.campus,
+            region: formData.region,
+            hobbies: formData.hobbies,
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id);
@@ -374,12 +476,6 @@ export default function QuestionnaireScreen() {
         router.back();
       }
     } catch (error: any) {
-      console.error('Error saving questionnaire:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
-    } finally {
-      setLoading(false);
-    }
-  };    } catch (error: any) {
       console.error('Error saving questionnaire:', error);
       Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
     } finally {
@@ -408,21 +504,22 @@ export default function QuestionnaireScreen() {
       setCurrentStep(prev);
       scrollThresholds.current.clear();
     }
-    else router.back();
+    else {
+      if (isEditMode) {
+        router.back();
+      } else {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/welcome');
+        }
+      }
+    }
   };
 
-  const toggleMultiSelect = (val: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      intent: prev.intent.includes(val)
-        ? prev.intent.filter((i) => i !== val)
-        : [...prev.intent, val],
-    }));
-  };
-
-  const toggleMultiSelectField = (field: 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds', val: string, max?: number) => {
+  const toggleMultiSelectField = (field: 'hobbies' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds', val: string, max?: number) => {
     setFormData((prev) => {
-      const currentList = prev[field];
+      const currentList = prev[field] as string[];
       if (currentList.includes(val)) {
         return { ...prev, [field]: currentList.filter(item => item !== val) };
       }
@@ -486,37 +583,6 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
-  const renderSingleSelect = (field: keyof typeof formData, options: string[]) => (
-    <View style={styles.optionList}>
-      {options.map((opt) => (
-        <TouchableOpacity
-          key={opt}
-          activeOpacity={0.7}
-          style={[
-            styles.optionButton,
-            { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-            formData[field] === opt && {
-              borderColor: UI_COLORS.primary,
-              backgroundColor: dynamicColors.selectedBg,
-            },
-          ]}
-          onPress={() => {
-            Keyboard.dismiss();
-            setFormData({ ...formData, [field]: opt });
-          }}>
-          <ThemedText
-            style={[
-              styles.optionText,
-              { color: dynamicColors.text },
-              formData[field] === opt && { color: UI_COLORS.selectedText, fontWeight: '700' },
-            ]}>
-            {opt}
-          </ThemedText>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   const renderStep1 = () => (
     <View style={styles.stepContent}>
       <View>
@@ -562,49 +628,47 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>4. אוניברסיטה</ThemedText>
-        {renderSingleSelect('university', [
-          'האוניברסיטה העברית',
-          'אוניברסיטת תל אביב',
-          'אוניברסיטת בן גוריון',
-          'אוניברסיטת חיפה',
-          'הטכניון',
-          'אוניברסיטת בר אילן',
-          'אוניברסיטת אריאל',
-          'אחר',
+        {renderEnumSelect('university', [
+          { label: 'האוניברסיטה העברית', value: 'huji' },
+          { label: 'אוניברסיטת תל אביב', value: 'tau' },
+          { label: 'אוניברסיטת בן גוריון', value: 'bgu' },
+          { label: 'אוניברסיטת חיפה', value: 'haifa' },
+          { label: 'הטכניון', value: 'technion' },
+          { label: 'אוניברסיטת בר אילן', value: 'biu' },
+          { label: 'אוניברסיטת אריאל', value: 'ariel' },
+          { label: 'אחר', value: 'other' },
         ])}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>5. פקולטה</ThemedText>
-        {renderSingleSelect('faculty', [
-          'משפטים',
-          'מנהל עסקים',
-          'מדעי החברה',
-          'מדעי הרוח',
-          'מדעי הטבע',
-          'רפואה',
-          'הנדסה / מדעי המחשב',
-          'חינוך',
-          'אחר',
+        {renderEnumSelect('faculty', [
+          { label: 'משפטים', value: 'law' },
+          { label: 'מנהל עסקים', value: 'business' },
+          { label: 'מדעי החברה', value: 'social_science' },
+          { label: 'מדעי הרוח', value: 'humanities' },
+          { label: 'מדעי הטבע', value: 'natural_science' },
+          { label: 'רפואה', value: 'medicine' },
+          { label: 'הנדסה / מדעי המחשב', value: 'engineering' },
+          { label: 'חינוך', value: 'education' },
+          { label: 'אחר', value: 'other' },
         ])}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>6. שנה בתואר</ThemedText>
-        {renderSingleSelect('year', [
-          'שנה א׳',
-          'שנה ב׳',
-          'שנה ג׳',
-          'שנה ד׳ ומעלה',
-          'תואר שני',
-          'דוקטורט',
-          'אחר',
-        ])}
+        {renderEnumSelect('degree_stage', DEGREE_STAGE_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>7. קמפוס</ThemedText>
-        {renderSingleSelect('campus', ['הצופים', 'גבעת רם', 'עין כרם', 'רחובות', 'אחר'])}
+        {renderEnumSelect('campus', [
+            { label: 'הצופים', value: 'scopus' }, 
+            { label: 'גבעת רם', value: 'givat_ram' }, 
+            { label: 'עין כרם', value: 'ein_kerem' }, 
+            { label: 'רחובות', value: 'rehovot' }, 
+            { label: 'אחר', value: 'other' }
+        ])}
       </View>
     </View>
   );
@@ -621,45 +685,7 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>8. מה היית רוצה למצוא ב-UniMatch?</ThemedText>
-        <View style={styles.chipGrid}>
-          {[
-            'זוגיות',
-            'חברות חדשה',
-            'שותף/ה ללמידה',
-            'נטוורקינג',
-            'להכיר אנשים מפקולטות אחרות',
-            'מישהו/י לצאת איתו/ה לאירועים',
-            'עדיין לא בטוח/ה',
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.intent.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                toggleMultiSelect(opt);
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.intent.includes(opt) && { color: UI_COLORS.selectedText }]}>
-                {opt}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>9. איזה סוג חיבור הכי מתאים לך כרגע?</ThemedText>
-        {renderSingleSelect('connectionDepth', [
-          'משהו עמוק ומשמעותי',
-          'משהו קליל שיכול להתפתח',
-          'להכיר קודם בלי לחץ',
-          'חיבור חברי או סטודנטיאלי',
-          'חיבור סביב לימודים או קריירה',
-        ])}
+        {renderEnumSelect('intent_type', INTENT_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
@@ -715,36 +741,6 @@ export default function QuestionnaireScreen() {
           />
         </View>
       )}
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>11. עד כמה חשוב לך שההתאמה תהיה מאותה פקולטה?</ThemedText>
-        <View style={styles.scaleContainer}>
-          <View style={styles.scaleLabels}>
-            <ThemedText style={[styles.scaleLabelText, { color: dynamicColors.textLight }]}>1 = בכלל לא חשוב, דווקא מעניין אותי להכיר מחוץ לפקולטה</ThemedText>
-            <ThemedText style={[styles.scaleLabelText, { color: dynamicColors.textLight }]}>5 = מאוד חשוב לי, אני מעדיף/ה מישהו/י מאותו עולם</ThemedText>
-          </View>
-          <View style={styles.scaleButtons}>
-            {[1, 2, 3, 4, 5].map((val) => (
-              <TouchableOpacity
-                key={val}
-                activeOpacity={0.7}
-                style={[
-                  styles.scaleCircle,
-                  { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                  formData.sameFacultyImportance === val && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-                ]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setFormData({ ...formData, sameFacultyImportance: val });
-                }}>
-                <ThemedText style={[styles.scaleCircleText, { color: dynamicColors.text }, formData.sameFacultyImportance === val && { color: UI_COLORS.primary }]}>
-                  {val}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
     </View>
   );
 
@@ -760,44 +756,44 @@ export default function QuestionnaireScreen() {
       
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>12. חבר/ה מתקשר/ת ואומר/ת: "תוך שעה נוסעים לסופ״ש ספונטני". מה קורה?</ThemedText>
-        {renderSingleSelect('spontaneity', [
-          'ברור, אני כבר אורז/ת. חיים פעם אחת.',
-          'רגע, מי בא איפה ישנים כמה זה עולה ואז כנראה אזרום.',
-          'תלוי עם מי ותלוי מתי — אני ספונטני/ת, אבל עם גבולות.',
-          'אין מצב. אני צריך/ה לדעת מראש'
+        {renderEnumSelect('spontaneity', [
+          { label: 'ברור, אני כבר אורז/ת. חיים פעם אחת.', value: 'very_spontaneous' },
+          { label: 'רגע, מי בא איפה ישנים כמה זה עולה ואז כנראה אזרום.', value: 'calculated_spontaneous' },
+          { label: 'תלוי עם מי ותלוי מתי — אני ספונטני/ת, אבל עם גבולות.', value: 'selective_spontaneous' },
+          { label: 'אין מצב. אני צריך/ה לדעת מראש', value: 'not_spontaneous' }
         ])}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>13. נתקעת במעלית עם מישהו/י שלא הכרת. מה הכי סביר שיקרה?</ThemedText>
-        {renderSingleSelect('elevatorScenario', [
-          'אני אתחיל שיחה כאילו אנחנו מכירים מהצבא / מהגן.',
-          'אני אזרוק הערה מצחיקה ואבדוק אם יש עם מי לדבר.',
-          'אני אחייך בנימוס ואקווה שהשקט לא יהיה מוזר מדי.',
-          'אני אבדוק את הטלפון כאילו יש לי משהו ממש חשוב.',
-          'אני אהיה זה/זו שמנסה להרגיע את כולם וללחוץ על כל הכפתורים הנכונים.'
+        {renderEnumSelect('elevatorScenario', [
+          { label: 'אני אתחיל שיחה כאילו אנחנו מכירים מהצבא / מהגן.', value: 'initiator' },
+          { label: 'אני אזרוק הערה מצחיקה ואבדוק אם יש עם מי לדבר.', value: 'humorous' },
+          { label: 'אני אחייך בנימוס ואקווה שהשקט לא יהיה מוזר מדי.', value: 'polite_quiet' },
+          { label: 'אני אבדוק את הטלפון כאילו יש לי משהו ממש חשוב.', value: 'avoidant' },
+          { label: 'אני אהיה זה/זו שמנסה להרגיע את כולם וללחוץ על כל הכפתורים הנכונים.', value: 'problem_solver' }
         ])}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>14. מזמינים אותך לעלות לקריוקי. מה הסיכוי שזה קורה?</ThemedText>
-        {renderSingleSelect('karaokeChance', [
-          'אני כבר בוחר/ת שיר. תנו לי מיקרופון.',
-          'רק אם עוד מישהו עולה איתי.',
-          'אני אעודד את כולם מהצד ואנסה שלא יקראו לי.',
-          'אולי אחרי קצת זמן ואווירה טובה.',
-          'אין סיכוי. אני הקהל, לא ההופעה.'
+        {renderEnumSelect('karaokeChance', [
+          { label: 'אני כבר בוחר/ת שיר. תנו לי מיקרופון.', value: 'performer' },
+          { label: 'רק אם עוד מישהו עולה איתי.', value: 'duet' },
+          { label: 'אני אעודד את כולם מהצד ואנסה שלא יקראו לי.', value: 'encourager' },
+          { label: 'אולי אחרי קצת זמן ואווירה טובה.', value: 'needs_vibe' },
+          { label: 'אין סיכוי. אני הקהל, לא ההופעה.', value: 'spectator' }
         ])}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>15. את/ה רואה מישהו/י מוכר/ת מרחוק, אבל לא בטוח/ה שהוא/היא ראה/ראתה אותך. מה תעשה/י?</ThemedText>
-        {renderSingleSelect('familiarFace', [
-          'אנופף בלי לחשוב יותר מדי.',
-          'אחכה לראות אם הוא/היא מזהה אותי קודם.',
-          'אסתכל בטלפון כאילו אני באמצע משימה חשובה.',
-          'אעשה חצי חיוך כזה של "ראינו לא ראינו"',
-          'אשנה כיוון ואעמיד פנים שזה היה מתוכנן.'
+        {renderEnumSelect('familiarFace', [
+          { label: 'אנופף בלי לחשוב יותר מדי.', value: 'wave' },
+          { label: 'אחכה לראות אם הוא/היא מזהה אותי קודם.', value: 'wait_and_see' },
+          { label: 'אסתכל בטלפון כאילו אני באמצע משימה חשובה.', value: 'phone_check' },
+          { label: 'אעשה חצי חיוך כזה של "ראינו לא ראינו"', value: 'half_smile' },
+          { label: 'אשנה כיוון ואעמיד פנים שזה היה מתוכנן.', value: 'change_direction' }
         ])}
       </View>
     </View>
@@ -817,22 +813,25 @@ export default function QuestionnaireScreen() {
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>16. מה הכי חשוב לך באדם שמולך? (עד 4)</ThemedText>
         <View style={styles.chipGrid}>
           {[
-            'כנות', 'הומור', 'רגישות', 'שאפתנות', 'יציבות', 'פתיחות', 'אינטליגנציה', 'קלילות', 'נאמנות', 'יכולת להקשיב', 'עצמאות', 'חום ואכפתיות'
+            {label:'כנות', value:'honesty'}, {label:'הומור', value:'humor'}, {label:'רגישות', value:'sensitivity'}, 
+            {label:'שאפתנות', value:'ambition'}, {label:'יציבות', value:'stability'}, {label:'פתיחות', value:'openness'}, 
+            {label:'אינטליגנציה', value:'intelligence'}, {label:'קלילות', value:'lightness'}, {label:'נאמנות', value:'loyalty'}, 
+            {label:'יכולת להקשיב', value:'listening'}, {label:'עצמאות', value:'independence'}, {label:'חום ואכפתיות', value:'warmth'}
           ].map((opt) => (
             <TouchableOpacity
-              key={opt}
+              key={opt.value}
               activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.importantInPartner.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
+                formData.importantInPartner.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
               onPress={() => {
                 Keyboard.dismiss();
-                toggleMultiSelectField('importantInPartner', opt, 4);
+                toggleMultiSelectField('importantInPartner', opt.value, 4);
               }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.importantInPartner.includes(opt) && { color: UI_COLORS.selectedText }]}>
-                {opt}
+              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.importantInPartner.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
+                {opt.label}
               </ThemedText>
             </TouchableOpacity>
           ))}
@@ -841,12 +840,12 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>17. איזה סגנון תקשורת הכי מתאים לך?</ThemedText>
-        {renderSingleSelect('communicationStyle', [
-          'פתוח וישיר — עדיף לדבר על דברים.',
-          'רגוע והדרגתי — לא חייבים לפתוח הכול מיד.',
-          'קליל והומוריסטי — גם דברים רציניים אפשר לקחת בפרופורציה.',
-          'עמוק ומשמעותי — אני אוהב/ת שיחות שיש בהן עומק.',
-          'מעשי — פחות דיבורים, יותר מעשים.'
+        {renderEnumSelect('communicationStyle', [
+          { label: 'פתוח וישיר — עדיף לדבר על דברים.', value: 'open_direct' },
+          { label: 'רגוע והדרגתי — לא חייבים לפתוח הכול מיד.', value: 'calm_gradual' },
+          { label: 'קליל והומוריסטי — גם דברים רציניים אפשר לקחת בפרופורציה.', value: 'light_humorous' },
+          { label: 'עמוק ומשמעותי — אני אוהב/ת שיחות שיש בהן עומק.', value: 'deep_meaningful' },
+          { label: 'מעשי — פחות דיבורים, יותר מעשים.', value: 'practical' }
         ])}
       </View>
 
@@ -854,22 +853,24 @@ export default function QuestionnaireScreen() {
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>18. איך את/ה בדרך כלל מראה אכפתיות?</ThemedText>
         <View style={styles.chipGrid}>
           {[
-            'מילים טובות', 'זמן איכות', 'עזרה בפועל', 'הקשבה', 'מגע פיזי', 'מתנות קטנות', 'לזכור פרטים קטנים', 'להיות שם כשצריך'
+            {label:'מילים טובות', value:'kind_words'}, {label:'זמן איכות', value:'quality_time'}, {label:'עזרה בפועל', value:'practical_help'}, 
+            {label:'הקשבה', value:'listening'}, {label:'מגע פיזי', value:'physical_touch'}, {label:'מתנות קטנות', value:'small_gifts'}, 
+            {label:'לזכור פרטים קטנים', value:'remembering_details'}, {label:'להיות שם כשצריך', value:'being_there'}
           ].map((opt) => (
             <TouchableOpacity
-              key={opt}
+              key={opt.value}
               activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.careLanguage.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
+                formData.careLanguage.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
               onPress={() => {
                 Keyboard.dismiss();
-                toggleMultiSelectField('careLanguage', opt);
+                toggleMultiSelectField('careLanguage', opt.value);
               }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.careLanguage.includes(opt) && { color: UI_COLORS.selectedText }]}>
-                {opt}
+              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.careLanguage.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
+                {opt.label}
               </ThemedText>
             </TouchableOpacity>
           ))}
@@ -878,12 +879,12 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>19. אני בדרך כלל מתחבר/ת יותר לאנשים שהם:</ThemedText>
-        {renderSingleSelect('connectWith', [
-          'דומים לי',
-          'שונים ממני',
-          'משלימים אותי',
-          'מאתגרים אותי לחשוב אחרת',
-          'אם יש חיבור — זה לא באמת משנה'
+        {renderEnumSelect('connectWith', [
+          { label: 'דומים לי', value: 'similar' },
+          { label: 'שונים ממני', value: 'different' },
+          { label: 'משלימים אותי', value: 'complementary' },
+          { label: 'מאתגרים אותי לחשוב אחרת', value: 'challenging' },
+          { label: 'אם יש חיבור — זה לא באמת משנה', value: 'doesnt_matter' }
         ])}
       </View>
     </View>
@@ -903,22 +904,25 @@ export default function QuestionnaireScreen() {
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>20. מה כנראה יוריד לך את החשק להמשיך להכיר? (עד 4)</ThemedText>
         <View style={styles.chipGrid}>
           {[
-            'חוסר כבוד לגבולות', 'תקשורת לא ברורה', 'יהירות', 'חוסר רצינות', 'שיפוטיות', 'פער גדול בציפיות', 'לחץ להיפגש מהר מדי', 'חוסר הומור', 'חוסר יציבות', 'יותר מדי דרמה'
+            {label:'חוסר כבוד לגבולות', value:'disrespect_boundaries'}, {label:'תקשורת לא ברורה', value:'unclear_communication'}, 
+            {label:'יהירות', value:'arrogance'}, {label:'חוסר רצינות', value:'lack_of_seriousness'}, {label:'שיפוטיות', value:'judgmentalness'}, 
+            {label:'פער גדול בציפיות', value:'expectation_gap'}, {label:'לחץ להיפגש מהר מדי', value:'pressure_to_meet'}, 
+            {label:'חוסר הומור', value:'lack_of_humor'}, {label:'חוסר יציבות', value:'instability'}, {label:'יותר מדי דרמה', value:'too_much_drama'}
           ].map((opt) => (
             <TouchableOpacity
-              key={opt}
+              key={opt.value}
               activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.dealbreakers.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
+                formData.dealbreakers.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
               onPress={() => {
                 Keyboard.dismiss();
-                toggleMultiSelectField('dealbreakers', opt, 4);
+                toggleMultiSelectField('dealbreakers', opt.value, 4);
               }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.dealbreakers.includes(opt) && { color: UI_COLORS.selectedText }]}>
-                {opt}
+              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.dealbreakers.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
+                {opt.label}
               </ThemedText>
             </TouchableOpacity>
           ))}
@@ -929,22 +933,25 @@ export default function QuestionnaireScreen() {
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>21. מה גורם לך להרגיש בנוח בהיכרות ראשונה?</ThemedText>
         <View style={styles.chipGrid}>
           {[
-            'לדבר קצת באפליקציה לפני שנפגשים', 'להיפגש במקום ציבורי', 'שיהיה ברור מה הצד השני מחפש', 'שלא יהיה לחץ', 'פרופיל מאומת', 'הקשר סטודנטיאלי ברור', 'שיחה קלילה ולא כבדה מדי בהתחלה'
+            {label:'לדבר קצת באפליקציה לפני שנפגשים', value:'chat_first'}, {label:'להיפגש במקום ציבורי', value:'public_meeting'}, 
+            {label:'שיהיה ברור מה הצד השני מחפש', value:'clear_intent'}, {label:'שלא יהיה לחץ', value:'no_pressure'}, 
+            {label:'פרופיל מאומת', value:'verified_profile'}, {label:'הקשר סטודנטיאלי ברור', value:'student_context'}, 
+            {label:'שיחה קלילה ולא כבדה מדי בהתחלה', value:'light_conversation'}
           ].map((opt) => (
             <TouchableOpacity
-              key={opt}
+              key={opt.value}
               activeOpacity={0.7}
               style={[
                 styles.chip,
                 { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.comfortNeeds.includes(opt) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
+                formData.comfortNeeds.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
               ]}
               onPress={() => {
                 Keyboard.dismiss();
-                toggleMultiSelectField('comfortNeeds', opt);
+                toggleMultiSelectField('comfortNeeds', opt.value);
               }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.comfortNeeds.includes(opt) && { color: UI_COLORS.selectedText }]}>
-                {opt}
+              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.comfortNeeds.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
+                {opt.label}
               </ThemedText>
             </TouchableOpacity>
           ))}
@@ -953,14 +960,14 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={[styles.label, { color: dynamicColors.text }]}>22. איזה מפגש ראשון הכי מתאים לך?</ThemedText>
-        {renderSingleSelect('meetingStyle', [
-          'קפה קצר בקמפוס',
-          'הליכה קצרה בחוץ',
-          'בר בערב',
-          'למידה משותפת בספרייה',
-          'אירוע סטודנטיאלי',
-          'שיחת וידאו או צ׳אט קודם',
-          'משהו ספונטני ולא מתוכנן מדי'
+        {renderEnumSelect('meetingStyle', [
+          { label: 'קפה קצר בקמפוס', value: 'campus_coffee' },
+          { label: 'הליכה קצרה בחוץ', value: 'short_walk' },
+          { label: 'בר בערב', value: 'evening_bar' },
+          { label: 'למידה משותפת בספרייה', value: 'library_study' },
+          { label: 'אירוע סטודנטיאלי', value: 'student_event' },
+          { label: 'שיחת וידאו או צ׳אט קודם', value: 'video_chat' },
+          { label: 'משהו ספונטני ולא מתוכנן מדי', value: 'spontaneous' }
         ])}
       </View>
 
