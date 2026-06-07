@@ -1,44 +1,48 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function HomeScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
+    <ResponsiveContainer style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.logo}>UniMatch</Text>
 
-      <Text style={styles.title}>ההתאמה הסטודנטיאלית שלך מתחילה כאן</Text>
+        <Text style={styles.title}>ההתאמה הסטודנטיאלית שלך מתחילה כאן</Text>
 
-      <Text style={styles.subtitle}>
-        מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין,
-        ערכים, פקולטה ומה שבאמת חשוב.
-      </Text>
+        <Text style={styles.subtitle}>
+          מערכת התאמה חכמה שמחברת בין סטודנטים וסטודנטיות לפי תחומי עניין,
+          ערכים, פקולטה ומה שבאמת חשוב.
+        </Text>
 
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={() => router.push('/signup')}
-      >
-        <Text style={styles.primaryButtonText}>התחל התאמה</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => router.push('/signup')}
+        >
+          <Text style={styles.primaryButtonText}>התחל התאמה</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={() => router.push('/login')}
-      >
-        <Text style={styles.secondaryButtonText}>כבר יש לי חשבון</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push('/login')}
+        >
+          <Text style={styles.secondaryButtonText}>כבר יש לי חשבון</Text>
+        </TouchableOpacity>
 
-      <Text style={styles.footer}>מיועד לסטודנטים מאומתים בלבד</Text>
-    </View>
+        <Text style={styles.footer}>מיועד לסטודנטים מאומתים בלבד</Text>
+      </View>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 34,

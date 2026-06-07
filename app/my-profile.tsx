@@ -1,63 +1,67 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function MyProfileScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
+    <ResponsiveContainer style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.logo}>UniMatch</Text>
 
-      <Text style={styles.title}>הפרופיל שלי</Text>
+        <Text style={styles.title}>הפרופיל שלי</Text>
 
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>ל</Text>
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>ל</Text>
+          </View>
+
+          <Text style={styles.name}>ליזה, 25</Text>
+          <Text style={styles.details}>סטודנטית לפסיכולוגיה ומנהל עסקים</Text>
+          <Text style={styles.details}>האוניברסיטה העברית</Text>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>עליי</Text>
+            <Text style={styles.sectionText}>
+              אוהבת שיחות עומק, קפה בקמפוס, ללמוד דברים חדשים ולהכיר אנשים עם לב טוב.
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>מחפשת</Text>
+            <Text style={styles.sectionText}>
+              קשר רציני, יציב ובריא עם מישהו שאפשר לדבר איתו באמת.
+            </Text>
+          </View>
+
+          <View style={styles.tagsRow}>
+            <Text style={styles.tag}>קפה</Text>
+            <Text style={styles.tag}>טיולים</Text>
+            <Text style={styles.tag}>פסיכולוגיה</Text>
+          </View>
         </View>
 
-        <Text style={styles.name}>ליזה, 25</Text>
-        <Text style={styles.details}>סטודנטית לפסיכולוגיה ומנהל עסקים</Text>
-        <Text style={styles.details}>האוניברסיטה העברית</Text>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => router.push('/basic-questionnaire')}
+        >
+          <Text style={styles.primaryButtonText}>עריכת שאלון התאמה</Text>
+        </TouchableOpacity>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>עליי</Text>
-          <Text style={styles.sectionText}>
-            אוהבת שיחות עומק, קפה בקמפוס, ללמוד דברים חדשים ולהכיר אנשים עם לב טוב.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>מחפשת</Text>
-          <Text style={styles.sectionText}>
-            קשר רציני, יציב ובריא עם מישהו שאפשר לדבר איתו באמת.
-          </Text>
-        </View>
-
-        <View style={styles.tagsRow}>
-          <Text style={styles.tag}>קפה</Text>
-          <Text style={styles.tag}>טיולים</Text>
-          <Text style={styles.tag}>פסיכולוגיה</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={() => router.push('/questionnaire')}
-      >
-        <Text style={styles.primaryButtonText}>עריכת שאלון התאמה</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה לצ׳אט</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.link}>חזרה</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 28,

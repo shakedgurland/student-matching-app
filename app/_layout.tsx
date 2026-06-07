@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -19,7 +19,11 @@ export default function RootLayout() {
     if (!I18nManager.isRTL) {
       I18nManager.allowRTL(true);
       I18nManager.forceRTL(true);
-      // Note: A full app restart might be required for RTL to take effect on some devices.
+    }
+    
+    // Web specific RTL handling
+    if (Platform.OS === 'web') {
+      document.documentElement.dir = 'rtl';
     }
   }, []);
 

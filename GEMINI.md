@@ -24,14 +24,21 @@
 - **Methods:** University email, student card upload, proof of studies, manual review.
 - **Privacy Rule:** Do not store sensitive ID information unless absolutely necessary. Design for privacy and security.
 
-## Screens to Implement
-1. **Welcome Screen**
-2. **Signup Screen:** Username and password fields.
-3. **Student Verification Demo Screen**
-4. **Matching Questionnaire Screen**
-5. **Match Result Screen**
-6. **72-hour Active Match Screen**
-7. **Demo Chat Screen**
+## Screens Implemented
+1. **Welcome Screen** (`app/(tabs)/index.tsx`)
+2. **Signup Screen** (`app/signup.tsx`)
+3. **Login Screen** (`app/login.tsx`)
+4. **Student Verification Screen** (`app/student-verification.tsx`)
+5. **Basic Questionnaire Screen** (`app/basic-questionnaire.tsx`)
+6. **Questionnaire Transition Screen** (`app/questionnaire-transition.tsx`)
+7. **Deeper Questionnaire Screen** (`app/deeper-questionnaire.tsx`)
+8. **Match Result Screen** (`app/match-result.tsx`)
+9. **Active Match Screen** (`app/active-match.tsx`)
+10. **Chat Screen** (`app/chat.tsx`)
+11. **My Profile Screen** (`app/my-profile.tsx`)
+
+## User Flow
+Signup/Login -> Student Verification -> Basic Questionnaire -> Transition (Initial Matches) -> Deeper Questionnaire (Optional) -> Home (Explore Tab) -> Match Result -> Active Match -> Chat.
 
 ## Design Rules
 - **Hebrew RTL:** Native right-to-left flow.

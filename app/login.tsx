@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -27,15 +28,12 @@ export default function LoginScreen() {
         password,
       });
 
-      console.log('Login data:', data);
-      console.log('Login error:', error);
-
       if (error) {
         Alert.alert('שגיאה בכניסה', error.message);
         return;
       }
 
-      router.replace('/questionnaire');
+      router.replace('/basic-questionnaire');
     } catch (err) {
       console.log('Unexpected login error:', err);
       Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בכניסה');
@@ -45,52 +43,55 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
-      <Text style={styles.title}>כניסה לחשבון קיים</Text>
+    <ResponsiveContainer style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.logo}>UniMatch</Text>
+        <Text style={styles.title}>כניסה לחשבון קיים</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימייל"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="אימייל"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          textAlign="right"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="סיסמה"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="סיסמה"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          textAlign="right"
+        />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, loading && styles.disabledButton]}
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        <Text style={styles.primaryButtonText}>
-          {loading ? 'מתחברת...' : 'כניסה'}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.primaryButton, loading && styles.disabledButton]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <Text style={styles.primaryButtonText}>
+            {loading ? 'מתחברת...' : 'כניסה'}
+          </Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.link}>חזרה</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 30,

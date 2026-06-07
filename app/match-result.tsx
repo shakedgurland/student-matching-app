@@ -1,46 +1,50 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function MatchResultScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
+    <ResponsiveContainer style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.logo}>UniMatch</Text>
 
-      <Text style={styles.title}>מצאנו לך התאמה!</Text>
+        <Text style={styles.title}>מצאנו לך התאמה!</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.name}>נועם, 25</Text>
-        <Text style={styles.details}>סטודנט/ית לפסיכולוגיה</Text>
-        <Text style={styles.match}>87% התאמה</Text>
+        <View style={styles.card}>
+          <Text style={styles.name}>נועם, 25</Text>
+          <Text style={styles.details}>סטודנט/ית לפסיכולוגיה</Text>
+          <Text style={styles.match}>87% התאמה</Text>
 
-        <Text style={styles.bio}>
-          אוהב/ת קפה בקמפוס, שיחות עומק, לימודים ביחד וטיולים בסופי שבוע.
-        </Text>
-      </View>
+          <Text style={styles.bio}>
+            אוהב/ת קפה בקמפוס, שיחות עומק, לימודים ביחד וטיולים בסופי שבוע.
+          </Text>
+        </View>
 
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={() => router.push('/chat')}
-      >
-        <Text style={styles.primaryButtonText}>מעבר לצ׳אט</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => router.push('/active-match')}
+        >
+          <Text style={styles.primaryButtonText}>מעבר להתאמה שלי</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={() => router.push('/questionnaire')}
-      >
-        <Text style={styles.secondaryButtonText}>חזרה לשאלון</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => router.push('/basic-questionnaire')}
+        >
+          <Text style={styles.secondaryButtonText}>חזרה לשאלון</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 30,

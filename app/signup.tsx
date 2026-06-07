@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function SignupScreen() {
   const [username, setUsername] = useState('');
@@ -49,9 +50,6 @@ export default function SignupScreen() {
         },
       });
 
-      console.log('Signup data:', data);
-      console.log('Signup error:', error);
-
       if (error) {
         Alert.alert('שגיאה בהרשמה', error.message);
         return;
@@ -67,69 +65,72 @@ export default function SignupScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
-      <Text style={styles.title}>הרשמה</Text>
+    <ResponsiveContainer style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.logo}>UniMatch</Text>
+        <Text style={styles.title}>הרשמה</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="שם משתמש"
-        value={username}
-        onChangeText={setUsername}
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="שם משתמש"
+          value={username}
+          onChangeText={setUsername}
+          textAlign="right"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימייל"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="אימייל"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          textAlign="right"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="סיסמה"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="סיסמה"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          textAlign="right"
+        />
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימות סיסמה"
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-        secureTextEntry
-        textAlign="right"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="אימות סיסמה"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+          textAlign="right"
+        />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, loading && styles.disabledButton]}
-        onPress={handleSignup}
-        disabled={loading}
-      >
-        <Text style={styles.primaryButtonText}>
-          {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.primaryButton, loading && styles.disabledButton]}
+          onPress={handleSignup}
+          disabled={loading}
+        >
+          <Text style={styles.primaryButtonText}>
+            {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
+          </Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.link}>חזרה</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 30,

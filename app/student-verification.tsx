@@ -1,43 +1,47 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { ResponsiveContainer } from '@/components/ui/responsive-container';
 
 export default function StudentVerificationScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>UniMatch</Text>
+    <ResponsiveContainer style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.logo}>UniMatch</Text>
 
-      <Text style={styles.title}>אימות סטודנט</Text>
+        <Text style={styles.title}>אימות סטודנט</Text>
 
-      <Text style={styles.subtitle}>
-        כדי לשמור על קהילה סטודנטיאלית אמינה, הזיני אימייל אוניברסיטאי.
-      </Text>
+        <Text style={styles.subtitle}>
+          כדי לשמור על קהילה סטודנטיאלית אמינה, הזיני אימייל אוניברסיטאי.
+        </Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="אימייל אוניברסיטאי"
-        keyboardType="email-address"
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="אימייל אוניברסיטאי"
+          keyboardType="email-address"
+        />
 
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={() => router.push('/questionnaire')}
-      >
-        <Text style={styles.primaryButtonText}>המשך לשאלון התאמה</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={() => router.push('/basic-questionnaire')}
+        >
+          <Text style={styles.primaryButtonText}>המשך לשאלון התאמה</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>חזרה</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.link}>חזרה</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </ResponsiveContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   logo: {
     fontSize: 30,
