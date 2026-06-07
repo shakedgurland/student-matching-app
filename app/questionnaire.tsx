@@ -24,6 +24,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '../lib/supabase';
+import { logScreenView, logEvent, logFormSubmit, logError } from '@/lib/analytics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -126,6 +127,8 @@ export default function QuestionnaireScreen() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [photos, setPhotos] = useState<{ uri: string }[]>([]);
   
+  const scrollThresholds = React.useRef<Set<number>>(new Set());
+
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -174,6 +177,9 @@ export default function QuestionnaireScreen() {
   });
 
   useEffect(() => {
+    logScreenView('Questionnaire');
+    logEvent('onboarding_started', { metadata: { mode } });
+    logEvent('onboarding_step_viewed', { metadata: { step: currentStep } });
     if (isEditMode) {
       loadAnswers();
     } else {
@@ -223,19 +229,23 @@ export default function QuestionnaireScreen() {
   const handleSubmit = async () => {
     // 1. Mandatory Fields Validation
     if (!formData.gender) {
+      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'gender' } });
       Alert.alert('שדה חובה', 'יש לבחור מגדר כדי להמשיך.');
       return;
     }
     if (!formData.heightCm) {
+      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'heightCm' } });
       Alert.alert('שדה חובה', 'יש להזין גובה כדי להמשיך.');
       return;
     }
     if (!formData.interestedInGenders || formData.interestedInGenders.length === 0) {
+      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'interestedInGenders' } });
       Alert.alert('שדה חובה', 'יש לבחור במי את/ה מעוניין/ת כדי להמשיך.');
       return;
     }
 
     if (!isEditMode && photos.length === 0) {
+      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'photos' } });
       Alert.alert('חסרה תמונה', 'כדי למצוא התאמה טובה, חובה להוסיף לפחות תמונה אחת לפרופיל.');
       return;
     }
@@ -256,13 +266,17 @@ export default function QuestionnaireScreen() {
           answers: formData,
         }, { onConflict: 'user_id' });
 
-      if (answersError) throw answersError;
+      if (answersError) {
+        logError('Questionnaire', 'save_answers_failed', answersError);
+        throw answersError;
+      }
 
       if (!isEditMode) {
         // 2. Upload Photos
-        const uploadedUrls: string[] = [];
+        let firstPhotoPath: string | null = null;
         for (let i = 0; i < photos.length; i++) {
           const photo = photos[i];
+          logEvent('photo_upload_started', { screen: 'Questionnaire', metadata: { index: i } });
           
           // Compress and resize
           const manipResult = await ImageManipulator.manipulateAsync(
@@ -271,9 +285,14 @@ export default function QuestionnaireScreen() {
             { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
           );
 
-          if (!manipResult.base64) continue;
+          if (!manipResult.base64) {
+            logEvent('photo_upload_failed', { screen: 'Questionnaire', action: 'compression', metadata: { index: i } });
+            continue;
+          }
 
           const fileName = `${user.id}/${Date.now()}_${i}.jpg`;
+          if (i === 0) firstPhotoPath = fileName;
+          
           const { error: storageError } = await supabase.storage
             .from('profile-photos')
             .upload(fileName, decode(manipResult.base64), {
@@ -282,22 +301,25 @@ export default function QuestionnaireScreen() {
               upsert: false,
             });
 
-          if (storageError) throw storageError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('profile-photos')
-            .getPublicUrl(fileName);
-
-          uploadedUrls.push(publicUrl);
+          if (storageError) {
+            logError('Questionnaire', 'photo_upload_failed', storageError);
+            throw storageError;
+          }
 
           // Save to profile_photos table
-          await supabase
+          const { error: dbError } = await supabase
             .from('profile_photos')
             .insert({
               user_id: user.id,
-              url: publicUrl,
+              storage_path: fileName,
               display_order: i,
             });
+            
+          if (dbError) {
+            logError('Questionnaire', 'photo_db_insert_failed', dbError);
+          } else {
+            logEvent('photo_upload_succeeded', { screen: 'Questionnaire', metadata: { index: i } });
+          }
         }
 
         // 3. Update profile
@@ -313,13 +335,17 @@ export default function QuestionnaireScreen() {
             faculty: formData.faculty,
             year_of_study: formData.year,
             campus: formData.campus,
-            avatar_url: uploadedUrls[0] || null,
+            avatar_storage_path: firstPhotoPath,
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          logError('Questionnaire', 'profile_update_failed', profileError);
+          throw profileError;
+        }
 
+        logFormSubmit('Questionnaire', 'onboarding_submitted');
         router.replace('/(tabs)');
       } else {
         // Edit mode: Just update basic profile fields and go back
@@ -338,8 +364,12 @@ export default function QuestionnaireScreen() {
           })
           .eq('id', user.id);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          logError('Questionnaire', 'edit_profile_update_failed', profileError);
+          throw profileError;
+        }
 
+        logFormSubmit('Questionnaire', 'edit_onboarding_submitted');
         Alert.alert('הצלחה', 'השאלון עודכן בהצלחה');
         router.back();
       }
@@ -349,17 +379,35 @@ export default function QuestionnaireScreen() {
     } finally {
       setLoading(false);
     }
+  };    } catch (error: any) {
+      console.error('Error saving questionnaire:', error);
+      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const nextStep = () => {
-    if (currentStep < totalSteps) setCurrentStep((currentStep + 1) as Step);
+    if (currentStep < totalSteps) {
+      const next = (currentStep + 1) as Step;
+      logButtonTap('Questionnaire', 'next_step', { fromStep: currentStep, toStep: next });
+      logEvent('onboarding_step_viewed', { metadata: { step: next } });
+      setCurrentStep(next);
+      scrollThresholds.current.clear();
+    }
     else {
       handleSubmit();
     }
   };
 
   const prevStep = () => {
-    if (currentStep > 1) setCurrentStep((currentStep - 1) as Step);
+    if (currentStep > 1) {
+      const prev = (currentStep - 1) as Step;
+      logButtonTap('Questionnaire', 'previous_step', { fromStep: currentStep, toStep: prev });
+      logEvent('onboarding_step_viewed', { metadata: { step: prev } });
+      setCurrentStep(prev);
+      scrollThresholds.current.clear();
+    }
     else router.back();
   };
 
@@ -968,6 +1016,23 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
+  const handleScroll = (event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScroll = layoutMeasurement.height + contentOffset.y;
+    const totalHeight = contentSize.height;
+    const scrollPercent = Math.floor((currentScroll / totalHeight) * 100);
+
+    [25, 50, 75, 100].forEach(threshold => {
+      if (scrollPercent >= threshold && !scrollThresholds.current.has(threshold)) {
+        scrollThresholds.current.add(threshold);
+        logEvent('scroll_depth', { 
+          screen: 'Questionnaire', 
+          metadata: { percent: threshold, step: currentStep } 
+        });
+      }
+    });
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -981,6 +1046,8 @@ export default function QuestionnaireScreen() {
             contentContainerStyle={styles.scrollContent} 
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={1000}
           >
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}

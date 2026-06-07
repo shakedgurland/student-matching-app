@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -15,6 +16,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { findAndCreateBestMatch } from '@/lib/matching';
+import { logScreenView, logEvent, logError } from '@/lib/analytics';
 
 // Design Constants
 const UI_COLORS = {
@@ -47,6 +49,7 @@ export default function MatchSelectionScreen() {
   };
 
   useEffect(() => {
+    logScreenView('Home');
     fetchCurrentMatch();
   }, []);
 
@@ -80,7 +83,19 @@ export default function MatchSelectionScreen() {
           .single();
 
         if (profileError) throw profileError;
-        setOtherUser(profile);
+
+        // Generate signed URL for avatar if storage_path exists
+        let avatarUrl = profile.avatar_url;
+        if (profile.avatar_storage_path) {
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(profile.avatar_storage_path, 3600);
+          if (!signedError) {
+            avatarUrl = signedData.signedUrl;
+          }
+        }
+
+        setOtherUser({ ...profile, avatar_url: avatarUrl });
       } else {
         // Automatically try to find a match if none exists
         handleFindMatch(user.id);
@@ -95,21 +110,37 @@ export default function MatchSelectionScreen() {
   const handleFindMatch = async (userId?: string) => {
     try {
       setMatching(true);
+      logEvent('match_search_started');
       const targetUserId = userId || (await supabase.auth.getUser()).data.user?.id;
       if (!targetUserId) return;
 
       const newMatch = await findAndCreateBestMatch(targetUserId);
       if (newMatch) {
+        logEvent('match_found', { metadata: { matchId: newMatch.matchId, score: newMatch.compatibilityScore } });
+        let candidateProfile = newMatch.candidateProfile;
+        
+        // Generate signed URL for avatar if storage_path exists
+        if (candidateProfile.avatar_storage_path) {
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(candidateProfile.avatar_storage_path, 3600);
+          if (!signedError) {
+            candidateProfile = { ...candidateProfile, avatar_url: signedData.signedUrl };
+          }
+        }
+
         setCurrentMatch({
           id: newMatch.matchId,
           compatibility_score: newMatch.compatibilityScore,
           compatibility_reasons: newMatch.compatibilityReasons
         });
-        setOtherUser(newMatch.candidateProfile);
+        setOtherUser(candidateProfile);
       } else {
+        logEvent('match_not_found');
         Alert.alert('לא נמצאה התאמה', 'לא הצלחנו למצוא לך התאמה כרגע. נסה שוב מאוחר יותר.');
       }
     } catch (error) {
+      logError('Home', 'match_search_failed', error);
       console.error('Error in finding match:', error);
     } finally {
       setMatching(false);
@@ -153,10 +184,7 @@ export default function MatchSelectionScreen() {
                 <View style={styles.visualContainer}>
                    <View style={[styles.avatarPlaceholder, { borderColor: UI_COLORS.branding }]}>
                       {otherUser.avatar_url ? (
-                        <View style={{ width: '100%', height: '100%', borderRadius: 60, overflow: 'hidden' }}>
-                           {/* Using a simple View for image placeholder to avoid importing Image if not necessary, but assuming Image is used elsewhere or avatar text is fine */}
-                           <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
-                        </View>
+                        <Image source={{ uri: otherUser.avatar_url }} style={styles.avatarImage} />
                       ) : (
                         <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
                       )}
@@ -263,6 +291,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFF0EA',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     fontSize: 48,

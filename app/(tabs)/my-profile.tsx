@@ -23,6 +23,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
+import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '@/lib/analytics';
 
 // Design Constants
 const UI_COLORS = {
@@ -48,6 +49,9 @@ export default function MyProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [editingAnswers, setEditingAnswers] = useState(false);
   
+  const scrollThresholds = React.useRef<Set<number>>(new Set());
+  const sectionsLogged = React.useRef<Set<string>>(new Set());
+
   // Editable fields
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
@@ -63,6 +67,7 @@ export default function MyProfileScreen() {
   };
 
   useEffect(() => {
+    logScreenView('MyProfile');
     fetchProfileData();
   }, []);
 
@@ -79,7 +84,19 @@ export default function MyProfileScreen() {
         .single();
 
       if (profileError) throw profileError;
-      setProfile(profileData);
+      
+      // Generate signed URL for avatar if storage_path exists
+      let avatarUrl = profileData.avatar_url;
+      if (profileData.avatar_storage_path) {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from('profile-photos')
+          .createSignedUrl(profileData.avatar_storage_path, 3600);
+        if (!signedError) {
+          avatarUrl = signedData.signedUrl;
+        }
+      }
+
+      setProfile({ ...profileData, avatar_url: avatarUrl });
       setUsername(profileData.username || '');
       setBio(profileData.bio || '');
 
@@ -90,7 +107,21 @@ export default function MyProfileScreen() {
         .order('display_order', { ascending: true });
 
       if (photosError) throw photosError;
-      setPhotos(photosData || []);
+      
+      // Generate signed URLs for all photos
+      const photosWithSignedUrls = await Promise.all((photosData || []).map(async (photo) => {
+        if (photo.storage_path) {
+          const { data, error } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(photo.storage_path, 3600);
+          if (!error) {
+            return { ...photo, url: data.signedUrl };
+          }
+        }
+        return photo;
+      }));
+
+      setPhotos(photosWithSignedUrls);
 
       const { data: answersData, error: answersError } = await supabase
         .from('questionnaire_answers')
@@ -111,6 +142,7 @@ export default function MyProfileScreen() {
 
   const handleSaveProfile = async () => {
     try {
+      logButtonTap('MyProfile', 'save_profile');
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -124,12 +156,17 @@ export default function MyProfileScreen() {
         })
         .eq('id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        logError('MyProfile', 'profile_update_failed', error);
+        throw error;
+      }
       
+      logFormSubmit('MyProfile', 'profile_updated');
       setProfile({ ...profile, username, bio });
       setEditing(false);
       Alert.alert('הצלחה', 'הפרופיל עודכן בהצלחה');
     } catch (error) {
+      logError('MyProfile', 'profile_update_failed', error);
       console.error('Error updating profile:', error);
       Alert.alert('שגיאה', 'לא הצלחנו לעדכן את הפרופיל');
     } finally {
@@ -150,6 +187,7 @@ export default function MyProfileScreen() {
         uploadImage(result.assets[0].uri);
       }
     } catch (error) {
+      logError('MyProfile', 'image_picker_failed', error);
       console.error('Error picking image:', error);
       Alert.alert('שגיאה', 'לא הצלחנו לבחור תמונה');
     }
@@ -158,6 +196,7 @@ export default function MyProfileScreen() {
   const uploadImage = async (uri: string) => {
     try {
       setUploading(true);
+      logEvent('photo_upload_started', { screen: 'MyProfile' });
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -180,37 +219,51 @@ export default function MyProfileScreen() {
           upsert: false,
         });
 
-      if (storageError) throw storageError;
+      if (storageError) {
+        logError('MyProfile', 'photo_upload_failed', storageError);
+        throw storageError;
+      }
 
-      // 3. Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // 3. Generate signed URL for UI update
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('profile-photos')
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 3600);
+
+      if (signedError) {
+        logError('MyProfile', 'signed_url_generation_failed', signedError);
+        throw signedError;
+      }
 
       // 4. Save to profile_photos table
       const { data: photoData, error: tableError } = await supabase
         .from('profile_photos')
         .insert({
           user_id: user.id,
-          url: publicUrl,
+          storage_path: fileName,
           display_order: photos.length,
         })
         .select()
         .single();
 
-      if (tableError) throw tableError;
+      if (tableError) {
+        logError('MyProfile', 'photo_db_insert_failed', tableError);
+        throw tableError;
+      }
 
-      setPhotos([...photos, photoData]);
+      logEvent('photo_upload_succeeded', { screen: 'MyProfile' });
+      const newPhoto = { ...photoData, url: signedData.signedUrl };
+      setPhotos([...photos, newPhoto]);
       
       if (!profile.avatar_url) {
         await supabase
           .from('profiles')
-          .update({ avatar_url: publicUrl })
+          .update({ avatar_storage_path: fileName })
           .eq('id', user.id);
-        setProfile({ ...profile, avatar_url: publicUrl });
+        setProfile({ ...profile, avatar_url: signedData.signedUrl, avatar_storage_path: fileName });
       }
 
     } catch (error) {
+      logError('MyProfile', 'uploadImage_exception', error);
       console.error('Error uploading image:', error);
       Alert.alert('שגיאה', 'לא הצלחנו להעלות את התמונה');
     } finally {
@@ -218,34 +271,41 @@ export default function MyProfileScreen() {
     }
   };
 
-  const removePhoto = async (photoId: string, photoUrl: string) => {
+  const removePhoto = async (photoId: string, storagePath: string) => {
     try {
       setLoading(true);
+      logEvent('photo_deleted', { screen: 'MyProfile' });
       const { error: tableError } = await supabase
         .from('profile_photos')
         .delete()
         .eq('id', photoId);
 
-      if (tableError) throw tableError;
+      if (tableError) {
+        logError('MyProfile', 'photo_delete_db_failed', tableError);
+        throw tableError;
+      }
 
-      const filePath = photoUrl.split('profile-photos/')[1];
-      if (filePath) {
-        await supabase.storage.from('profile-photos').remove([filePath]);
+      if (storagePath) {
+        await supabase.storage.from('profile-photos').remove([storagePath]);
       }
 
       const newPhotos = photos.filter(p => p.id !== photoId);
       setPhotos(newPhotos);
 
-      if (profile.avatar_url === photoUrl) {
-        const newAvatar = newPhotos.length > 0 ? newPhotos[0].url : null;
+      if (profile.avatar_storage_path === storagePath) {
+        const nextPhoto = newPhotos.length > 0 ? newPhotos[0] : null;
+        const newAvatarPath = nextPhoto ? nextPhoto.storage_path : null;
+        const newAvatarUrl = nextPhoto ? nextPhoto.url : null;
+
         await supabase
           .from('profiles')
-          .update({ avatar_url: newAvatar })
+          .update({ avatar_storage_path: newAvatarPath })
           .eq('id', profile.id);
-        setProfile({ ...profile, avatar_url: newAvatar });
+        setProfile({ ...profile, avatar_url: newAvatarUrl, avatar_storage_path: newAvatarPath });
       }
 
     } catch (error) {
+      logError('MyProfile', 'photo_delete_exception', error);
       console.error('Error removing photo:', error);
       Alert.alert('שגיאה', 'לא הצלחנו למחוק את התמונה');
     } finally {
@@ -354,7 +414,7 @@ export default function MyProfileScreen() {
                   {photos.map((photo) => (
                     <View key={photo.id} style={styles.photoWrapper}>
                       <Image source={{ uri: photo.url }} style={styles.gridPhoto} />
-                      <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removePhoto(photo.id, photo.url)}>
+                      <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removePhoto(photo.id, photo.storage_path)}>
                          <IconSymbol name="xmark" size={12} color="white" />
                       </TouchableOpacity>
                     </View>
