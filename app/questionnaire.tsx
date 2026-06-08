@@ -28,7 +28,8 @@ import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+// 0: Intro, 1-6: Short, 7: Choice, 8-14: Deep
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
 
 // Design Constants for Bright Premium Style
 const UI_COLORS = {
@@ -203,17 +204,27 @@ const COMPROMISE_OPTIONS = [
   { label: 'מרחב אישי.', value: 'space' },
 ];
 
+const FIRST_DATE_OPTIONS = [
+  { label: 'קפה קצר בקמפוס', value: 'campus_coffee' },
+  { label: 'הליכה קצרה בחוץ', value: 'short_walk' },
+  { label: 'בר בערב', value: 'evening_bar' },
+  { label: 'למידה משותפת בספרייה', value: 'library_study' },
+  { label: 'אירוע סטודנטיאלי', value: 'student_event' },
+  { label: 'שיחת וידאו או צ׳אט קודם', value: 'video_chat' },
+  { label: 'משהו ספונטני ולא מתוכנן מדי', value: 'spontaneous' },
+];
+
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
   const { mode } = useLocalSearchParams<{ mode: string }>();
   const isEditMode = mode === 'edit';
-  const totalSteps = isEditMode ? 5 : 6;
   
-  const [currentStep, setCurrentStep] = useState<Step>(1);
+  const [currentStep, setCurrentStep] = useState<Step>(isEditMode ? 1 : 0);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [photos, setPhotos] = useState<{ uri: string }[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   const scrollThresholds = React.useRef<Set<number>>(new Set());
 
@@ -228,7 +239,7 @@ export default function QuestionnaireScreen() {
   };
 
   const [formData, setFormData] = useState({
-    // Step 1: Profile
+    // Short Questionnaire
     age: '',
     gender: '',
     heightCm: '',
@@ -238,8 +249,6 @@ export default function QuestionnaireScreen() {
     campus: '',
     region: '',
     hobbies: [] as string[],
-
-    // Core Dynamics & Connection
     intent_type: '',
     relationship_pace: '',
     conflict_style: '',
@@ -247,24 +256,24 @@ export default function QuestionnaireScreen() {
     interest_signals: '',
     conversation_style: '',
     compromise_area: '',
-
-    // Preferences & Hard Filters
     interestedInGenders: [] as string[],
     heightPreferenceImportance: 'none',
     minPreferredHeightCm: '',
+    preferred_age_min: '18',
+    preferred_age_max: '45',
+    preferred_first_date: '',
 
-    // Step 3: Social Style (Deep)
+    // Deep Questionnaire
     spontaneity: '',
     elevatorScenario: '',
     karaokeChance: '',
     familiarFace: '',
-
-    // Deep questionnaire extras (legacy or additional)
+    relationship_growth_text: '',
+    about_me: '',
     importantInPartner: [] as string[],
     communicationStyle: '',
     careLanguage: [] as string[],
     connectWith: '',
-
     dealbreakers: [] as string[],
     comfortNeeds: [] as string[],
     meetingStyle: '',
@@ -273,23 +282,40 @@ export default function QuestionnaireScreen() {
 
   useEffect(() => {
     logScreenView('Questionnaire');
-    logEvent('onboarding_started', { metadata: { mode } });
-    logEvent('onboarding_step_viewed', { metadata: { step: currentStep } });
-    if (isEditMode) {
+    logEvent(currentStep === 0 ? 'short_questionnaire_started' : 'onboarding_step_viewed', { metadata: { mode, step: currentStep } });
+    
+    if (isEditMode && !dataLoaded) {
       loadAnswers();
-    } else {
+    } else if (!isEditMode) {
       setDataLoaded(true);
     }
-  }, [isEditMode]);
+  }, [isEditMode, currentStep]);
 
   const loadAnswers = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data, error } = await supabase.from('questionnaire_answers').select('answers').eq('user_id', user.id).single();
-      if (data?.answers) {
-        setFormData(prev => ({ ...prev, ...data.answers }));
+      
+      const [answersRes, profileRes] = await Promise.all([
+        supabase.from('questionnaire_answers').select('answers').eq('user_id', user.id).single(),
+        supabase.from('profiles').select('onboarding_mode').eq('id', user.id).single()
+      ]);
+
+      if (answersRes.data?.answers) {
+        setFormData(prev => ({ 
+          ...prev, 
+          ...answersRes.data.answers,
+          // Ensure new fields have defaults if they didn't exist in DB
+          preferred_age_min: answersRes.data.answers.preferred_age_min || '18',
+          preferred_age_max: answersRes.data.answers.preferred_age_max || '45',
+          preferred_first_date: answersRes.data.answers.preferred_first_date || '',
+          relationship_growth_text: answersRes.data.answers.relationship_growth_text || '',
+          about_me: answersRes.data.answers.about_me || '',
+        }));
+      }
+      if (profileRes.data) {
+        setUserProfile(profileRes.data);
       }
     } catch (e) {
       console.error('Failed to load answers for edit', e);
@@ -323,31 +349,10 @@ export default function QuestionnaireScreen() {
     setPhotos(photos.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async () => {
-    logButtonTap('Questionnaire', isEditMode ? 'save_questionnaire_edit' : 'submit_questionnaire');
-    // 1. Mandatory Fields Validation
-    if (!formData.gender) {
-      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'gender' } });
-      Alert.alert('שדה חובה', 'יש לבחור מגדר כדי להמשיך.');
-      return;
-    }
-    if (!formData.heightCm) {
-      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'heightCm' } });
-      Alert.alert('שדה חובה', 'יש להזין גובה כדי להמשיך.');
-      return;
-    }
-    if (!formData.interestedInGenders || formData.interestedInGenders.length === 0) {
-      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'interestedInGenders' } });
-      Alert.alert('שדה חובה', 'יש לבחור במי את/ה מעוניין/ת כדי להמשיך.');
-      return;
-    }
-
-    if (!isEditMode && photos.length === 0) {
-      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', action: 'submit', metadata: { field: 'photos' } });
-      Alert.alert('חסרה תמונה', 'כדי למצוא התאמה טובה, חובה להוסיף לפחות תמונה אחת לפרופיל.');
-      return;
-    }
-
+  const handleSubmit = async (submitMode: 'fast' | 'deep') => {
+    const finalMode = submitMode;
+    logButtonTap('Questionnaire', isEditMode ? 'save_questionnaire_edit' : `${finalMode}_match_selected`);
+    
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -376,7 +381,6 @@ export default function QuestionnaireScreen() {
           const photo = photos[i];
           logEvent('photo_upload_started', { screen: 'Questionnaire', metadata: { index: i } });
           
-          // Compress and resize
           const manipResult = await ImageManipulator.manipulateAsync(
             photo.uri,
             [{ resize: { width: 1200 } }],
@@ -404,20 +408,15 @@ export default function QuestionnaireScreen() {
             throw storageError;
           }
 
-          // Save to profile_photos table
-          const { error: dbError } = await supabase
+          await supabase
             .from('profile_photos')
             .insert({
               user_id: user.id,
               storage_path: fileName,
               display_order: i,
             });
-            
-          if (dbError) {
-            logError('Questionnaire', 'photo_db_insert_failed', dbError);
-          } else {
-            logEvent('photo_upload_succeeded', { screen: 'Questionnaire', metadata: { index: i } });
-          }
+          
+          logEvent('photo_upload_succeeded', { screen: 'Questionnaire', metadata: { index: i } });
         }
 
         // 3. Update profile
@@ -425,6 +424,7 @@ export default function QuestionnaireScreen() {
           .from('profiles')
           .update({
             onboarding_completed: true,
+            onboarding_mode: finalMode,
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
@@ -435,7 +435,8 @@ export default function QuestionnaireScreen() {
             campus: formData.campus,
             region: formData.region,
             hobbies: formData.hobbies,
-            avatar_storage_path: firstPhotoPath,
+            bio: formData.about_me,
+            avatar_storage_path: firstPhotoPath || undefined,
             updated_at: new Date().toISOString(),
           })
           .eq('id', user.id);
@@ -445,13 +446,12 @@ export default function QuestionnaireScreen() {
           throw profileError;
         }
 
-        logFormSubmit('Questionnaire', 'onboarding_submitted');
-        router.replace('/(tabs)');
+        logEvent(finalMode === 'fast' ? 'short_questionnaire_completed' : 'deep_questionnaire_completed');
+        logFormSubmit('Questionnaire', 'onboarding_submitted', { mode: finalMode });
+        router.replace('/(tabs)/my-profile');
       } else {
-        // Edit mode: Just update basic profile fields and go back
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
+        // Edit mode
+        const updateData: any = {
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
@@ -462,8 +462,18 @@ export default function QuestionnaireScreen() {
             campus: formData.campus,
             region: formData.region,
             hobbies: formData.hobbies,
+            bio: formData.about_me,
             updated_at: new Date().toISOString(),
-          })
+        };
+
+        // Upgrade mode if they were fast and completed deep
+        if (userProfile?.onboarding_mode === 'fast' && submitMode === 'deep') {
+          updateData.onboarding_mode = 'deep';
+        }
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update(updateData)
           .eq('id', user.id);
 
         if (profileError) {
@@ -484,40 +494,82 @@ export default function QuestionnaireScreen() {
   };
 
   const nextStep = () => {
-    if (currentStep < totalSteps) {
+    // Validation before moving next
+    if (currentStep === 1) {
+      if (!isEditMode && photos.length === 0) {
+        logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'photos' } });
+        Alert.alert('חסרה תמונה', 'חובה להוסיף לפחות תמונה אחת.');
+        return;
+      }
+      if (!formData.gender || !formData.age || !formData.heightCm) {
+         logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step1_basics' } });
+         Alert.alert('שדות חובה', 'יש למלא גיל, מגדר וגובה.');
+         return;
+      }
+    }
+
+    if (currentStep === 3) {
+      const minAge = parseInt(formData.preferred_age_min);
+      const maxAge = parseInt(formData.preferred_age_max);
+      if (isNaN(minAge) || isNaN(maxAge)) {
+        Alert.alert('שגיאה', 'נא להזין טווח גילאים תקין');
+        return;
+      }
+      if (minAge < 18 || maxAge > 45) {
+        Alert.alert('שגיאה', 'טווח הגילאים המותר הוא 18-45');
+        return;
+      }
+      if (minAge > maxAge) {
+        Alert.alert('שגיאה', 'הגיל המינימלי חייב להיות נמוך מהגיל המקסימלי');
+        return;
+      }
+      if (formData.interestedInGenders.length === 0) {
+        Alert.alert('שדות חובה', 'יש לבחור את מי היית רוצה להכיר');
+        return;
+      }
+    }
+
+    if (currentStep === 4) {
+      if (!formData.intent_type || !formData.relationship_pace || !formData.preferred_first_date) {
+        Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
+        return;
+      }
+    }
+
+    if (currentStep === 6) {
+      if (isEditMode) {
+        if (userProfile?.onboarding_mode === 'deep') {
+          setCurrentStep(8);
+        } else {
+          // Stay on step 6 and let the footer handle the choice
+        }
+      } else {
+        setCurrentStep(7); // Show choice screen
+      }
+    } else if (currentStep === 12) {
+      handleSubmit('deep');
+    } else {
       const next = (currentStep + 1) as Step;
-      logButtonTap('Questionnaire', 'next_step', { fromStep: currentStep, toStep: next });
-      logEvent('onboarding_step_viewed', { metadata: { step: next } });
+      logButtonTap('Questionnaire', 'next_step', { from: currentStep, to: next });
       setCurrentStep(next);
       scrollThresholds.current.clear();
-    }
-    else {
-      handleSubmit();
+      if (next === 8) logEvent('deep_questionnaire_started');
     }
   };
 
   const prevStep = () => {
-    if (currentStep > 1) {
-      const prev = (currentStep - 1) as Step;
-      logButtonTap('Questionnaire', 'previous_step', { fromStep: currentStep, toStep: prev });
-      logEvent('onboarding_step_viewed', { metadata: { step: prev } });
+    if (currentStep > 0) {
+      const prev = (currentStep === 8 ? 6 : currentStep - 1) as Step;
+      logButtonTap('Questionnaire', 'previous_step', { from: currentStep, to: prev });
       setCurrentStep(prev);
       scrollThresholds.current.clear();
-    }
-    else {
-      if (isEditMode) {
-        router.back();
-      } else {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace('/welcome');
-        }
-      }
+    } else {
+      if (isEditMode) router.back();
+      else router.canGoBack() ? router.back() : router.replace('/welcome');
     }
   };
 
-  const toggleMultiSelectField = (field: 'hobbies' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds', val: string, max?: number) => {
+  const toggleMultiSelectField = (field: 'hobbies' | 'interestedInGenders' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds', val: string, max?: number) => {
     setFormData((prev) => {
       const currentList = prev[field] as string[];
       if (currentList.includes(val)) {
@@ -529,28 +581,6 @@ export default function QuestionnaireScreen() {
       return { ...prev, [field]: [...currentList, val] };
     });
   };
-
-  const renderProgress = () => (
-    <View style={styles.progressHeader}>
-      <View style={styles.progressContainer}>
-        {[1, 2, 3, 4, 5, 6].map((step) => (
-          <View
-            key={step}
-            style={[
-              styles.progressSegment,
-              { 
-                backgroundColor: step <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive,
-              },
-            ]}
-          />
-        ))}
-      </View>
-      <View style={styles.headerBadge}>
-        <BrandMark size={20} />
-        <ThemedText style={styles.badgeText}>התאמה חכמה</ThemedText>
-      </View>
-    </View>
-  );
 
   const renderEnumSelect = (field: keyof typeof formData, options: {label: string, value: string}[]) => (
     <View style={styles.optionList}>
@@ -583,51 +613,103 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
+  const renderIntro = () => (
+    <View style={styles.stepContent}>
+      <View style={styles.introHeader}>
+         <BrandMark size={60} />
+         <ThemedText style={styles.introTitle}>ברוכים הבאים ל-UniMatch</ThemedText>
+      </View>
+      <ThemedText style={styles.introText}>
+        השאלות הבאות נבנו כדי לזהות דפוסי התאמה משמעותיים — כמו כוונות, ערכים, סגנון תקשורת וקצב קשר — שעוזרים לנו להציע התאמה מדויקת ומוצלחת יותר.
+      </ThemedText>
+      <TouchableOpacity 
+        style={[styles.primaryNav, { backgroundColor: UI_COLORS.primary, padding: 18, borderRadius: 16, marginTop: 40 }]}
+        onPress={() => setCurrentStep(1)}>
+        <ThemedText style={[styles.primaryNavText, { textAlign: 'center' }]}>בואו נתחיל</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderStep1 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>מי אני כסטודנט/ית</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>קצת עליי</ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>1. תמונות פרופיל</ThemedText>
+        <View style={styles.photoGrid}>
+          {photos.map((p, i) => (
+            <View key={i} style={styles.photoWrapper}>
+              <Image source={{ uri: p.uri }} style={styles.gridPhoto} />
+              <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removeLocalPhoto(i)}>
+                <IconSymbol name="xmark" size={12} color="white" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          {photos.length < 6 && (
+            <TouchableOpacity style={styles.addPhotoPlaceholder} onPress={pickImage}>
+              <IconSymbol name="plus" size={32} color={UI_COLORS.textLight} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>2. גיל</ThemedText>
-        <TextInput
-          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
-          placeholder="למשל: 24"
-          placeholderTextColor={dynamicColors.textLight}
-          keyboardType="number-pad"
-          value={formData.age}
-          onChangeText={(v) => setFormData({ ...formData, age: v })}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>3. מגדר</ThemedText>
+        <ThemedText style={styles.label}>2. מגדר</ThemedText>
         {renderEnumSelect('gender', GENDER_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>3.5. גובה (בס״מ)</ThemedText>
+        <ThemedText style={styles.label}>3. גובה (בס״מ)</ThemedText>
         <TextInput
           style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
-          placeholder="למשל: 170"
-          placeholderTextColor={dynamicColors.textLight}
+          placeholder="170"
           keyboardType="number-pad"
           value={formData.heightCm}
           onChangeText={(v) => setFormData({ ...formData, heightCm: v })}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
         />
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>4. אוניברסיטה</ThemedText>
+        <ThemedText style={styles.label}>4. גיל</ThemedText>
+        <TextInput
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+          placeholder="24"
+          keyboardType="number-pad"
+          value={formData.age}
+          onChangeText={(v) => setFormData({ ...formData, age: v })}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>5. ספר/י על עצמך בכמה מילים</ThemedText>
+        <TextInput
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+          placeholder="משהו קצר שיעזור לצד השני להבין מי את/ה מעבר לשאלון."
+          multiline
+          value={formData.about_me}
+          onChangeText={(v) => setFormData({ ...formData, about_me: v })}
+        />
+      </View>
+    </View>
+  );
+
+  const renderStep2 = () => (
+    <View style={styles.stepContent}>
+      <View>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 2 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>לימודים ומיקום</ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>5. אזור מגורים</ThemedText>
+        {renderEnumSelect('region', REGION_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>6. מוסד לימודים</ThemedText>
         {renderEnumSelect('university', [
           { label: 'האוניברסיטה העברית', value: 'huji' },
           { label: 'אוניברסיטת תל אביב', value: 'tau' },
@@ -641,160 +723,71 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>5. פקולטה</ThemedText>
-        {renderEnumSelect('faculty', [
-          { label: 'משפטים', value: 'law' },
-          { label: 'מנהל עסקים', value: 'business' },
-          { label: 'מדעי החברה', value: 'social_science' },
-          { label: 'מדעי הרוח', value: 'humanities' },
-          { label: 'מדעי הטבע', value: 'natural_science' },
-          { label: 'רפואה', value: 'medicine' },
-          { label: 'הנדסה / מדעי המחשב', value: 'engineering' },
-          { label: 'חינוך', value: 'education' },
-          { label: 'אחר', value: 'other' },
-        ])}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>6. שנה בתואר</ThemedText>
+        <ThemedText style={styles.label}>7. שלב בתואר</ThemedText>
         {renderEnumSelect('degree_stage', DEGREE_STAGE_OPTIONS)}
       </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>7. קמפוס</ThemedText>
-        {renderEnumSelect('campus', [
-            { label: 'הצופים', value: 'scopus' }, 
-            { label: 'גבעת רם', value: 'givat_ram' }, 
-            { label: 'עין כרם', value: 'ein_kerem' }, 
-            { label: 'רחובות', value: 'rehovot' }, 
-            { label: 'אחר', value: 'other' }
-        ])}
-      </View>
-    </View>
-  );
-
-  const renderStep2 = () => (
-    <View style={styles.stepContent}>
-      <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 2</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>מה אני מחפש/ת ב-UniMatch</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>8. מה היית רוצה למצוא ב-UniMatch?</ThemedText>
-        {renderEnumSelect('intent_type', INTENT_OPTIONS)}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>10. את מי היית רוצה להכיר?</ThemedText>
-        <View style={styles.chipGrid}>
-          {INTERESTED_IN_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.interestedInGenders.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                if (opt.value === 'any') {
-                   setFormData({ ...formData, interestedInGenders: ['any'] });
-                } else {
-                   const newList = formData.interestedInGenders.filter(v => v !== 'any');
-                   if (newList.includes(opt.value)) {
-                      setFormData({ ...formData, interestedInGenders: newList.filter(v => v !== opt.value) });
-                   } else {
-                      setFormData({ ...formData, interestedInGenders: [...newList, opt.value] });
-                   }
-                }
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.interestedInGenders.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
-                {opt.label}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>10.5. האם יש לך העדפת גובה?</ThemedText>
-        {renderEnumSelect('heightPreferenceImportance', HEIGHT_PREF_OPTIONS)}
-      </View>
-
-      {(formData.heightPreferenceImportance === 'nice_to_have' || formData.heightPreferenceImportance === 'must_have') && (
-        <View style={styles.formGroup}>
-          <ThemedText style={[styles.label, { color: dynamicColors.text }]}>גובה מינימלי מועדף (בס״מ)</ThemedText>
-          <TextInput
-            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
-            placeholder="למשל: 175"
-            placeholderTextColor={dynamicColors.textLight}
-            keyboardType="number-pad"
-            value={formData.minPreferredHeightCm}
-            onChangeText={(v) => setFormData({ ...formData, minPreferredHeightCm: v })}
-            returnKeyType="done"
-            onSubmitEditing={Keyboard.dismiss}
-          />
-        </View>
-      )}
     </View>
   );
 
   const renderStep3 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 3</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>אופי וסגנון חברתי</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 3 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>העדפות ותחביבים</ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>8. את מי היית רוצה להכיר?</ThemedText>
+        <View style={styles.chipGrid}>
+          {INTERESTED_IN_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.chip, { borderColor: dynamicColors.border }, formData.interestedInGenders.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+              onPress={() => toggleMultiSelectField('interestedInGenders', opt.value)}>
+              <ThemedText style={[styles.chipText, formData.interestedInGenders.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
-      
+
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>12. חבר/ה מתקשר/ת ואומר/ת: "תוך שעה נוסעים לסופ״ש ספונטני". מה קורה?</ThemedText>
-        {renderEnumSelect('spontaneity', [
-          { label: 'ברור, אני כבר אורז/ת. חיים פעם אחת.', value: 'very_spontaneous' },
-          { label: 'רגע, מי בא איפה ישנים כמה זה עולה ואז כנראה אזרום.', value: 'calculated_spontaneous' },
-          { label: 'תלוי עם מי ותלוי מתי — אני ספונטני/ת, אבל עם גבולות.', value: 'selective_spontaneous' },
-          { label: 'אין מצב. אני צריך/ה לדעת מראש', value: 'not_spontaneous' }
-        ])}
+        <ThemedText style={styles.label}>9. איזה גילאים היית רוצה להכיר?</ThemedText>
+        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>גיל מינימלי</ThemedText>
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="18"
+              keyboardType="number-pad"
+              value={formData.preferred_age_min}
+              onChangeText={(v) => setFormData({ ...formData, preferred_age_min: v })}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>גיל מקסימלי</ThemedText>
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="45"
+              keyboardType="number-pad"
+              value={formData.preferred_age_max}
+              onChangeText={(v) => setFormData({ ...formData, preferred_age_max: v })}
+            />
+          </View>
+        </View>
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>13. נתקעת במעלית עם מישהו/י שלא הכרת. מה הכי סביר שיקרה?</ThemedText>
-        {renderEnumSelect('elevatorScenario', [
-          { label: 'אני אתחיל שיחה כאילו אנחנו מכירים מהצבא / מהגן.', value: 'initiator' },
-          { label: 'אני אזרוק הערה מצחיקה ואבדוק אם יש עם מי לדבר.', value: 'humorous' },
-          { label: 'אני אחייך בנימוס ואקווה שהשקט לא יהיה מוזר מדי.', value: 'polite_quiet' },
-          { label: 'אני אבדוק את הטלפון כאילו יש לי משהו ממש חשוב.', value: 'avoidant' },
-          { label: 'אני אהיה זה/זו שמנסה להרגיע את כולם וללחוץ על כל הכפתורים הנכונים.', value: 'problem_solver' }
-        ])}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>14. מזמינים אותך לעלות לקריוקי. מה הסיכוי שזה קורה?</ThemedText>
-        {renderEnumSelect('karaokeChance', [
-          { label: 'אני כבר בוחר/ת שיר. תנו לי מיקרופון.', value: 'performer' },
-          { label: 'רק אם עוד מישהו עולה איתי.', value: 'duet' },
-          { label: 'אני אעודד את כולם מהצד ואנסה שלא יקראו לי.', value: 'encourager' },
-          { label: 'אולי אחרי קצת זמן ואווירה טובה.', value: 'needs_vibe' },
-          { label: 'אין סיכוי. אני הקהל, לא ההופעה.', value: 'spectator' }
-        ])}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>15. את/ה רואה מישהו/י מוכר/ת מרחוק, אבל לא בטוח/ה שהוא/היא ראה/ראתה אותך. מה תעשה/י?</ThemedText>
-        {renderEnumSelect('familiarFace', [
-          { label: 'אנופף בלי לחשוב יותר מדי.', value: 'wave' },
-          { label: 'אחכה לראות אם הוא/היא מזהה אותי קודם.', value: 'wait_and_see' },
-          { label: 'אסתכל בטלפון כאילו אני באמצע משימה חשובה.', value: 'phone_check' },
-          { label: 'אעשה חצי חיוך כזה של "ראינו לא ראינו"', value: 'half_smile' },
-          { label: 'אשנה כיוון ואעמיד פנים שזה היה מתוכנן.', value: 'change_direction' }
-        ])}
+        <ThemedText style={styles.label}>10. תחביבים בשעות הפנאי</ThemedText>
+        <View style={styles.chipGrid}>
+          {HOBBY_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.chip, { borderColor: dynamicColors.border }, formData.hobbies.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+              onPress={() => toggleMultiSelectField('hobbies', opt.value)}>
+              <ThemedText style={[styles.chipText, formData.hobbies.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -802,90 +795,20 @@ export default function QuestionnaireScreen() {
   const renderStep4 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 4</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>ערכים, תקשורת וסגנון קשר</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
-        </View>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 4 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>כוונות וקצב</ThemedText>
       </View>
-
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>16. מה הכי חשוב לך באדם שמולך? (עד 4)</ThemedText>
-        <View style={styles.chipGrid}>
-          {[
-            {label:'כנות', value:'honesty'}, {label:'הומור', value:'humor'}, {label:'רגישות', value:'sensitivity'}, 
-            {label:'שאפתנות', value:'ambition'}, {label:'יציבות', value:'stability'}, {label:'פתיחות', value:'openness'}, 
-            {label:'אינטליגנציה', value:'intelligence'}, {label:'קלילות', value:'lightness'}, {label:'נאמנות', value:'loyalty'}, 
-            {label:'יכולת להקשיב', value:'listening'}, {label:'עצמאות', value:'independence'}, {label:'חום ואכפתיות', value:'warmth'}
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.importantInPartner.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                toggleMultiSelectField('importantInPartner', opt.value, 4);
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.importantInPartner.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
-                {opt.label}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <ThemedText style={styles.label}>11. מה את/ה מחפש/ת כרגע?</ThemedText>
+        {renderEnumSelect('intent_type', INTENT_OPTIONS)}
       </View>
-
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>17. איזה סגנון תקשורת הכי מתאים לך?</ThemedText>
-        {renderEnumSelect('communicationStyle', [
-          { label: 'פתוח וישיר — עדיף לדבר על דברים.', value: 'open_direct' },
-          { label: 'רגוע והדרגתי — לא חייבים לפתוח הכול מיד.', value: 'calm_gradual' },
-          { label: 'קליל והומוריסטי — גם דברים רציניים אפשר לקחת בפרופורציה.', value: 'light_humorous' },
-          { label: 'עמוק ומשמעותי — אני אוהב/ת שיחות שיש בהן עומק.', value: 'deep_meaningful' },
-          { label: 'מעשי — פחות דיבורים, יותר מעשים.', value: 'practical' }
-        ])}
+        <ThemedText style={styles.label}>12. איזה קצב מרגיש לך נכון בתחילת קשר?</ThemedText>
+        {renderEnumSelect('relationship_pace', PACE_OPTIONS)}
       </View>
-
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>18. איך את/ה בדרך כלל מראה אכפתיות?</ThemedText>
-        <View style={styles.chipGrid}>
-          {[
-            {label:'מילים טובות', value:'kind_words'}, {label:'זמן איכות', value:'quality_time'}, {label:'עזרה בפועל', value:'practical_help'}, 
-            {label:'הקשבה', value:'listening'}, {label:'מגע פיזי', value:'physical_touch'}, {label:'מתנות קטנות', value:'small_gifts'}, 
-            {label:'לזכור פרטים קטנים', value:'remembering_details'}, {label:'להיות שם כשצריך', value:'being_there'}
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.careLanguage.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                toggleMultiSelectField('careLanguage', opt.value);
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.careLanguage.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
-                {opt.label}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>19. אני בדרך כלל מתחבר/ת יותר לאנשים שהם:</ThemedText>
-        {renderEnumSelect('connectWith', [
-          { label: 'דומים לי', value: 'similar' },
-          { label: 'שונים ממני', value: 'different' },
-          { label: 'משלימים אותי', value: 'complementary' },
-          { label: 'מאתגרים אותי לחשוב אחרת', value: 'challenging' },
-          { label: 'אם יש חיבור — זה לא באמת משנה', value: 'doesnt_matter' }
-        ])}
+        <ThemedText style={styles.label}>13. איזה דייט ראשון הכי מתאים לך?</ThemedText>
+        {renderEnumSelect('preferred_first_date', FIRST_DATE_OPTIONS)}
       </View>
     </View>
   );
@@ -893,96 +816,16 @@ export default function QuestionnaireScreen() {
   const renderStep5 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 5</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>העדפות, גבולות ודיל־ברייקרים</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
-        </View>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 5 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>תקשורת וערכים</ThemedText>
       </View>
-
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>20. מה כנראה יוריד לך את החשק להמשיך להכיר? (עד 4)</ThemedText>
-        <View style={styles.chipGrid}>
-          {[
-            {label:'חוסר כבוד לגבולות', value:'disrespect_boundaries'}, {label:'תקשורת לא ברורה', value:'unclear_communication'}, 
-            {label:'יהירות', value:'arrogance'}, {label:'חוסר רצינות', value:'lack_of_seriousness'}, {label:'שיפוטיות', value:'judgmentalness'}, 
-            {label:'פער גדול בציפיות', value:'expectation_gap'}, {label:'לחץ להיפגש מהר מדי', value:'pressure_to_meet'}, 
-            {label:'חוסר הומור', value:'lack_of_humor'}, {label:'חוסר יציבות', value:'instability'}, {label:'יותר מדי דרמה', value:'too_much_drama'}
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.dealbreakers.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                toggleMultiSelectField('dealbreakers', opt.value, 4);
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.dealbreakers.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
-                {opt.label}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <ThemedText style={styles.label}>14. כשיש ריב או אי־הבנה, מה נכון לך?</ThemedText>
+        {renderEnumSelect('conflict_style', CONFLICT_OPTIONS)}
       </View>
-
       <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>21. מה גורם לך להרגיש בנוח בהיכרות ראשונה?</ThemedText>
-        <View style={styles.chipGrid}>
-          {[
-            {label:'לדבר קצת באפליקציה לפני שנפגשים', value:'chat_first'}, {label:'להיפגש במקום ציבורי', value:'public_meeting'}, 
-            {label:'שיהיה ברור מה הצד השני מחפש', value:'clear_intent'}, {label:'שלא יהיה לחץ', value:'no_pressure'}, 
-            {label:'פרופיל מאומת', value:'verified_profile'}, {label:'הקשר סטודנטיאלי ברור', value:'student_context'}, 
-            {label:'שיחה קלילה ולא כבדה מדי בהתחלה', value:'light_conversation'}
-          ].map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              activeOpacity={0.7}
-              style={[
-                styles.chip,
-                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                formData.comfortNeeds.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary },
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                toggleMultiSelectField('comfortNeeds', opt.value);
-              }}>
-              <ThemedText style={[styles.chipText, { color: dynamicColors.text }, formData.comfortNeeds.includes(opt.value) && { color: UI_COLORS.selectedText }]}>
-                {opt.label}
-              </ThemedText>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>22. איזה מפגש ראשון הכי מתאים לך?</ThemedText>
-        {renderEnumSelect('meetingStyle', [
-          { label: 'קפה קצר בקמפוס', value: 'campus_coffee' },
-          { label: 'הליכה קצרה בחוץ', value: 'short_walk' },
-          { label: 'בר בערב', value: 'evening_bar' },
-          { label: 'למידה משותפת בספרייה', value: 'library_study' },
-          { label: 'אירוע סטודנטיאלי', value: 'student_event' },
-          { label: 'שיחת וידאו או צ׳אט קודם', value: 'video_chat' },
-          { label: 'משהו ספונטני ולא מתוכנן מדי', value: 'spontaneous' }
-        ])}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>23. משהו שחשוב לדעת עליי (אופציונלי)</ThemedText>
-        <TextInput
-          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top' }]}
-          placeholder="שתפ/י משהו קטן..."
-          placeholderTextColor={dynamicColors.textLight}
-          multiline
-          value={formData.personalNuance}
-          onChangeText={(v) => setFormData({ ...formData, personalNuance: v })}
-          returnKeyType="done"
-          onSubmitEditing={Keyboard.dismiss}
-        />
+        <ThemedText style={styles.label}>15. מה הכי חשוב שיכבדו אצלך?</ThemedText>
+        {renderEnumSelect('respect_priority', RESPECT_OPTIONS)}
       </View>
     </View>
   );
@@ -990,36 +833,123 @@ export default function QuestionnaireScreen() {
   const renderStep6 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 6</ThemedText>
-        <View style={styles.subtitleContainer}>
-          <ThemedText style={[styles.stepSubtitle, { color: UI_COLORS.text }]}>תמונות פרופיל</ThemedText>
-          <View style={[styles.subtitleLine, { backgroundColor: UI_COLORS.accent }]} />
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 6 מתוך 6</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>חיבור והתאמה</ThemedText>
+      </View>
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>16. איך את/ה מרגיש/ה שמישהו בעניין שלך?</ThemedText>
+        {renderEnumSelect('interest_signals', INTEREST_SIGNAL_OPTIONS)}
+      </View>
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>17. איזה סוג שיחה מושך אותך בדייט?</ThemedText>
+        {renderEnumSelect('conversation_style', CONVERSATION_OPTIONS)}
+      </View>
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>18. באיזה תחום הכי קשה לך להתפשר?</ThemedText>
+        {renderEnumSelect('compromise_area', COMPROMISE_OPTIONS)}
+      </View>
+    </View>
+  );
+
+  const renderChoiceScreen = () => (
+    <View style={styles.stepContent}>
+      <View style={{ alignItems: 'center', marginBottom: 20 }}>
+        <BrandMark size={50} />
+      </View>
+      <ThemedText style={[styles.stepSubtitle, { textAlign: 'center' }]}>איזו התאמה מתאימה לך?</ThemedText>
+      
+      <TouchableOpacity 
+        style={styles.choiceCard} 
+        onPress={() => handleSubmit('fast')}>
+        <View style={styles.choiceIcon}><ThemedText style={{fontSize: 24}}>⚡</ThemedText></View>
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.choiceTitle}>יאללה התאמה מהירה</ThemedText>
+          <ThemedText style={styles.choiceDescription}>נמצא לך התאמה לפי מה שכבר סיפרת לנו — אבל בלי להתחייב שזו תהיה ההתאמה הכי מדויקת ביקום.</ThemedText>
         </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.choiceCard} 
+        onPress={() => nextStep()}>
+        <View style={styles.choiceIcon}><ThemedText style={{fontSize: 24}}>🎯</ThemedText></View>
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.choiceTitle}>אני רוצה התאמה מדויקת יותר</ThemedText>
+          <ThemedText style={styles.choiceDescription}>עוד כמה שאלות שיעזרו לנו להבין אותך באמת ולשפר את איכות ההתאמה.</ThemedText>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderDeepSteps = () => (
+    <View style={styles.stepContent}>
+      <View>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שאלון מעמיק</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>אופי וסגנון חברתי</ThemedText>
       </View>
 
-      <View style={styles.formGroup}>
-        <ThemedText style={[styles.label, { color: dynamicColors.text }]}>הוספת תמונות (לפחות אחת חובה)</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight, textAlign: 'right' }]}>
-           תמונות ברורות עוזרות לקבל התאמות טובות יותר.
-        </ThemedText>
-        
-        <View style={styles.photoGrid}>
-          {photos.map((photo, index) => (
-            <View key={index} style={styles.photoWrapper}>
-              <Image source={{ uri: photo.uri }} style={styles.gridPhoto} />
-              <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removeLocalPhoto(index)}>
-                <IconSymbol name="xmark" size={12} color="white" />
-              </TouchableOpacity>
-            </View>
-          ))}
-          {photos.length < 6 && (
-            <TouchableOpacity style={[styles.addPhotoPlaceholder, { borderColor: dynamicColors.border }]} onPress={pickImage}>
-              <IconSymbol name="plus" size={32} color={dynamicColors.textLight} />
-              <ThemedText style={{ color: dynamicColors.textLight, marginTop: 8 }}>הוספה</ThemedText>
-            </TouchableOpacity>
-          )}
+      {currentStep === 8 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>ספונטניות</ThemedText>
+          {renderEnumSelect('spontaneity', [
+            { label: 'ברור, אני כבר אורז/ת. חיים פעם אחת.', value: 'very_spontaneous' },
+            { label: 'רגע, מי בא איפה ישנים כמה זה עולה ואז כנראה אזרום.', value: 'calculated_spontaneous' },
+            { label: 'תלוי עם מי ותלוי מתי — אני ספונטני/ת, אבל עם גבולות.', value: 'selective_spontaneous' },
+            { label: 'אין מצב. אני צריך/ה לדעת מראש', value: 'not_spontaneous' }
+          ])}
         </View>
-      </View>
+      )}
+
+      {currentStep === 9 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>סיטואציית מעלית</ThemedText>
+          {renderEnumSelect('elevatorScenario', [
+            { label: 'אני אתחיל שיחה כאילו אנחנו מכירים מהצבא / מהגן.', value: 'initiator' },
+            { label: 'אני אזרוק הערה מצחיקה ואבדוק אם יש עם מי לדבר.', value: 'humorous' },
+            { label: 'אני אחייך בנימוס ואקווה שהשקט לא יהיה מוזר מדי.', value: 'polite_quiet' },
+            { label: 'אני אבדוק את הטלפון כאילו יש לי משהו ממש חשוב.', value: 'avoidant' },
+            { label: 'אני אהיה זה/זו שמנסה להרגיע את כולם וללחוץ על כל הכפתורים הנכונים.', value: 'problem_solver' }
+          ])}
+        </View>
+      )}
+
+      {currentStep === 10 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>קריוקי</ThemedText>
+          {renderEnumSelect('karaokeChance', [
+            { label: 'אני כבר בוחר/ת שיר. תנו לי מיקרופון.', value: 'performer' },
+            { label: 'רק אם עוד מישהו עולה איתי.', value: 'duet' },
+            { label: 'אני אעודד את כולם מהצד ואנסה שלא יקראו לי.', value: 'encourager' },
+            { label: 'אולי אחרי קצת זמן ואווירה טובה.', value: 'needs_vibe' },
+            { label: 'אין סיכוי. אני הקהל, לא ההופעה.', value: 'spectator' }
+          ])}
+        </View>
+      )}
+
+      {currentStep === 11 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>פנים מוכרות</ThemedText>
+          {renderEnumSelect('familiarFace', [
+            { label: 'אנופף בלי לחשוב יותר מדי.', value: 'wave' },
+            { label: 'אחכה לראות אם הוא/היא מזהה אותי קודם.', value: 'wait_and_see' },
+            { label: 'אסתכל בטלפון כאילו אני באמצע משימה חשובה.', value: 'phone_check' },
+            { label: 'אעשה חצי חיוך כזה של "ראינו לא ראינו"', value: 'half_smile' },
+            { label: 'אשנה כיוון ואעמיד פנים שזה היה מתוכנן.', value: 'change_direction' }
+          ])}
+        </View>
+      )}
+
+      {currentStep === 12 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>ומה משהו שחשוב שידעו עלייך?</ThemedText>
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top', paddingTop: 10 }]}
+            placeholder="ספר/י לנו משהו נוסף..."
+            multiline
+            value={formData.relationship_growth_text}
+            onChangeText={(v) => setFormData({ ...formData, relationship_growth_text: v })}
+          />
+        </View>
+      )}
     </View>
   );
 
@@ -1048,44 +978,62 @@ export default function QuestionnaireScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}
         >
-          {renderProgress()}
+          {currentStep > 0 && currentStep !== 7 && (
+            <View style={styles.progressHeader}>
+               <View style={styles.progressContainer}>
+                  {Array.from({ length: 12 }).map((_, i) => (
+                     <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
+                  ))}
+               </View>
+               <BrandMark size={20} />
+            </View>
+          )}
+
           <ScrollView 
             contentContainerStyle={styles.scrollContent} 
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={1000}
           >
+            {currentStep === 0 && renderIntro()}
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
             {currentStep === 4 && renderStep4()}
             {currentStep === 5 && renderStep5()}
             {currentStep === 6 && renderStep6()}
+            {currentStep === 7 && renderChoiceScreen()}
+            {currentStep >= 8 && renderDeepSteps()}
 
-            <View style={styles.navigation}>
-              <TouchableOpacity
-                style={[styles.navButton, styles.primaryNav, { backgroundColor: UI_COLORS.primary }]}
-                activeOpacity={0.8}
-                onPress={nextStep}
-                disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator size="small" color="white" />
+            {currentStep !== 0 && currentStep !== 7 && (
+              <View style={styles.navigation}>
+                {isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'fast' ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
+                      onPress={() => handleSubmit('fast')}
+                      disabled={loading}>
+                      {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>שמור וסיים</ThemedText>}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.navButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: UI_COLORS.primary }]}
+                      onPress={() => setCurrentStep(8)}
+                      disabled={loading}>
+                      <ThemedText style={[styles.primaryNavText, { color: UI_COLORS.primary }]}>להמשיך לשאלון המעמיק</ThemedText>
+                    </TouchableOpacity>
+                  </>
                 ) : (
-                  <ThemedText style={styles.primaryNavText}>
-                    {currentStep === 6 ? 'סיום והתחלה' : 'המשך'}
-                  </ThemedText>
+                  <TouchableOpacity
+                    style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
+                    onPress={nextStep}
+                    disabled={loading}>
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 12 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.navButton} 
-                activeOpacity={0.6}
-                onPress={prevStep} 
-                disabled={loading}>
-                <ThemedText style={[styles.secondaryNavText, { color: UI_COLORS.primary }]}>חזרה</ThemedText>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity style={styles.navButton} onPress={prevStep}>
+                  <ThemedText style={{ color: UI_COLORS.primary, fontWeight: '700' }}>חזרה</ThemedText>
+                </TouchableOpacity>
+              </View>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -1094,221 +1042,38 @@ export default function QuestionnaireScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  progressHeader: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  progressContainer: {
-    flexDirection: 'row-reverse',
-    height: 4,
-    flex: 1,
-    gap: 6,
-  },
-  headerBadge: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 16,
-    backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: UI_COLORS.textLight,
-  },
-  progressSegment: {
-    flex: 1,
-    height: '100%',
-    borderRadius: 2,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 60,
-  },
-  stepContent: {
-    gap: 32,
-    paddingTop: 20,
-  },
-  stepTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'right',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  subtitleContainer: {
-    alignItems: 'flex-end',
-  },
-  stepSubtitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    textAlign: 'right',
-    letterSpacing: -0.5,
-    lineHeight: 34,
-  },
-  subtitleLine: {
-    width: 40,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 4,
-  },
-  formGroup: {
-    gap: 16,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'right',
-    lineHeight: 24,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    textAlign: 'right',
-  },
-  optionList: {
-    gap: 12,
-  },
-  optionButton: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'flex-end',
-  },
-  optionText: {
-    fontSize: 16,
-    textAlign: 'right',
-    fontWeight: '600',
-  },
-  chipGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    borderWidth: 1,
-  },
-  chipText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  scaleContainer: {
-    gap: 20,
-  },
-  scaleLabels: {
-    gap: 10,
-  },
-  scaleLabelText: {
-    fontSize: 14,
-    textAlign: 'right',
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  scaleButtons: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  scaleCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scaleCircleText: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  photoGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 10,
-  },
-  photoWrapper: {
-    width: '30%',
-    aspectRatio: 0.8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#eee',
-  },
-  gridPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  deletePhotoBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPhotoPlaceholder: {
-    width: '30%',
-    aspectRatio: 0.8,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  navigation: {
-    marginTop: 48,
-    gap: 16,
-  },
-  navButton: {
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  primaryNav: {
-    shadowColor: '#FF4D3D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  primaryNavText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  secondaryNavText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  flex: { flex: 1 },
+  container: { flex: 1 },
+  scrollContent: { padding: 24, paddingBottom: 60 },
+  stepContent: { gap: 24, paddingTop: 10 },
+  introHeader: { alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 40 },
+  introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding },
+  introText: { fontSize: 18, lineHeight: 28, textAlign: 'center', color: UI_COLORS.text, paddingHorizontal: 10 },
+  stepTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  stepSubtitle: { fontSize: 24, fontWeight: '800', textAlign: 'right', marginBottom: 10 },
+  formGroup: { gap: 12 },
+  label: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
+  input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right' },
+  optionList: { gap: 10 },
+  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1, alignItems: 'flex-end' },
+  optionText: { fontSize: 15, textAlign: 'right' },
+  chipGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  chipText: { fontSize: 14, fontWeight: '600' },
+  photoGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 },
+  photoWrapper: { width: '30%', aspectRatio: 0.8, borderRadius: 10, overflow: 'hidden' },
+  gridPhoto: { width: '100%', height: '100%' },
+  deletePhotoBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  addPhotoPlaceholder: { width: '30%', aspectRatio: 0.8, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', borderColor: UI_COLORS.border },
+  choiceCard: { flexDirection: 'row-reverse', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15 },
+  choiceIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: UI_COLORS.surface, justifyContent: 'center', alignItems: 'center' },
+  choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: 4 },
+  choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', lineHeight: 20 },
+  progressHeader: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 24, gap: 15, marginTop: 10 },
+  progressContainer: { flex: 1, flexDirection: 'row-reverse', height: 4, gap: 4 },
+  progressSegment: { flex: 1, height: '100%', borderRadius: 2 },
+  navigation: { marginTop: 30, gap: 12 },
+  navButton: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  primaryNav: { shadowColor: UI_COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 3 },
+  primaryNavText: { color: 'white', fontSize: 18, fontWeight: '800' },
 });

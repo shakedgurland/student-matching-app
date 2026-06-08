@@ -98,7 +98,7 @@ export default function MatchSelectionScreen() {
         setOtherUser({ ...profile, avatar_url: avatarUrl });
       } else {
         // Automatically try to find a match if none exists
-        handleFindMatch(user.id);
+        handleFindMatch(user.id, true);
       }
     } catch (error) {
       console.error('Error fetching match:', error);
@@ -107,7 +107,7 @@ export default function MatchSelectionScreen() {
     }
   };
 
-  const handleFindMatch = async (userId?: string) => {
+  const handleFindMatch = async (userId?: string, silent: boolean = false) => {
     try {
       setMatching(true);
       logEvent('match_search_started');
@@ -137,7 +137,9 @@ export default function MatchSelectionScreen() {
         setOtherUser(candidateProfile);
       } else {
         logEvent('match_not_found');
-        Alert.alert('לא נמצאה התאמה', 'לא הצלחנו למצוא לך התאמה כרגע. נסה שוב מאוחר יותר.');
+        if (!silent) {
+          Alert.alert('לא נמצאה התאמה', 'לא הצלחנו למצוא לך התאמה כרגע. נסה שוב מאוחר יותר.');
+        }
       }
     } catch (error) {
       logError('Home', 'match_search_failed', error);

@@ -1,9 +1,22 @@
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../lib/supabase';
 
 export default function StudentVerificationScreen() {
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace('/welcome');
+      }
+    };
+    checkSession();
+  }, []);
+
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <Text style={styles.logo}>UniMatch</Text>
 
       <Text style={styles.title}>אימות סטודנט</Text>
@@ -20,7 +33,10 @@ export default function StudentVerificationScreen() {
 
       <TouchableOpacity
         style={styles.primaryButton}
-        onPress={() => router.push('/questionnaire')}
+        onPress={() => {
+          // In a real app, we would verify the email here
+          router.push('/questionnaire');
+        }}
       >
         <Text style={styles.primaryButtonText}>המשך לשאלון התאמה</Text>
       </TouchableOpacity>

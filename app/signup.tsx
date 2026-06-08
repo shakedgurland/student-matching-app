@@ -70,7 +70,17 @@ export default function SignupScreen() {
         return;
       }
 
-      router.replace('/student-verification');
+      if (data.session) {
+        // Direct happy path: session exists immediately
+        router.replace('/student-verification');
+      } else {
+        // Unexpected: session is null, likely Confirm Email is enabled in Supabase
+        Alert.alert(
+          'שגיאה בחיבור',
+          'לא נוצר חיבור אוטומטי לאחר ההרשמה. בדקי שהגדרת Confirm email כבויה ב-Supabase, ואז נסי להתחבר מחדש.',
+          [{ text: 'להתחברות', onPress: () => router.replace('/login') }]
+        );
+      }
     } catch (err) {
       console.log('Unexpected signup error:', err);
       Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בהרשמה');

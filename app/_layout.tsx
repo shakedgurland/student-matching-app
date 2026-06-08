@@ -86,10 +86,13 @@ export default function RootLayout() {
         .single();
 
       if (error) throw error;
-      setOnboardingCompleted(data?.onboarding_completed || false);
+      const completed = data?.onboarding_completed || false;
+      setOnboardingCompleted(completed);
+      return completed;
     } catch (error) {
       console.error('Error checking onboarding:', error);
       setOnboardingCompleted(false);
+      return false;
     } finally {
       setInitialized(true);
     }
@@ -110,10 +113,26 @@ export default function RootLayout() {
         router.replace('/welcome');
       }
     } else if (onboardingCompleted === false) {
-      // If logged in but onboarding not completed, force questionnaire
-      const isOnboardingScreen = segments[0] === 'questionnaire' || segments[0] === 'verification' || segments[0] === 'student-verification';
-      if (!isOnboardingScreen) {
-        router.replace('/questionnaire');
+      // If logged in but onboarding not completed
+      const isOnboardingFlow = segments[0] === 'student-verification' || 
+                               segments[0] === 'verification' || 
+                               segments[0] === 'questionnaire' ||
+                               segments[0] === 'signup'; // Allow signup to finish its own redirect
+      
+      if (inAuthGroup) {
+        // Mismatch! User is in tabs but state says onboarding not completed.
+        // Re-check before redirecting.
+        checkOnboarding(session.user.id).then(completed => {
+          if (!completed) {
+            router.replace('/student-verification');
+          }
+        });
+        return;
+      }
+
+      if (!isOnboardingFlow) {
+        // If "lost", go to the start of onboarding
+        router.replace('/student-verification');
       }
     } else if (onboardingCompleted === true) {
       // If logged in and onboarding completed, don't allow welcome/login/signup
