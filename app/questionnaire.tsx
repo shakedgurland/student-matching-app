@@ -28,8 +28,8 @@ import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 0: Intro, 1-6: Short, 7: Choice, 8-14: Deep
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+// 0: Intro, 1-6: Short, 7: Choice, 8-20: Deep
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
 
 // Design Constants for Bright Premium Style
 const UI_COLORS = {
@@ -214,6 +214,60 @@ const FIRST_DATE_OPTIONS = [
   { label: 'משהו ספונטני ולא מתוכנן מדי', value: 'spontaneous' },
 ];
 
+const MONEY_STYLE_OPTIONS = [
+  { label: 'אני אוהב/ת לפנק כשאני יכול/ה.', value: 'treats_when_can' },
+  { label: 'הכי נוח לי שכל אחד משלם על עצמו.', value: 'split_equally' },
+  { label: 'אני זורם/ת לפי הסיטואציה.', value: 'situational' },
+  { label: 'חשוב לי שיהיה הוגן ומאוזן לאורך זמן.', value: 'balanced_over_time' },
+  { label: 'אני פחות שם/ה לב לזה, העיקר האווירה.', value: 'not_focus' },
+];
+
+const LOVE_LANGUAGE_OPTIONS = [
+  { label: 'מילים טובות', value: 'words' },
+  { label: 'זמן איכות', value: 'quality_time' },
+  { label: 'עזרה ומעשים', value: 'acts_of_service' },
+  { label: 'מגע פיזי', value: 'physical_touch' },
+  { label: 'מתנות קטנות', value: 'gifts' },
+  { label: 'הקשבה ונוכחות', value: 'presence_listening' },
+];
+
+const SIMILARITY_PREF_OPTIONS = [
+  { label: 'דומה לי', value: 'similar' },
+  { label: 'שונה ממני', value: 'different' },
+  { label: 'משלים/ה אותי', value: 'complementary' },
+  { label: 'מאתגר/ת אותי לחשוב אחרת', value: 'challenging' },
+  { label: 'אם יש חיבור — זה לא באמת משנה', value: 'doesnt_matter' },
+];
+
+const RELIGION_OPTIONS = [
+  { label: 'חילוני/ת', value: 'secular' },
+  { label: 'מסורתי/ת', value: 'traditional' },
+  { label: 'דתי/ה', value: 'religious' },
+  { label: 'דתי/ה לאומי/ת', value: 'religious_national' },
+  { label: 'חרדי/ת', value: 'haredi' },
+  { label: 'מעדיפ/ה לא לומר', value: 'prefer_not_to_say' },
+];
+
+const PERFECT_DATE_OPTIONS = [
+  { label: 'קפה ושיחה טובה', value: 'coffee_talk' },
+  { label: 'בר/דרינק בערב', value: 'evening_drink' },
+  { label: 'ים או שקיעה', value: 'beach_sunset' },
+  { label: 'טיול קצר בחוץ', value: 'short_walk' },
+  { label: 'פעילות מצחיקה או לא שגרתית', value: 'fun_activity' },
+  { label: 'ערב רגוע בלי יותר מדי רעש', value: 'calm_evening' },
+  { label: 'משהו ספונטני שמרגיש טבעי', value: 'spontaneous_natural' },
+];
+
+const MAIN_DEALBREAKER_OPTIONS = [
+  { label: 'חוסר אמון או נאמנות', value: 'trust_loyalty' },
+  { label: 'תקשורת לא ברורה', value: 'unclear_communication' },
+  { label: 'חוסר כבוד לגבולות', value: 'boundaries' },
+  { label: 'פער גדול באורח חיים', value: 'lifestyle_gap' },
+  { label: 'חוסר שאיפות לעתיד', value: 'future_ambition' },
+  { label: 'לחץ או קצב שלא מתאים לי', value: 'pace_pressure' },
+  { label: 'פער גדול ביחס לדת/מסורת', value: 'religion_tradition_gap' },
+];
+
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -268,6 +322,15 @@ export default function QuestionnaireScreen() {
     elevatorScenario: '',
     karaokeChance: '',
     familiarFace: '',
+    money_style: '',
+    love_language: '',
+    similarity_preference: '',
+    religion: '',
+    tradition_self_rating: 3,
+    tradition_partner_importance: 3,
+    perfect_date: '',
+    main_dealbreaker: '',
+    relationship_strengths_text: '',
     relationship_growth_text: '',
     about_me: '',
     importantInPartner: [] as string[],
@@ -312,6 +375,15 @@ export default function QuestionnaireScreen() {
           preferred_first_date: answersRes.data.answers.preferred_first_date || '',
           relationship_growth_text: answersRes.data.answers.relationship_growth_text || '',
           about_me: answersRes.data.answers.about_me || '',
+          money_style: answersRes.data.answers.money_style || '',
+          love_language: answersRes.data.answers.love_language || '',
+          similarity_preference: answersRes.data.answers.similarity_preference || '',
+          religion: answersRes.data.answers.religion || '',
+          tradition_self_rating: answersRes.data.answers.tradition_self_rating || 3,
+          tradition_partner_importance: answersRes.data.answers.tradition_partner_importance || 3,
+          perfect_date: answersRes.data.answers.perfect_date || '',
+          main_dealbreaker: answersRes.data.answers.main_dealbreaker || '',
+          relationship_strengths_text: answersRes.data.answers.relationship_strengths_text || '',
         }));
       }
       if (profileRes.data) {
@@ -546,7 +618,7 @@ export default function QuestionnaireScreen() {
       } else {
         setCurrentStep(7); // Show choice screen
       }
-    } else if (currentStep === 12) {
+    } else if (currentStep === 20) {
       handleSubmit('deep');
     } else {
       const next = (currentStep + 1) as Step;
@@ -880,6 +952,28 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
+  const renderScale = (field: 'tradition_self_rating' | 'tradition_partner_importance') => (
+    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingHorizontal: 10, marginTop: 10 }}>
+      {[1, 2, 3, 4, 5].map((val) => (
+        <TouchableOpacity
+          key={val}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            borderWidth: 1,
+            borderColor: formData[field] === val ? UI_COLORS.primary : dynamicColors.border,
+            backgroundColor: formData[field] === val ? dynamicColors.selectedBg : dynamicColors.card,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+          onPress={() => setFormData({ ...formData, [field]: val })}>
+          <ThemedText style={{ fontSize: 18, fontWeight: '700', color: formData[field] === val ? UI_COLORS.selectedText : dynamicColors.text }}>{val}</ThemedText>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
   const renderDeepSteps = () => (
     <View style={styles.stepContent}>
       <View>
@@ -940,6 +1034,74 @@ export default function QuestionnaireScreen() {
 
       {currentStep === 12 && (
         <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>כשיוצאים יחד, מה הכי טבעי לך?</ThemedText>
+          {renderEnumSelect('money_style', MONEY_STYLE_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 13 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>איך את/ה הכי נוטה להראות אהבה או אכפתיות?</ThemedText>
+          {renderEnumSelect('love_language', LOVE_LANGUAGE_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 14 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>את/ה בדרך כלל נמשך/ת יותר למישהו/י ש...</ThemedText>
+          {renderEnumSelect('similarity_preference', SIMILARITY_PREF_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 15 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>מה ההגדרה הדתית שלך?</ThemedText>
+          {renderEnumSelect('religion', RELIGION_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 16 && (
+        <View style={{ gap: 30 }}>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>עד כמה את/ה קרוב/ה למסורת?</ThemedText>
+            {renderScale('tradition_self_rating')}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>עד כמה חשוב לך שבן/בת הזוג יהיו קרובים למסורת?</ThemedText>
+            {renderScale('tradition_partner_importance')}
+          </View>
+        </View>
+      )}
+
+      {currentStep === 17 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>מה הדייט המושלם בעיניך?</ThemedText>
+          {renderEnumSelect('perfect_date', PERFECT_DATE_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 18 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>מה דיל־ברייקר מבחינתך?</ThemedText>
+          {renderEnumSelect('main_dealbreaker', MAIN_DEALBREAKER_OPTIONS)}
+        </View>
+      )}
+
+      {currentStep === 19 && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>מה לדעתך הצדדים החזקים שלך בקשר?</ThemedText>
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top', paddingTop: 10 }]}
+            placeholder="ספר/י לנו..."
+            multiline
+            value={formData.relationship_strengths_text}
+            onChangeText={(v) => setFormData({ ...formData, relationship_strengths_text: v })}
+          />
+        </View>
+      )}
+
+      {currentStep === 20 && (
+        <View style={styles.formGroup}>
           <ThemedText style={styles.label}>ומה משהו שחשוב שידעו עלייך?</ThemedText>
           <TextInput
             style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top', paddingTop: 10 }]}
@@ -981,7 +1143,7 @@ export default function QuestionnaireScreen() {
           {currentStep > 0 && currentStep !== 7 && (
             <View style={styles.progressHeader}>
                <View style={styles.progressContainer}>
-                  {Array.from({ length: 12 }).map((_, i) => (
+                  {Array.from({ length: 20 }).map((_, i) => (
                      <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
                   ))}
                </View>
@@ -1026,7 +1188,7 @@ export default function QuestionnaireScreen() {
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
                     onPress={nextStep}
                     disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 12 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
