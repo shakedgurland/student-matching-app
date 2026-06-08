@@ -5,9 +5,10 @@ export interface MatchResult {
   candidateProfile: any;
   compatibilityScore: number;
   compatibilityReasons: string[];
+  depth: 'fast' | 'deep';
 }
 
-export async function findAndCreateBestMatch(currentUserId: string): Promise<MatchResult | null> {
+export async function findAndCreateBestMatch(currentUserId: string): Promise<MatchResult | null | { status: 'incomplete_profile' }> {
   // 1. Fetch current user profile and answers
   const { data: currentProfile, error: profileError } = await supabase
     .from('profiles')
@@ -18,6 +19,11 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
   if (profileError || !currentProfile) {
     console.error('Matching Error: Could not fetch current profile', profileError);
     return null;
+  }
+
+  // Safety: If onboarding not completed, don't match
+  if (!currentProfile.onboarding_completed) {
+    return { status: 'incomplete_profile' };
   }
 
   const { data: currentAnswersData, error: answersError } = await supabase
@@ -34,16 +40,14 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
   const currentAnswers = currentAnswersData.answers;
 
   // Validate required hard filter fields exist
-  const myGender = currentProfile.gender || currentAnswers.gender;
-  const myInterestedIn = currentProfile.interested_in_genders || currentAnswers.interestedInGenders || [];
+  const myGender = currentProfile.gender;
+  const myInterestedIn = currentProfile.interested_in_genders || [];
 
   if (!myGender || !myInterestedIn || myInterestedIn.length === 0) {
-    console.error('Matching Error: Missing mandatory gender or interest fields for current user');
-    return null;
+    return { status: 'incomplete_profile' };
   }
 
   // 2. Fetch candidates (onboarded, not self)
-  // We use contains for interested_in_genders so candidate is interested in current user's gender
   let query = supabase
     .from('profiles')
     .select(`
@@ -77,6 +81,7 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
   let bestCandidate = null;
   let highestScore = -1;
   let bestReasons: string[] = [];
+  let bestDepth: 'fast' | 'deep' = 'fast';
 
   for (const candidate of candidates) {
     if (excludeIds.has(candidate.id)) continue;
@@ -84,38 +89,37 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
     const candidateAnswers = candidate.questionnaire_answers?.[0]?.answers || candidate.questionnaire_answers?.answers;
     if (!candidateAnswers) continue;
 
-    const candidateGender = candidate.gender || candidateAnswers.gender;
-    const candidateInterestedIn = candidate.interested_in_genders || candidateAnswers.interestedInGenders || [];
-
     // Hard Filter: Gender Compatibility (Bidirectional)
-    if (!myInterestedIn.includes(candidateGender) && !myInterestedIn.includes('any')) continue;
-    if (!candidateInterestedIn.includes(myGender) && !candidateInterestedIn.includes('any')) continue;
+    const candidateGender = candidate.gender;
+    const candidateInterestedIn = candidate.interested_in_genders || [];
+
+    const iAmInterested = myInterestedIn.includes(candidateGender) || myInterestedIn.includes('any');
+    const theyAreInterested = candidateInterestedIn.includes(myGender) || candidateInterestedIn.includes('any');
+    if (!iAmInterested || !theyAreInterested) continue;
 
     // Hard Filter: Height Compatibility (Bidirectional for 'must_have')
-    const myHeightPref = currentProfile.height_preference_importance || currentAnswers.heightPreferenceImportance || 'none';
-    const myMinHeight = currentProfile.min_preferred_height_cm || parseInt(currentAnswers.minPreferredHeightCm) || 0;
+    const myHeightPref = currentProfile.height_preference_importance || 'none';
+    const myMinHeight = currentProfile.min_preferred_height_cm || 0;
+    const myHeight = currentProfile.height_cm || 0;
     
-    const candidateHeight = candidate.height_cm || parseInt(candidateAnswers.heightCm) || 0;
-    const candidateHeightPref = candidate.height_preference_importance || candidateAnswers.heightPreferenceImportance || 'none';
-    const candidateMinHeight = candidate.min_preferred_height_cm || parseInt(candidateAnswers.minPreferredHeightCm) || 0;
+    const candidateHeight = candidate.height_cm || 0;
+    const candidateHeightPref = candidate.height_preference_importance || 'none';
+    const candidateMinHeight = candidate.min_preferred_height_cm || 0;
 
-    // Disqualify if I have a must_have and candidate is too short
-    if (myHeightPref === 'must_have' && candidateHeight > 0 && candidateHeight < myMinHeight) {
-      continue;
-    }
+    if (myHeightPref === 'must_have' && candidateHeight > 0 && candidateHeight < myMinHeight) continue;
+    if (candidateHeightPref === 'must_have' && myHeight > 0 && myHeight < candidateMinHeight) continue;
 
-    // Disqualify if candidate has a must_have and I am too short
-    if (candidateHeightPref === 'must_have' && currentProfile.height_cm > 0 && currentProfile.height_cm < candidateMinHeight) {
-      continue;
-    }
+    // Determine Matching Depth
+    const depth: 'fast' | 'deep' = (currentProfile.onboarding_mode === 'deep' && candidate.onboarding_mode === 'deep') ? 'deep' : 'fast';
 
     // Calculate Score
-    const { score, reasons } = calculateCompatibility(currentProfile, currentAnswers, candidate, candidateAnswers);
+    const { score, reasons } = calculateCompatibility(currentProfile, currentAnswers, candidate, candidateAnswers, depth);
 
     if (score > highestScore) {
       highestScore = score;
       bestCandidate = candidate;
       bestReasons = reasons;
+      bestDepth = depth;
     }
   }
 
@@ -128,11 +132,12 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
   const { data: newMatch, error: insertError } = await supabase
     .from('matches')
     .insert({
-      user_a_id: currentUserId, // We don't need to sort IDs due to migration 002 update
+      user_a_id: currentUserId,
       user_b_id: bestCandidate.id,
       compatibility_score: highestScore,
       compatibility_reasons: bestReasons,
-      status: 'active'
+      status: 'active',
+      metadata: { depth: bestDepth }
     })
     .select()
     .single();
@@ -146,117 +151,155 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
     matchId: newMatch.id,
     candidateProfile: bestCandidate,
     compatibilityScore: highestScore,
-    compatibilityReasons: bestReasons
+    compatibilityReasons: bestReasons,
+    depth: bestDepth
   };
 }
 
 // ----------------------------------------------------------------------
-// Scoring Logic
+// Scoring Logic Helpers
 // ----------------------------------------------------------------------
 
-function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile: any, candidateAnswers: any) {
-  let score = 0;
+function scoreRegionCompatibility(regionA: string, regionB: string): number {
+  if (!regionA || !regionB) return 0;
+  if (regionA === regionB) return 10;
+
+  const pairs: Record<string, number> = {
+    'center+jerusalem': 7,
+    'jerusalem+center': 7,
+    'center+haifa': 5,
+    'haifa+center': 5,
+    'north+haifa': 7,
+    'haifa+north': 7,
+    'south+jerusalem': 4,
+    'jerusalem+south': 4,
+    'center+north': 3,
+    'north+center': 3,
+    'center+south': 3,
+    'south+center': 3,
+  };
+
+  return pairs[`${regionA}+${regionB}`] || 0;
+}
+
+function scoreAgeCompatibility(myAnswers: any, myBirthYear: number | null, candidateAnswers: any, candidateBirthYear: number | null): number {
+  const getAge = (birthYear: number | null) => birthYear ? new Date().getFullYear() - birthYear : null;
+  
+  const myAge = getAge(myBirthYear) || parseInt(myAnswers.age);
+  const candidateAge = getAge(candidateBirthYear) || parseInt(candidateAnswers.age);
+
+  if (!myAge || !candidateAge) return 0;
+
+  const checkRange = (age: number, min: string, max: string) => {
+    const minVal = parseInt(min) || 18;
+    const maxVal = parseInt(max) || 45;
+    return age >= minVal && age <= maxVal;
+  };
+
+  const candidateInMyRange = checkRange(candidateAge, myAnswers.preferred_age_min, myAnswers.preferred_age_max);
+  const iAmInCandidateRange = checkRange(myAge, candidateAnswers.preferred_age_min, candidateAnswers.preferred_age_max);
+
+  if (candidateInMyRange && iAmInCandidateRange) return 10;
+  if (candidateInMyRange || iAmInCandidateRange) return 5;
+  return 0;
+}
+
+function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile: any, candidateAnswers: any, depth: 'fast' | 'deep') {
+  let fastScore = 0;
+  let deepScore = 0;
   const reasons: string[] = [];
 
   // Helper for array overlap
-  const getOverlap = (arr1: string[], arr2: string[]) => {
+  const getOverlap = (arr1: any, arr2: any) => {
     if (!arr1 || !arr2 || !Array.isArray(arr1) || !Array.isArray(arr2)) return 0;
     return arr1.filter(item => arr2.includes(item)).length;
   };
 
-  // 1. Connection Intent & Depth (20 points max)
-  let intentScore = 0;
-  if (myAnswers.connectionDepth === candidateAnswers.connectionDepth) {
-    intentScore += 10;
-    reasons.push('שניכם מחפשים סוג חיבור דומה');
-  }
-  const intentOverlap = getOverlap(myAnswers.intent, candidateAnswers.intent);
-  if (intentOverlap > 0) {
-    intentScore += Math.min(10, intentOverlap * 4);
-    if (intentOverlap >= 2) reasons.push('מטרות משותפות ב-UniMatch');
-  }
-  score += intentScore;
+  // 1. Intent & Pace (20 pts)
+  let intentPaceScore = 0;
+  if (myAnswers.intent_type === candidateAnswers.intent_type) intentPaceScore += 10;
+  if (myAnswers.relationship_pace === candidateAnswers.relationship_pace) intentPaceScore += 10;
+  if (intentPaceScore >= 10) reasons.push('יש לכם קצב היכרות וכוונות דומות');
+  fastScore += intentPaceScore;
 
-  // 2. Values & Priorities (20 points max)
-  const valuesOverlap = getOverlap(myAnswers.importantInPartner, candidateAnswers.importantInPartner);
-  if (valuesOverlap > 0) {
-    score += Math.min(20, valuesOverlap * 5);
-    if (valuesOverlap >= 2) reasons.push('חולקים ערכים דומים בקשר');
-  }
-
-  // 3. Communication Style & Care Language (15 points max)
+  // 2. Communication & Style (20 pts)
   let commScore = 0;
-  if (myAnswers.communicationStyle === candidateAnswers.communicationStyle) {
-    commScore += 8;
-    reasons.push('סגנון תקשורת תואם');
-  }
-  const careOverlap = getOverlap(myAnswers.careLanguage, candidateAnswers.careLanguage);
-  if (careOverlap > 0) {
-    commScore += Math.min(7, careOverlap * 3);
-  }
-  score += commScore;
+  if (myAnswers.conflict_style === candidateAnswers.conflict_style) commScore += 7;
+  if (myAnswers.conversation_style === candidateAnswers.conversation_style) commScore += 7;
+  if (myAnswers.compromise_area === candidateAnswers.compromise_area) commScore += 6;
+  if (commScore >= 13) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
+  fastScore += commScore;
 
-  // 4. Social Energy (15 points max)
-  let socialScore = 0;
-  if (myAnswers.spontaneity === candidateAnswers.spontaneity) socialScore += 5;
-  if (myAnswers.elevatorScenario === candidateAnswers.elevatorScenario) socialScore += 5;
-  if (myAnswers.karaokeChance === candidateAnswers.karaokeChance) socialScore += 5;
+  // 3. Interests & Region (15 + 10 = 25 pts)
+  const hobbyOverlap = getOverlap(myProfile.hobbies || myAnswers.hobbies, candidateProfile.hobbies || candidateAnswers.hobbies);
+  const interestScore = Math.min(15, hobbyOverlap * 3);
+  const regionScore = scoreRegionCompatibility(myProfile.region, candidateProfile.region);
   
-  if (socialScore >= 10) {
-    reasons.push('רמת אנרגיה חברתית דומה');
-  }
-  score += socialScore;
+  if (hobbyOverlap >= 2) reasons.push('יש חפיפה בתחומי העניין');
+  if (regionScore >= 7) reasons.push('יש לכם קרבה גיאוגרפית נוחה');
+  fastScore += (interestScore + regionScore);
 
-  // 5. Campus / Academic Background (10 points max)
-  let academicScore = 0;
-  if (myProfile.university === candidateProfile.university && myProfile.university) {
-    academicScore += 4;
-    reasons.push(`לומדים באותה אוניברסיטה`);
-  }
-  if (myProfile.campus === candidateProfile.campus && myProfile.campus) {
-    academicScore += 3;
-  }
-  // If user strongly prefers same faculty (4 or 5)
-  if (myAnswers.sameFacultyImportance >= 4 && myProfile.faculty === candidateProfile.faculty) {
-    academicScore += 3;
-    reasons.push('לומדים באותה פקולטה כפי שהעדפת');
-  }
-  score += academicScore;
+  // 4. Age Range Compatibility (10 pts)
+  const ageScore = scoreAgeCompatibility(myAnswers, myProfile.birth_year, candidateAnswers, candidateProfile.birth_year);
+  if (ageScore >= 10) reasons.push('שניכם בטווח הגילאים המועדף');
+  fastScore += ageScore;
 
-  // 6. Meeting Preferences (10 points max)
-  let comfortScore = 0;
-  if (myAnswers.meetingStyle === candidateAnswers.meetingStyle) {
-    comfortScore += 5;
-    reasons.push('מעדיפים אותו סגנון מפגש ראשון');
-  }
-  const comfortOverlap = getOverlap(myAnswers.comfortNeeds, candidateAnswers.comfortNeeds);
-  if (comfortOverlap > 0) {
-    comfortScore += Math.min(5, comfortOverlap * 2);
-  }
-  score += comfortScore;
+  // 5. Preferences (10 + 10 = 20 pts)
+  let prefScore = 0;
+  if (myAnswers.preferred_first_date === candidateAnswers.preferred_first_date) prefScore += 10;
+  if (myAnswers.respect_priority === candidateAnswers.respect_priority) prefScore += 5;
+  if (myAnswers.interest_signals === candidateAnswers.interest_signals) prefScore += 5;
+  if (prefScore >= 10) reasons.push('יש לכם העדפות דומות לחיבור ראשוני');
+  fastScore += prefScore;
 
-  // 6.5 Height Preference Bonus (up to 5 points)
-  const myHeightPref = myProfile.height_preference_importance || myAnswers.heightPreferenceImportance || 'none';
-  const myMinHeight = myProfile.min_preferred_height_cm || parseInt(myAnswers.minPreferredHeightCm) || 0;
-  const candidateHeight = candidateProfile.height_cm || parseInt(candidateAnswers.heightCm) || 0;
-
-  if (myHeightPref === 'nice_to_have' && candidateHeight > 0 && candidateHeight >= myMinHeight) {
-    score += 5;
-    reasons.push('עונה על העדפת הגובה שלך');
+  // 6. Degree Stage Small Bonus (5 pts)
+  if (myProfile.year_of_study === candidateProfile.year_of_study && myProfile.year_of_study) {
+    fastScore += 5;
   }
 
-  // 7. Dealbreakers Penalty
-  // Basic implementation: if candidate's comfort needs conflict with dealbreakers
-  const dealbreakerOverlap = getOverlap(myAnswers.dealbreakers, candidateAnswers.comfortNeeds);
-  if (dealbreakerOverlap > 0) {
-    score -= (dealbreakerOverlap * 10);
+  // 7. Deep Factors (if applicable - 40 pts max)
+  if (depth === 'deep') {
+    // Social (10 pts)
+    if (myAnswers.spontaneity === candidateAnswers.spontaneity) deepScore += 2.5;
+    if (myAnswers.elevatorScenario === candidateAnswers.elevatorScenario) deepScore += 2.5;
+    if (myAnswers.karaokeChance === candidateAnswers.karaokeChance) deepScore += 2.5;
+    if (myAnswers.familiarFace === candidateAnswers.familiarFace) deepScore += 2.5;
+
+    // Values (10 pts)
+    if (myAnswers.money_style === candidateAnswers.money_style) deepScore += 5;
+    if (myAnswers.love_language === candidateAnswers.love_language) deepScore += 5;
+
+    // Dating & Similar (10 pts)
+    if (myAnswers.perfect_date === candidateAnswers.perfect_date) deepScore += 5;
+    if (myAnswers.similarity_preference === candidateAnswers.similarity_preference) deepScore += 5;
+
+    // Religion (10 pts)
+    if (myAnswers.religion === candidateAnswers.religion) deepScore += 5;
+    const tradDiff = Math.abs((myAnswers.tradition_self_rating || 3) - (candidateAnswers.tradition_partner_importance || 3));
+    const tradDiffReverse = Math.abs((candidateAnswers.tradition_self_rating || 3) - (myAnswers.tradition_partner_importance || 3));
+    if (tradDiff <= 1 && tradDiffReverse <= 1) deepScore += 5;
+
+    // Tiny completeness bonus (max 2 points, capped within 40 deep total)
+    if (myAnswers.about_me && candidateAnswers.about_me) deepScore = Math.min(40, deepScore + 1);
+    if (myAnswers.relationship_strengths_text && candidateAnswers.relationship_strengths_text) deepScore = Math.min(40, deepScore + 1);
+
+    if (deepScore >= 25) {
+        reasons.push('יש גם התאמה בשאלות העומק');
+        reasons.push('יש התאמה טובה בערכים ובגבולות');
+    }
   }
 
-  // Cap Score
-  score = Math.max(0, Math.min(100, score));
+  // Calculate Final Score
+  let finalScore = 0;
+  if (depth === 'deep') {
+    // 60% Fast, 40% Deep
+    finalScore = (fastScore * 0.6) + deepScore;
+  } else {
+    finalScore = fastScore;
+  }
 
-  // Base random minimum score for UI polish if they passed hard filters but answered very differently
-  if (score < 40) score = 40 + Math.floor(Math.random() * 20);
+  // Final Cleanup
+  finalScore = Math.round(Math.max(40, Math.min(100, finalScore)));
 
   // Fallback reason if none triggered
   if (reasons.length === 0) {
@@ -266,5 +309,5 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   // Deduplicate and slice reasons
   const uniqueReasons = Array.from(new Set(reasons)).slice(0, 3);
 
-  return { score: Math.round(score), reasons: uniqueReasons };
+  return { score: finalScore, reasons: uniqueReasons };
 }
