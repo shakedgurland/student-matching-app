@@ -438,9 +438,12 @@ export default function MyProfileScreen() {
                  
                  {answers ? (
                    <View style={styles.answersPreview}>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מחפש/ת: {Array.isArray(answers.intent) ? answers.intent.join(', ') : answers.intent}</ThemedText>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• סגנון תקשורת: {answers.communicationStyle}</ThemedText>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מפגש ראשון: {answers.meetingStyle}</ThemedText>
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מחפש/ת: {answers.intent_type || 'לא צוין'}</ThemedText>
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• סגנון תקשורת: {answers.communicationStyle || 'לא צוין'}</ThemedText>
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מפגש ראשון: {answers.preferred_first_date || 'לא צוין'}</ThemedText>
+                      {answers.relationship_growth_text ? (
+                        <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• חשוב שידעו עליי: {answers.relationship_growth_text}</ThemedText>
+                      ) : null}
                    </View>
                  ) : (
                    <ThemedText style={[styles.onboardingNote, { color: dynamicColors.textLight }]}>
