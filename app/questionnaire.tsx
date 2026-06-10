@@ -446,6 +446,17 @@ export default function QuestionnaireScreen() {
         throw answersError;
       }
 
+      // Trigger AI Traits Analysis if Deep Questionnaire is completed/updated
+      if (finalMode === 'deep') {
+        supabase.functions.invoke('analyze-user-traits').then(({ error }) => {
+          if (error) {
+            logError('Questionnaire', 'ai_traits_analysis_failed', error);
+          }
+        }).catch(err => {
+          logError('Questionnaire', 'ai_traits_analysis_exception', err);
+        });
+      }
+
       if (!isEditMode) {
         // 2. Upload Photos
         let firstPhotoPath: string | null = null;
