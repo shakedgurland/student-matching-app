@@ -18,7 +18,7 @@ serve(async (req) => {
     // 1. Initialize Supabase Client with Service Role Key (Server-side only)
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('UNIMATCH_SERVICE_ROLE_KEY') ?? ''
     )
 
     // 2. Parse Request
