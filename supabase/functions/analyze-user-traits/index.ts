@@ -21,11 +21,21 @@ serve(async (req) => {
       Deno.env.get('UNIMATCH_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 2. Parse Request
-    const { user_id } = await req.json()
-    if (!user_id) throw new Error('user_id is required')
+    // 2. Auth Check: Require valid Supabase JWT
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('Missing Authorization header')
+    }
 
-    console.log(`Analyzing traits for user: ${user_id}`)
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token)
+    
+    if (userError || !user) {
+      throw new Error(`Unauthorized: ${userError?.message || 'Invalid token'}`)
+    }
+
+    const user_id = user.id
+    console.log(`Analyzing traits for verified user: ${user_id}`)
 
     // 3. Fetch Questionnaire Answers
     const { data: answersData, error: fetchError } = await supabaseClient
