@@ -54,35 +54,74 @@ serve(async (req) => {
       })
     }
 
-    // 4. TODO: AI Analysis
-    /*
-      PROMPT STRATEGY:
-      System Message: You are a psychology expert. Analyze the following student dating profile text 
-      and output a JSON object representing their traits.
-      
-      Input: ${JSON.stringify(freeTextFields)}
-      
-      Expected Schema:
-      {
-        "emotional_tone": "warm | reserved | energetic",
-        "social_energy": 1-5,
-        "communication_style": "direct | expressive | thoughtful",
-        "ambition_level": 1-5,
-        "lifestyle_tone": "relaxed | active | intellectual",
-        "humor_style": "witty | sarcastic | dry | none"
-      }
-    */
+    // 4. AI Analysis with OpenAI
+    const openAiKey = Deno.env.get('OPENAI_API_KEY')
+    if (!openAiKey) {
+      throw new Error('OPENAI_API_KEY is not configured')
+    }
 
-    // Placeholder Traits (Simulated AI Response)
-    const analyzedTraits = {
-      emotional_tone: "warm",
-      social_energy: 3,
-      communication_style: "thoughtful",
-      ambition_level: 4,
-      lifestyle_tone: "intellectual",
-      humor_style: "witty",
-      analyzed_at: new Date().toISOString(),
-      is_placeholder: true
+    const systemPrompt = `You are a psychology expert specializing in relationship compatibility. 
+Analyze the following student dating profile text (provided in Hebrew) and extract key personality traits.
+The output MUST be a valid JSON object strictly following this schema:
+{
+  "emotional_tone": "warm | reserved | energetic | calm",
+  "social_energy": 1,
+  "communication_style": "direct | expressive | thoughtful | minimalist",
+  "ambition_level": 1,
+  "lifestyle_tone": "relaxed | active | intellectual | adventurous",
+  "humor_style": "witty | sarcastic | dry | gentle | none",
+  "key_values": ["value1", "value2", "value3"]
+}
+
+Note: social_energy and ambition_level are numbers from 1 to 5.
+Rules:
+1. Return ONLY the JSON object.
+2. Be objective and avoid overly sensitive or diagnostic language.
+3. If the input is too short or unclear, provide neutral/middle-ground values.
+4. Keep key_values to 3 items max.`
+
+    const userPrompt = `Student profile text:
+- About me: ${freeTextFields.about_me}
+- Strengths in relationships: ${freeTextFields.relationship_strengths_text}
+- Areas for growth: ${freeTextFields.relationship_growth_text}`
+
+    console.log('Requesting analysis from OpenAI...')
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        max_tokens: 400,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(`OpenAI API error: ${errorData.error?.message || response.statusText}`)
+    }
+
+    const aiData = await response.json()
+    const content = aiData.choices[0]?.message?.content
+    if (!content) throw new Error('OpenAI returned an empty response')
+
+    let analyzedTraits
+    try {
+      analyzedTraits = JSON.parse(content)
+      analyzedTraits.analyzed_at = new Date().toISOString()
+      analyzedTraits.is_placeholder = false
+    } catch (e) {
+      console.error('Failed to parse OpenAI JSON:', content)
+      throw new Error('Failed to parse AI traits response')
     }
 
     // 5. Upsert into public.profile_ai_traits
@@ -91,15 +130,14 @@ serve(async (req) => {
       .upsert({
         user_id: user_id,
         traits: analyzedTraits,
-        model_version: 'placeholder-v1',
-        // source_hash: generateHash(combinedText) // Future: only re-run if text changes
+        model_version: 'openai-traits-v1',
       }, { onConflict: 'user_id' })
 
     if (upsertError) throw upsertError
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: 'Traits extracted (placeholder mode)',
+      message: 'Traits extracted successfully',
       traits: analyzedTraits 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
