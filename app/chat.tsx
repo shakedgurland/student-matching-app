@@ -57,7 +57,6 @@ export default function ChatScreen() {
         headerShown: true, 
         headerTitle: "השיחה עם נועה",
         headerTitleAlign: 'center',
-        headerBackTitleVisible: false,
         headerTintColor: UI_COLORS.branding,
         headerStyle: { backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' },
         headerTitleStyle: { color: isDark ? '#FFFFFF' : UI_COLORS.text },

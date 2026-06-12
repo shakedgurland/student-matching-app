@@ -115,7 +115,7 @@ export default function MatchSelectionScreen() {
       if (!targetUserId) return;
 
       const newMatch = await findAndCreateBestMatch(targetUserId);
-      if (newMatch) {
+      if (newMatch && 'matchId' in newMatch) {
         logEvent('match_found', { metadata: { matchId: newMatch.matchId, score: newMatch.compatibilityScore } });
         let candidateProfile = newMatch.candidateProfile;
         
@@ -135,6 +135,11 @@ export default function MatchSelectionScreen() {
           compatibility_reasons: newMatch.compatibilityReasons
         });
         setOtherUser(candidateProfile);
+      } else if (newMatch && 'status' in newMatch && newMatch.status === 'incomplete_profile') {
+        logEvent('match_not_found', { metadata: { reason: 'incomplete_profile' } });
+        if (!silent) {
+          Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
+        }
       } else {
         logEvent('match_not_found');
         if (!silent) {
