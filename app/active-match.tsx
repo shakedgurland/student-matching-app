@@ -64,6 +64,13 @@ export default function ActiveMatchScreen() {
     Alert.alert('בהכנה', 'מסך הצ׳אט ייבנה בשלב הבא');
   };
 
+  const openFeedback = () => {
+    router.push({
+      pathname: '/match-feedback' as any,
+      params: { stage: 'after_match' }
+    });
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -107,6 +114,12 @@ export default function ActiveMatchScreen() {
                onPress={openChat}
                activeOpacity={0.8}>
                <ThemedText style={styles.primaryButtonText}>פתח/י צ׳אט</ThemedText>
+             </TouchableOpacity>
+
+             <TouchableOpacity 
+               style={styles.feedbackButton}
+               onPress={openFeedback}>
+               <ThemedText style={[styles.feedbackButtonText, { color: UI_COLORS.branding }]}>משוב על ההתאמה</ThemedText>
              </TouchableOpacity>
 
              <TouchableOpacity 
@@ -249,6 +262,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '800',
+  },
+  feedbackButton: {
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: UI_COLORS.branding + '40',
+  },
+  feedbackButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
   secondaryButton: {
     height: 52,

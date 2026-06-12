@@ -41,6 +41,7 @@ const MockMessage = ({ text, isMe }: { text: string, isMe: boolean }) => (
 );
 
 export default function ChatScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -58,6 +59,13 @@ export default function ChatScreen() {
         headerTitle: "השיחה עם נועה",
         headerTitleAlign: 'center',
         headerTintColor: UI_COLORS.branding,
+        headerRight: () => (
+          <TouchableOpacity 
+            onPress={() => router.push({ pathname: '/match-feedback' as any, params: { stage: 'after_chat' } })}
+            style={{ marginRight: 10 }}>
+            <IconSymbol name="star.fill" size={20} color={UI_COLORS.branding} />
+          </TouchableOpacity>
+        ),
         headerStyle: { backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' },
         headerTitleStyle: { color: isDark ? '#FFFFFF' : UI_COLORS.text },
       }} />
