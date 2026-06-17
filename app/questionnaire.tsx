@@ -268,6 +268,289 @@ const MAIN_DEALBREAKER_OPTIONS = [
   { label: 'פער גדול ביחס לדת/מסורת', value: 'religion_tradition_gap' },
 ];
 
+// === v2 questionnaire spec — option sets ===
+// These constants are added now so that follow-up commits can wire them into
+// the UI without churning the rest of the file. They are intentionally unused
+// in this commit; that's expected.
+
+const RELIGIOUS_LEVEL_OPTIONS = [
+  { label: 'חילוני/ת', value: 'secular' },
+  { label: 'מסורתי/ת', value: 'traditional' },
+  { label: 'דתי/ה', value: 'religious' },
+  { label: 'דתי/ה לאומי/ת', value: 'religious_national' },
+  { label: 'חרדי/ת', value: 'haredi' },
+];
+
+const APP_INTENT_OPTIONS = [
+  { label: 'קשר לטווח ארוך', value: 'long_term' },
+  { label: 'קשר קצר', value: 'short_term' },
+  { label: 'סטוצים / קשר לא מחייב', value: 'casual' },
+  { label: 'ראש פתוח וזורם', value: 'open_flow' },
+];
+
+const FIELD_OF_STUDY_OPTIONS = [
+  { label: 'פסיכולוגיה', value: 'psychology' },
+  { label: 'מדעי המחשב', value: 'cs' },
+  { label: 'משפטים', value: 'law' },
+  { label: 'רפואה', value: 'medicine' },
+  { label: 'מנהל עסקים', value: 'business' },
+  { label: 'הנדסה', value: 'engineering' },
+  { label: 'אחר', value: 'other' },
+];
+
+const DEGREE_TYPE_OPTIONS = [
+  { label: 'תואר ראשון', value: 'bachelors' },
+  { label: 'תואר שני', value: 'masters' },
+  { label: 'דוקטורט', value: 'phd' },
+  { label: 'לימודי תעודה', value: 'certificate' },
+];
+
+const STUDY_YEAR_OPTIONS = [
+  { label: 'שנה א׳', value: 'year_1' },
+  { label: 'שנה ב׳', value: 'year_2' },
+  { label: 'שנה ג׳', value: 'year_3' },
+  { label: 'שנה ד׳', value: 'year_4' },
+  { label: 'שנה ה׳+', value: 'year_5_plus' },
+];
+
+const INTERESTED_IN_OPTIONS_V2 = [
+  { label: 'גברים', value: 'man' },
+  { label: 'נשים', value: 'woman' },
+  { label: 'כולם', value: 'any' },
+];
+
+const MATCH_PREFERENCES_OPTIONS = [
+  { label: 'מאותו מוסד לימודים', value: 'same_university' },
+  { label: 'מאותה פקולטה', value: 'same_faculty' },
+  { label: 'מאותו אזור בארץ', value: 'same_region' },
+  { label: 'באותה רמת דתיות', value: 'same_religious_level' },
+  { label: 'לא משנה לי', value: 'no_preference' },
+];
+
+const HOBBY_OPTIONS_V2 = [
+  { label: 'חדר כושר', value: 'gym' },
+  { label: 'ריצה', value: 'running' },
+  { label: 'טיולים', value: 'hiking' },
+  { label: 'קמפינג', value: 'camping' },
+  { label: 'ים', value: 'beach' },
+  { label: 'מוזיקה', value: 'music' },
+  { label: 'הופעות', value: 'concerts' },
+  { label: 'סרטים', value: 'movies' },
+  { label: 'סדרות', value: 'series' },
+  { label: 'קריאה', value: 'reading' },
+  { label: 'גיימינג', value: 'gaming' },
+  { label: 'בישול', value: 'cooking' },
+  { label: 'מסעדות', value: 'restaurants' },
+  { label: 'אומנות', value: 'art' },
+  { label: 'צילום', value: 'photography' },
+  { label: 'ריקוד', value: 'dancing' },
+  { label: 'כלבים', value: 'dogs' },
+  { label: 'חתולים', value: 'cats' },
+  { label: 'טכנולוגיה', value: 'tech' },
+  { label: 'יזמות', value: 'entrepreneurship' },
+];
+
+const DATE_TYPE_OPTIONS = [
+  { label: 'בית קפה', value: 'coffee' },
+  { label: 'מסעדה', value: 'restaurant' },
+  { label: 'בר / דרינק', value: 'bar' },
+  { label: 'פיקניק', value: 'picnic' },
+  { label: 'טיול בטבע', value: 'nature_walk' },
+  { label: 'פעילות אקטיבית', value: 'active' },
+  { label: 'ערב ביתי', value: 'home_evening' },
+  { label: 'לא משנה מה עושים, העיקר החיבור', value: 'connection_matters' },
+];
+
+const RELATIONSHIP_PACE_OPTIONS_V2 = [
+  { label: 'איטי מאוד', value: 'very_slow' },
+  { label: 'להכיר בהדרגה', value: 'gradual' },
+  { label: 'קצב בינוני', value: 'medium' },
+  { label: 'כשיש חיבור אני זורם/ת מהר', value: 'fast_with_connection' },
+];
+
+const CONFLICT_RESPONSE_OPTIONS = [
+  { label: 'רוצה לדבר מיד', value: 'talk_immediately' },
+  { label: 'צריך/ה זמן להירגע', value: 'need_cooldown' },
+  { label: 'נמנע/ת מעימותים', value: 'avoidant' },
+  { label: 'תלוי במצב', value: 'situational' },
+];
+
+const PROBLEM_RESPONSE_OPTIONS = [
+  { label: 'לפתור אותה מיד', value: 'solve_immediately' },
+  { label: 'להבין קודם את הרגשות שלי', value: 'understand_feelings_first' },
+  { label: 'לתת לזמן לעשות את שלו', value: 'let_time_help' },
+  { label: 'לשמוע את הצד השני', value: 'hear_other_side' },
+];
+
+const ATTRACTION_INITIATIVE_OPTIONS = [
+  { label: 'יוזם/ת שיחה', value: 'initiate_conversation' },
+  { label: 'רומז/ת בעדינות', value: 'subtle_hint' },
+  { label: 'מחכה שיפנו אליי', value: 'wait_for_approach' },
+  { label: 'תלוי בביטחון שלי באותו רגע', value: 'confidence_dependent' },
+];
+
+const FEEL_INTEREST_OPTIONS = [
+  { label: 'מתלהב/ת', value: 'excited' },
+  { label: 'בוחן/ת את המצב', value: 'evaluating' },
+  { label: 'נלחץ/ת קצת', value: 'slightly_anxious' },
+  { label: 'שמתי לב אבל משתדל/ת לא להראות', value: 'hide_it' },
+];
+
+const ELEVATOR_OPTIONS_V2 = [
+  { label: 'אפתח שיחה', value: 'open_conversation' },
+  { label: 'אחייך ואבדוק אם יש עניין', value: 'smile_check_interest' },
+  { label: 'אחכה להזדמנות אחרת', value: 'wait_other_chance' },
+  { label: 'כנראה לא אעשה כלום', value: 'do_nothing' },
+];
+
+const KARAOKE_OPTIONS_V2 = [
+  { label: 'ראשון/ה על הבמה', value: 'first_on_stage' },
+  { label: 'שר/ה אם משכנעים אותי', value: 'sing_if_convinced' },
+  { label: 'מעדיף/ה לצפות', value: 'prefer_watching' },
+  { label: 'מחפש/ת דרך להתחמק', value: 'find_escape' },
+];
+
+const FAMILIAR_FACE_OPTIONS_V2 = [
+  { label: 'ניגש/ת לדבר מיד', value: 'approach_immediately' },
+  { label: 'אומר/ת שלום קצר', value: 'brief_hello' },
+  { label: 'מחכה שהוא ייגש', value: 'wait_for_them' },
+  { label: 'מעדיף/ה להמשיך בדרכי', value: 'continue_my_way' },
+];
+
+const SPONTANEITY_OPTIONS_V2 = [
+  { label: 'סוגר/ת מזוודה עכשיו', value: 'pack_now' },
+  { label: 'תלוי עם מי', value: 'depends_who' },
+  { label: 'צריך/ה זמן לתכנן', value: 'need_planning_time' },
+  { label: 'כנראה לא אטוס', value: 'probably_no' },
+];
+
+const SPONTANEOUS_PLAN_OPTIONS = [
+  { label: 'בפנים בלי לחשוב פעמיים', value: 'in_immediately' },
+  { label: 'בדרך כלל זורם/ת', value: 'usually_flow' },
+  { label: 'תלוי במצב רוח', value: 'mood_dependent' },
+  { label: 'מעדיף/ה לתכנן מראש', value: 'prefer_planning' },
+];
+
+const RELATIONSHIP_TOP_VALUES_OPTIONS = [
+  { label: 'אמון', value: 'trust' },
+  { label: 'תקשורת', value: 'communication' },
+  { label: 'משיכה', value: 'attraction' },
+  { label: 'הומור', value: 'humor' },
+  { label: 'יציבות', value: 'stability' },
+  { label: 'חברות', value: 'friendship' },
+  { label: 'עצמאות', value: 'independence' },
+  { label: 'שאפתנות', value: 'ambition' },
+  { label: 'משפחתיות', value: 'family' },
+];
+
+const LOVE_LANGUAGE_OPTIONS_V2 = [
+  { label: 'זמן איכות', value: 'quality_time' },
+  { label: 'מילים טובות', value: 'words' },
+  { label: 'מגע', value: 'touch' },
+  { label: 'עזרה ומעשים', value: 'acts_of_service' },
+  { label: 'מתנות', value: 'gifts' },
+];
+
+const SIMILARITY_PREF_OPTIONS_V2 = [
+  { label: 'אנשים שדומים לי', value: 'similar' },
+  { label: 'אנשים שמשלימים אותי', value: 'complementary' },
+  { label: 'אנשים שהפוכים ממני', value: 'opposite' },
+  { label: 'שילוב של השניים', value: 'mix' },
+];
+
+const PERFECT_DATE_OPTIONS_V2 = [
+  { label: 'בית קפה ושיחה טובה', value: 'coffee_talk' },
+  { label: 'מסעדה רומנטית', value: 'romantic_restaurant' },
+  { label: 'פיקניק בטבע', value: 'nature_picnic' },
+  { label: 'טיול ארוך', value: 'long_walk' },
+  { label: 'בר ודרינק', value: 'bar_drink' },
+  { label: 'פעילות מיוחדת', value: 'special_activity' },
+  { label: 'ערב ביתי', value: 'home_evening' },
+  { label: 'לא משנה מה עושים, העיקר החיבור', value: 'connection_matters' },
+];
+
+const DEALBREAKERS_OPTIONS = [
+  { label: 'חוסר כנות', value: 'dishonesty' },
+  { label: 'חוסר תקשורת', value: 'poor_communication' },
+  { label: 'חוסר משיכה', value: 'no_attraction' },
+  { label: 'חוסר שאפתנות', value: 'no_ambition' },
+  { label: 'ערכים שונים מאוד', value: 'different_values' },
+  { label: 'עישון', value: 'smoking' },
+  { label: 'קנאה מוגזמת', value: 'excessive_jealousy' },
+  { label: 'חוסר עצמאות', value: 'no_independence' },
+  { label: 'יחס לא מכבד', value: 'disrespect' },
+];
+
+const RELATIONSHIP_STRENGTHS_OPTIONS = [
+  { label: 'תקשורת טובה', value: 'good_communication' },
+  { label: 'נאמנות', value: 'loyalty' },
+  { label: 'הקשבה', value: 'listening' },
+  { label: 'הומור', value: 'humor' },
+  { label: 'רומנטיות', value: 'romance' },
+  { label: 'כנות', value: 'honesty' },
+  { label: 'יציבות', value: 'stability' },
+  { label: 'תמיכה', value: 'support' },
+  { label: 'ספונטניות', value: 'spontaneity' },
+  { label: 'פתרון קונפליקטים', value: 'conflict_resolution' },
+];
+
+const PARTNER_SHOULD_KNOW_OPTIONS = [
+  { label: 'אני צריך/ה הרבה זמן לבד', value: 'need_alone_time' },
+  { label: 'אני מאוד משפחתי/ת', value: 'family_oriented' },
+  { label: 'הקריירה חשובה לי מאוד', value: 'career_focused' },
+  { label: 'אני אדם רגיש', value: 'sensitive' },
+  { label: 'אני אדם ישיר', value: 'direct' },
+  { label: 'אני אוהב/ת ספונטניות', value: 'love_spontaneity' },
+  { label: 'חשוב לי סדר וארגון', value: 'order_organization' },
+  { label: 'אני אוהב/ת הרפתקאות', value: 'love_adventure' },
+  { label: 'לוקח לי זמן להיפתח', value: 'slow_to_open' },
+];
+
+const PARTNER_QUALITIES_OPTIONS = [
+  { label: 'אינטליגנציה', value: 'intelligence' },
+  { label: 'הומור', value: 'humor' },
+  { label: 'אמביציה', value: 'ambition' },
+  { label: 'רגישות', value: 'sensitivity' },
+  { label: 'תקשורת טובה', value: 'good_communication' },
+  { label: 'ביטחון עצמי', value: 'self_confidence' },
+  { label: 'משפחתיות', value: 'family' },
+  { label: 'משיכה פיזית', value: 'physical_attraction' },
+  { label: 'כנות', value: 'honesty' },
+  { label: 'יציבות', value: 'stability' },
+  { label: 'פתיחות מחשבתית', value: 'open_minded' },
+  { label: 'ספונטניות', value: 'spontaneity' },
+  { label: 'ערכים דומים', value: 'similar_values' },
+  { label: 'בגרות רגשית', value: 'emotional_maturity' },
+];
+
+const PERSONAL_SPACE_OPTIONS = [
+  { label: 'צריך/ה הרבה מרחב אישי', value: 'need_lots_of_space' },
+  { label: 'צריך/ה איזון', value: 'need_balance' },
+  { label: 'אוהב/ת להיות הרבה ביחד', value: 'lots_of_togetherness' },
+];
+
+const CHEMISTRY_VS_LONGTERM_OPTIONS = [
+  { label: 'כימיה מיידית', value: 'instant_chemistry' },
+  { label: 'התאמה לטווח ארוך', value: 'long_term_fit' },
+  { label: 'שניהם באותה מידה', value: 'both_equal' },
+];
+
+const STABILITY_VS_ADVENTURE_OPTIONS = [
+  { label: 'יציבות וביטחון', value: 'stability_security' },
+  { label: 'ריגוש והרפתקאות', value: 'excitement_adventure' },
+  { label: 'שילוב של שניהם', value: 'mix' },
+];
+
+const PARTNER_SHOULD_FEEL_OPTIONS = [
+  { label: 'בטוחים', value: 'safe' },
+  { label: 'אהובים', value: 'loved' },
+  { label: 'מוערכים', value: 'valued' },
+  { label: 'רגועים', value: 'calm' },
+  { label: 'נרגשים', value: 'excited' },
+  { label: 'מובנים', value: 'understood' },
+  { label: 'חופשיים להיות עצמם', value: 'free_to_be_themselves' },
+];
+
 export default function QuestionnaireScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -342,6 +625,25 @@ export default function QuestionnaireScreen() {
     comfortNeeds: [] as string[],
     meetingStyle: '',
     personalNuance: '',
+
+    // === v2 questionnaire spec fields — wired into UI by follow-up commits ===
+    city: '',
+    degree_type: '',
+    match_preferences: [] as string[],
+    shared_hobbies_priority: [] as string[],
+    availability_level: 3,
+    problem_response_style: '',
+    attraction_initiative_style: '',
+    feel_interest_response: '',
+    spontaneous_plan_response: '',
+    relationship_top_values: [] as string[],
+    relationship_strengths: [] as string[],
+    partner_should_know: [] as string[],
+    partner_qualities: [] as string[],
+    personal_space_style: '',
+    chemistry_vs_longterm: '',
+    stability_vs_adventure: '',
+    partner_should_feel: [] as string[],
   });
 
   useEffect(() => {
@@ -386,6 +688,25 @@ export default function QuestionnaireScreen() {
           perfect_date: answersRes.data.answers.perfect_date || '',
           main_dealbreaker: answersRes.data.answers.main_dealbreaker || '',
           relationship_strengths_text: answersRes.data.answers.relationship_strengths_text || '',
+
+          // v2 spec field defaults
+          city: answersRes.data.answers.city || '',
+          degree_type: answersRes.data.answers.degree_type || '',
+          match_preferences: answersRes.data.answers.match_preferences || [],
+          shared_hobbies_priority: answersRes.data.answers.shared_hobbies_priority || [],
+          availability_level: answersRes.data.answers.availability_level || 3,
+          problem_response_style: answersRes.data.answers.problem_response_style || '',
+          attraction_initiative_style: answersRes.data.answers.attraction_initiative_style || '',
+          feel_interest_response: answersRes.data.answers.feel_interest_response || '',
+          spontaneous_plan_response: answersRes.data.answers.spontaneous_plan_response || '',
+          relationship_top_values: answersRes.data.answers.relationship_top_values || [],
+          relationship_strengths: answersRes.data.answers.relationship_strengths || [],
+          partner_should_know: answersRes.data.answers.partner_should_know || [],
+          partner_qualities: answersRes.data.answers.partner_qualities || [],
+          personal_space_style: answersRes.data.answers.personal_space_style || '',
+          chemistry_vs_longterm: answersRes.data.answers.chemistry_vs_longterm || '',
+          stability_vs_adventure: answersRes.data.answers.stability_vs_adventure || '',
+          partner_should_feel: answersRes.data.answers.partner_should_feel || [],
         }));
       }
       if (profileRes.data) {
@@ -451,7 +772,14 @@ export default function QuestionnaireScreen() {
         throw answersError;
       }
 
-      // Trigger AI Traits Analysis if Deep Questionnaire is completed/updated
+      // Trigger AI Traits Analysis if Deep Questionnaire is completed/updated.
+      // TODO: The v2 questionnaire spec drops the free-text inputs that this
+      // Edge Function (analyze-user-traits) reads — `about_me`,
+      // `relationship_strengths_text`, `relationship_growth_text`. Once those
+      // fields stop being populated by the new UI, the function will return its
+      // "No text to analyze" no-op path. To re-enable meaningful AI traits,
+      // re-introduce at least one free-text prompt (e.g. an optional
+      // "ספר/י על עצמך") and wire it into the same field(s).
       if (finalMode === 'deep') {
         supabase.functions.invoke('analyze-user-traits').then(({ error }) => {
           if (error) {
@@ -521,7 +849,7 @@ export default function QuestionnaireScreen() {
             university: formData.university,
             faculty: formData.faculty,
             year_of_study: formData.degree_stage,
-            campus: formData.campus,
+            campus: formData.city.trim() || formData.campus || null,
             region: formData.region,
             hobbies: formData.hobbies,
             bio: formData.about_me,
@@ -549,7 +877,7 @@ export default function QuestionnaireScreen() {
             university: formData.university,
             faculty: formData.faculty,
             year_of_study: formData.degree_stage,
-            campus: formData.campus,
+            campus: formData.city.trim() || formData.campus || null,
             region: formData.region,
             hobbies: formData.hobbies,
             bio: formData.about_me,
