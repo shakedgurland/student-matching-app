@@ -3,8 +3,13 @@ import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { ResponsiveContainer } from '@/components/ui/responsive-container';
+import { Colors, Spacing, BorderRadius, Shadow, Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SignupScreen() {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,18 +17,8 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!username.trim()) {
-      Alert.alert('שגיאה', 'יש להזין שם משתמש');
-      return;
-    }
-
-    if (!email.trim()) {
-      Alert.alert('שגיאה', 'יש להזין אימייל');
-      return;
-    }
-
-    if (!password) {
-      Alert.alert('שגיאה', 'יש להזין סיסמה');
+    if (!username.trim() || !email.trim() || !password || !confirmPassword) {
+      Alert.alert('שגיאה', 'יש למלא את כל השדות');
       return;
     }
 
@@ -40,6 +35,15 @@ export default function SignupScreen() {
     setLoading(true);
 
     try {
+      const academicDomains = ['.ac.il', 'edu', '.ac.'];
+      const isAcademic = academicDomains.some(domain => email.toLowerCase().endsWith(domain));
+      
+      if (!isAcademic) {
+        Alert.alert('אימות סטודנט', 'אנא השתמשי באימייל אוניברסיטאי רשמי (המסתים ב-.ac.il)');
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -55,7 +59,7 @@ export default function SignupScreen() {
         return;
       }
 
-      router.replace('/student-verification');
+      router.replace('/basic-questionnaire');
     } catch (err) {
       console.log('Unexpected signup error:', err);
       Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בהרשמה');
@@ -65,59 +69,83 @@ export default function SignupScreen() {
   };
 
   return (
-    <ResponsiveContainer style={styles.container}>
+    <ResponsiveContainer style={[styles.container, { backgroundColor: theme.offBackground }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.logo}>UniMatch</Text>
-        <Text style={styles.title}>הרשמה</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="שם משתמש"
-          value={username}
-          onChangeText={setUsername}
-          textAlign="right"
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="אימייל"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          textAlign="right"
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="סיסמה"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          textAlign="right"
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="אימות סיסמה"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          textAlign="right"
-        />
-
-        <TouchableOpacity
-          style={[styles.primaryButton, loading && styles.disabledButton]}
-          onPress={handleSignup}
-          disabled={loading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
-          </Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="chevron-forward" size={28} color={theme.primary} />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.link}>חזרה</Text>
+        <Text style={[styles.title, { color: theme.text }]}>בואי נתחיל ✨</Text>
+        <Text style={[styles.subtitle, { color: theme.muted }]}>צרי חשבון כדי למצוא את ההתאמה שלך</Text>
+
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>שם משתמש</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border }]}
+              placeholder="איך תרצי שנקרא לך?"
+              placeholderTextColor={theme.tabIconDefault}
+              value={username}
+              onChangeText={setUsername}
+              textAlign="right"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>אימייל אקדמי</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border }]}
+              placeholder="example@student.ac.il"
+              placeholderTextColor={theme.tabIconDefault}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              textAlign="right"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>סיסמה</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border }]}
+              placeholder="לפחות 6 תווים"
+              placeholderTextColor={theme.tabIconDefault}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textAlign="right"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: theme.text }]}>אימות סיסמה</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border }]}
+              placeholder="הקלידי שוב את הסיסמה"
+              placeholderTextColor={theme.tabIconDefault}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              textAlign="right"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.primary }, Shadow.soft, loading && styles.disabledButton]}
+            onPress={handleSignup}
+            disabled={loading}
+          >
+            <Text style={styles.primaryButtonText}>
+              {loading ? 'יוצר חשבון...' : 'המשך לשאלון התאמה'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity onPress={() => router.push('/login')} style={styles.footerLink}>
+          <Text style={[styles.footerLinkText, { color: theme.muted }]}>
+            כבר יש לך חשבון? <Text style={{ color: theme.primary, fontWeight: '700' }}>התחברי כאן</Text>
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </ResponsiveContainer>
@@ -126,53 +154,67 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    padding: Spacing.lg,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    paddingTop: Spacing.xl,
   },
-  logo: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: '#477D9B',
-    textAlign: 'center',
-    marginBottom: 24,
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.xl,
   },
   title: {
-    fontSize: 30,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 24,
-    color: '#111111',
+    ...Typography.h1,
+    textAlign: 'right',
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    ...Typography.body,
+    textAlign: 'right',
+    marginBottom: Spacing.xxl,
+  },
+  form: {
+    width: '100%',
+    gap: Spacing.md,
+  },
+  inputGroup: {
+    marginBottom: Spacing.sm,
+  },
+  label: {
+    ...Typography.label,
+    marginBottom: Spacing.xs,
+    textAlign: 'right',
+    marginRight: 4,
   },
   input: {
-    backgroundColor: '#F4F4F4',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
+    height: 60,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
     fontSize: 16,
+    borderWidth: 1,
   },
   primaryButton: {
-    backgroundColor: '#477D9B',
-    padding: 16,
-    borderRadius: 16,
+    height: 64,
+    borderRadius: BorderRadius.xl,
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
+    marginTop: Spacing.lg,
   },
   disabledButton: {
     opacity: 0.6,
   },
   primaryButtonText: {
     color: 'white',
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
   },
-  link: {
-    textAlign: 'center',
-    marginTop: 20,
-    color: '#477D9B',
-    fontSize: 16,
-    fontWeight: '600',
+  footerLink: {
+    alignItems: 'center',
+    marginTop: Spacing.xl,
+    padding: Spacing.md,
+  },
+  footerLinkText: {
+    fontSize: 15,
   },
 });

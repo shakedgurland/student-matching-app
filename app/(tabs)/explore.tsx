@@ -1,33 +1,107 @@
 import { router } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { ResponsiveContainer } from '@/components/ui/responsive-container';
+import { Colors, Spacing, BorderRadius, Shadow, Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { findPotentialMatches, recordMatch } from '@/lib/matching';
+import { supabase } from '@/lib/supabase';
 
 export default function MatchTabScreen() {
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+  const [loading, setLoading] = useState(false);
+
+  const handleFindMatch = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('שגיאה', 'אנא התחברי כדי למצוא התאמות');
+        return;
+      }
+
+      // Check for active match first
+      const { data: activeMatch } = await supabase
+        .from('user_matches')
+        .select('candidate_id, score')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+
+      if (activeMatch) {
+        router.push({
+          pathname: '/active-match',
+          params: { id: activeMatch.candidate_id }
+        });
+        return;
+      }
+
+      // If no active match, find new ones
+      const matches = await findPotentialMatches(user.id);
+
+      if (matches.length === 0) {
+        Alert.alert('מצטערים', 'לא מצאנו התאמות חדשות כרגע. נסי שוב מאוחר יותר או עדכני את הפרופיל שלך!');
+        return;
+      }
+
+      // Take the best match
+      const bestMatch = matches[0];
+      
+      // Record as shown
+      await recordMatch(user.id, bestMatch.profile.id, bestMatch.score, 'shown');
+
+      // Redirect to results
+      router.push({
+        pathname: '/match-result',
+        params: { 
+          id: bestMatch.profile.id,
+          score: bestMatch.score.toString()
+        }
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert('שגיאה', 'אירעה שגיאה בחיפוש התאמות');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ResponsiveContainer style={styles.container}>
+    <ResponsiveContainer style={[styles.container, { backgroundColor: theme.offBackground }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.logo}>UniMatch</Text>
+        <Text style={[styles.logo, { color: theme.primary }]}>UniMatch</Text>
 
         <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <Text style={styles.icon}>✨</Text>
+          <View style={[styles.iconContainer, { backgroundColor: theme.secondary }]}>
+            {loading ? (
+              <ActivityIndicator size="large" color={theme.primary} />
+            ) : (
+              <Ionicons name="sparkles" size={48} color={theme.primary} />
+            )}
           </View>
 
-          <Text style={styles.title}>מחפשים לך את ההתאמה הבאה</Text>
-          <Text style={styles.subtitle}>
-            המערכת שלנו עובדת על מציאת הסטודנט/ית שהכי מתאימים לך.
-            ברגע שנמצא, תקבלי התראה!
+          <Text style={[styles.title, { color: theme.text }]}>
+            {loading ? 'מחפשים את ההתאמה המושלמת...' : 'מחפשים לך את ההתאמה הבאה'}
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.muted }]}>
+            המערכת שלנו עוברת על כל הסטודנטים כדי למצוא את מי שבאמת מתאים לערכים ולשאיפות שלך. ✨
           </Text>
 
           <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.push('/match-result')}
+            style={[styles.primaryButton, { backgroundColor: theme.primary }, Shadow.soft, loading && { opacity: 0.7 }]}
+            onPress={handleFindMatch}
+            disabled={loading}
           >
-            <Text style={styles.primaryButtonText}>בדקי אם יש התאמה</Text>
+            <Text style={styles.primaryButtonText}>
+              {loading ? 'מחפש...' : 'בדקי אם יש התאמה'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>נשארו לך 5 התאמות החודש</Text>
+        {!loading && <Text style={[styles.footer, { color: theme.tabIconDefault }]}>נשארו לך 5 התאמות החודש ✨</Text>}
       </ScrollView>
     </ResponsiveContainer>
   );
@@ -35,7 +109,7 @@ export default function MatchTabScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    padding: Spacing.lg,
   },
   scrollContent: {
     flexGrow: 1,
@@ -43,60 +117,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#477D9B',
+    fontSize: 24,
+    fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: Spacing.huge,
   },
   content: {
     alignItems: 'center',
     width: '100%',
+    paddingHorizontal: Spacing.md,
   },
   iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#F0F7FA',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  icon: {
-    fontSize: 48,
+    marginBottom: Spacing.xl,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#111111',
+    ...Typography.h2,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    lineHeight: 34,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666666',
+    ...Typography.body,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: Spacing.huge,
   },
   primaryButton: {
-    backgroundColor: '#477D9B',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 18,
+    height: 64,
+    borderRadius: BorderRadius.xl,
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryButtonText: {
     color: 'white',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   footer: {
-    marginTop: 40,
+    marginTop: Spacing.huge,
     textAlign: 'center',
-    color: '#999999',
     fontSize: 14,
+    fontWeight: '600',
   },
 });
