@@ -107,7 +107,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (!initialized) return;
 
-    const root = segments[0];
+    const root: string | undefined = segments[0];
+
+    // Legal screens are reachable from any state — auth or no auth, mid-onboarding or completed.
+    if (root === 'privacy-policy' || root === 'terms-of-use') return;
+
     const isQuestionnaireEdit = root === 'questionnaire' && mode === 'edit';
 
     console.log(`[Auth] Session: ${!!session}, Profile: ${profile.kind}, Path: ${segments.join('/')}, Mode: ${mode}`);
@@ -170,6 +174,8 @@ export default function RootLayout() {
         <Stack.Screen name="match-result" options={{ headerShown: false }} />
         <Stack.Screen name="active-match" options={{ headerShown: false }} />
         <Stack.Screen name="chat" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
+        <Stack.Screen name="terms-of-use" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />
