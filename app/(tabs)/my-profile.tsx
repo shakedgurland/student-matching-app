@@ -11,8 +11,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -330,10 +328,13 @@ export default function MyProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1 }}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-          <SafeAreaView style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
               <View style={styles.header}>
                 <ThemedText style={[styles.title, { color: dynamicColors.text }]}>הפרופיל שלי</ThemedText>
                 <TouchableOpacity onPress={handleLogout}>
@@ -451,10 +452,9 @@ export default function MyProfileScreen() {
                    </ThemedText>
                  )}
               </View>
-            </ScrollView>
-          </SafeAreaView>
-        </ThemedView>
-      </TouchableWithoutFeedback>
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
     </KeyboardAvoidingView>
   );
 }
