@@ -14,26 +14,27 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { classifySignupError, isStudentEmail } from '../lib/auth-flow';
 
 export default function SignupScreen() {
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
   const handleSignup = async () => {
-    if (!username.trim()) {
-      Alert.alert('שגיאה', 'יש להזין שם משתמש');
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      Alert.alert('שגיאה', 'יש להזין אימייל');
       return;
     }
 
-    if (!email.trim()) {
-      Alert.alert('שגיאה', 'יש להזין אימייל');
+    if (!isStudentEmail(trimmedEmail)) {
+      Alert.alert('שגיאה', 'ניתן להירשם רק עם אימייל אקדמי (סיומת ‎.ac.il‎).');
       return;
     }
 
@@ -56,34 +57,27 @@ export default function SignupScreen() {
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
-        options: {
-          data: {
-            username: username.trim(),
-          },
-        },
       });
 
       if (error) {
-        Alert.alert('שגיאה בהרשמה', error.message);
+        Alert.alert('שגיאה בהרשמה', classifySignupError(error));
         return;
       }
 
       if (data.session) {
-        // Direct happy path: session exists immediately
-        router.replace('/student-verification');
+        router.replace('/questionnaire');
       } else {
-        // Unexpected: session is null, likely Confirm Email is enabled in Supabase
         Alert.alert(
-          'שגיאה בחיבור',
-          'לא נוצר חיבור אוטומטי לאחר ההרשמה. בדקי שהגדרת Confirm email כבויה ב-Supabase, ואז נסי להתחבר מחדש.',
+          'אימות אימייל נדרש',
+          'נשלח אליך מייל אימות. אשרי אותו ואז התחברי.',
           [{ text: 'להתחברות', onPress: () => router.replace('/login') }]
         );
       }
     } catch (err) {
       console.log('Unexpected signup error:', err);
-      Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בהרשמה');
+      Alert.alert('שגיאה בהרשמה', classifySignupError(err));
     } finally {
       setLoading(false);
     }
@@ -105,20 +99,7 @@ export default function SignupScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="שם משתמש"
-              placeholderTextColor="#999999"
-              value={username}
-              onChangeText={setUsername}
-              textAlign="right"
-              returnKeyType="next"
-              onSubmitEditing={() => emailRef.current?.focus()}
-              blurOnSubmit={false}
-            />
-
-            <TextInput
-              ref={emailRef}
-              style={styles.input}
-              placeholder="אימייל"
+              placeholder="אימייל אקדמי (סיומת ‎.ac.il‎)"
               placeholderTextColor="#999999"
               value={email}
               onChangeText={setEmail}
@@ -163,7 +144,7 @@ export default function SignupScreen() {
               disabled={loading}
             >
               <Text style={styles.primaryButtonText}>
-                {loading ? 'נרשמת...' : 'המשך לאימות סטודנט'}
+                {loading ? 'נרשמת...' : 'הרשמה'}
               </Text>
             </TouchableOpacity>
 
