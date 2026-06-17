@@ -15,6 +15,84 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 
+const UI_COLORS = {
+  bg: '#FFF9F6',
+  primary: '#FF4D3D',
+  accent: '#FF8A00',
+  branding: '#FF3D57',
+  surface: '#FFF0EA',
+  text: '#172033',
+  textLight: '#667085',
+  border: '#E9E4E0',
+  inputBg: '#F4F4F4',
+  inputText: '#111111',
+  placeholder: '#999999',
+};
+
+const BrandMark = ({ size = 60, showSpark = true }: { size?: number; showSpark?: boolean }) => {
+  const strokeWidth = size * 0.2;
+  const innerSize = size - strokeWidth;
+  const sparkSize = size * 0.14;
+
+  return (
+    <View style={{ width: size, height: size + strokeWidth, justifyContent: 'flex-end', alignItems: 'center' }}>
+      <View
+        style={{
+          width: innerSize,
+          height: innerSize,
+          borderBottomLeftRadius: innerSize / 2,
+          borderBottomRightRadius: innerSize / 2,
+          borderWidth: strokeWidth,
+          borderColor: UI_COLORS.branding,
+          borderTopWidth: 0,
+        }}
+      >
+        <View
+          style={{
+            position: 'absolute',
+            top: -strokeWidth / 2,
+            left: -strokeWidth,
+            width: strokeWidth,
+            height: strokeWidth,
+            backgroundColor: UI_COLORS.branding,
+            borderTopLeftRadius: strokeWidth * 0.2,
+            borderTopRightRadius: strokeWidth * 0.2,
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            top: -strokeWidth / 2,
+            right: -strokeWidth,
+            width: strokeWidth,
+            height: strokeWidth,
+            backgroundColor: UI_COLORS.branding,
+            borderTopLeftRadius: strokeWidth * 0.2,
+            borderTopRightRadius: strokeWidth * 0.2,
+          }}
+        />
+      </View>
+      {showSpark && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            width: sparkSize,
+            height: sparkSize,
+            borderRadius: sparkSize / 2,
+            backgroundColor: UI_COLORS.accent,
+            shadowColor: UI_COLORS.accent,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.6,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        />
+      )}
+    </View>
+  );
+};
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,17 +114,15 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
       if (error) {
-        Alert.alert('שגיאה בכניסה', error.message);
+        Alert.alert('שגיאה בכניסה', 'אימייל או סיסמה שגויים');
         return;
       }
-
-      // Root layout will handle redirection based on onboarding status
     } catch (err) {
       console.log('Unexpected login error:', err);
       Alert.alert('שגיאה', 'אירעה שגיאה לא צפויה בכניסה');
@@ -66,49 +142,62 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
-            <Text style={styles.logo}>UniMatch</Text>
-            <Text style={styles.title}>כניסה לחשבון קיים</Text>
+            <View style={styles.brandSection}>
+              <BrandMark size={60} />
+              <Text style={styles.appName}>UniMatch</Text>
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="אימייל"
-              placeholderTextColor="#999999"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              textAlign="right"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              blurOnSubmit={false}
-            />
+            <View style={styles.copySection}>
+              <Text style={styles.headline}>ברוכים השבים</Text>
+              <Text style={styles.subtitle}>התחברי כדי להמשיך להתאמה החכמה שלך</Text>
+            </View>
 
-            <TextInput
-              ref={passwordRef}
-              style={styles.input}
-              placeholder="סיסמה"
-              placeholderTextColor="#999999"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              textAlign="right"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
+            <View style={styles.formSection}>
+              <TextInput
+                style={styles.input}
+                placeholder="אימייל"
+                placeholderTextColor={UI_COLORS.placeholder}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                textAlign="right"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                blurOnSubmit={false}
+              />
 
-            <TouchableOpacity
-              style={[styles.primaryButton, loading && styles.disabledButton]}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              <Text style={styles.primaryButtonText}>
-                {loading ? 'מתחברת...' : 'כניסה'}
-              </Text>
-            </TouchableOpacity>
+              <TextInput
+                ref={passwordRef}
+                style={styles.input}
+                placeholder="סיסמה"
+                placeholderTextColor={UI_COLORS.placeholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                textAlign="right"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
 
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={styles.link}>חזרה</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.disabledButton]}
+                onPress={handleLogin}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {loading ? 'מתחברת...' : 'כניסה'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.registerSection}>
+              <Text style={styles.registerPrompt}>אין לך חשבון? </Text>
+              <TouchableOpacity onPress={() => router.push('/signup')}>
+                <Text style={styles.registerLink}>להרשמה</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </TouchableWithoutFeedback>
@@ -119,6 +208,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+    backgroundColor: UI_COLORS.bg,
   },
   scrollContent: {
     flexGrow: 1,
@@ -127,52 +217,83 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    gap: 32,
+    backgroundColor: UI_COLORS.bg,
   },
-  logo: {
-    fontSize: 30,
-    fontWeight: 'bold',
-    color: '#477D9B',
-    textAlign: 'center',
-    marginBottom: 24,
+  brandSection: {
+    alignItems: 'center',
+    gap: 14,
   },
-  title: {
-    fontSize: 30,
+  appName: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: UI_COLORS.branding,
+    letterSpacing: -0.5,
+  },
+  copySection: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  headline: {
+    fontSize: 26,
     fontWeight: '800',
+    color: UI_COLORS.text,
     textAlign: 'center',
-    marginBottom: 24,
-    color: '#111111',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: UI_COLORS.textLight,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 8,
+  },
+  formSection: {
+    gap: 12,
   },
   input: {
-    backgroundColor: '#F4F4F4',
+    backgroundColor: UI_COLORS.inputBg,
     padding: 14,
     borderRadius: 12,
-    marginBottom: 12,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E9E4E0',
-    color: '#111111',
+    borderColor: UI_COLORS.border,
+    color: UI_COLORS.inputText,
   },
   primaryButton: {
-    backgroundColor: '#477D9B',
-    padding: 16,
-    borderRadius: 16,
+    backgroundColor: UI_COLORS.primary,
+    height: 56,
+    borderRadius: 18,
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: UI_COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   disabledButton: {
     opacity: 0.6,
   },
   primaryButtonText: {
-    color: 'white',
-    fontSize: 17,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
-  link: {
-    textAlign: 'center',
-    marginTop: 20,
-    color: '#477D9B',
-    fontSize: 16,
-    fontWeight: '600',
+  registerSection: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  registerPrompt: {
+    fontSize: 15,
+    color: UI_COLORS.textLight,
+  },
+  registerLink: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: UI_COLORS.branding,
   },
 });
