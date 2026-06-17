@@ -294,6 +294,7 @@ export default function QuestionnaireScreen() {
 
   const [formData, setFormData] = useState({
     // Short Questionnaire
+    firstName: '',
     age: '',
     gender: '',
     heightCm: '',
@@ -362,14 +363,15 @@ export default function QuestionnaireScreen() {
       
       const [answersRes, profileRes] = await Promise.all([
         supabase.from('questionnaire_answers').select('answers').eq('user_id', user.id).single(),
-        supabase.from('profiles').select('onboarding_mode').eq('id', user.id).single()
+        supabase.from('profiles').select('onboarding_mode, full_name').eq('id', user.id).single()
       ]);
 
       if (answersRes.data?.answers) {
-        setFormData(prev => ({ 
-          ...prev, 
+        setFormData(prev => ({
+          ...prev,
           ...answersRes.data.answers,
           // Ensure new fields have defaults if they didn't exist in DB
+          firstName: answersRes.data.answers.firstName || profileRes.data?.full_name || '',
           preferred_age_min: answersRes.data.answers.preferred_age_min || '18',
           preferred_age_max: answersRes.data.answers.preferred_age_max || '45',
           preferred_first_date: answersRes.data.answers.preferred_first_date || '',
@@ -388,6 +390,9 @@ export default function QuestionnaireScreen() {
       }
       if (profileRes.data) {
         setUserProfile(profileRes.data);
+        if (profileRes.data.full_name && !answersRes.data?.answers?.firstName) {
+          setFormData(prev => ({ ...prev, firstName: profileRes.data.full_name }));
+        }
       }
     } catch (e) {
       console.error('Failed to load answers for edit', e);
@@ -508,6 +513,7 @@ export default function QuestionnaireScreen() {
           .update({
             onboarding_completed: true,
             onboarding_mode: finalMode,
+            full_name: formData.firstName.trim(),
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
@@ -535,6 +541,7 @@ export default function QuestionnaireScreen() {
       } else {
         // Edit mode
         const updateData: any = {
+            full_name: formData.firstName.trim(),
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
@@ -579,6 +586,11 @@ export default function QuestionnaireScreen() {
   const nextStep = () => {
     // Validation before moving next
     if (currentStep === 1) {
+      if (!formData.firstName.trim()) {
+        logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'firstName' } });
+        Alert.alert('שדה חובה', 'יש להזין את השם שלך');
+        return;
+      }
       if (!isEditMode && photos.length === 0) {
         logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'photos' } });
         Alert.alert('חסרה תמונה', 'חובה להוסיף לפחות תמונה אחת.');
@@ -718,6 +730,16 @@ export default function QuestionnaireScreen() {
       <View>
         <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1 מתוך 6</ThemedText>
         <ThemedText style={styles.stepSubtitle}>קצת עליי</ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>איך קוראים לך?</ThemedText>
+        <TextInput
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+          placeholder="השם שיופיע בפרופיל שלך"
+          value={formData.firstName}
+          onChangeText={(v) => setFormData({ ...formData, firstName: v })}
+        />
       </View>
 
       <View style={styles.formGroup}>
