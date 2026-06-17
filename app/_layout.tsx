@@ -37,39 +37,43 @@ const UniMatchDarkTheme = {
   },
 };
 
+type ProfileState =
+  | { kind: 'unknown' }
+  | { kind: 'missing' }
+  | { kind: 'present'; onboardingCompleted: boolean };
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [profile, setProfile] = useState<ProfileState>({ kind: 'unknown' });
   const router = useRouter();
   const segments = useSegments();
   const { mode } = useGlobalSearchParams<{ mode: string }>();
 
   useEffect(() => {
-    // Force RTL for Hebrew
     if (!I18nManager.isRTL) {
       I18nManager.allowRTL(true);
       I18nManager.forceRTL(true);
     }
 
-    // Initialize session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        checkOnboarding(session.user.id);
+        loadProfile(session.user.id);
       } else {
+        setProfile({ kind: 'unknown' });
         setInitialized(true);
       }
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        checkOnboarding(session.user.id);
+        setProfile({ kind: 'unknown' });
+        loadProfile(session.user.id);
       } else {
-        setOnboardingCompleted(null);
+        setProfile({ kind: 'unknown' });
         setInitialized(true);
       }
     });
@@ -77,22 +81,24 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkOnboarding = async (userId: string) => {
+  const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('onboarding_completed')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
-      const completed = data?.onboarding_completed || false;
-      setOnboardingCompleted(completed);
-      return completed;
+
+      if (!data) {
+        setProfile({ kind: 'missing' });
+      } else {
+        setProfile({ kind: 'present', onboardingCompleted: !!data.onboarding_completed });
+      }
     } catch (error) {
-      console.error('Error checking onboarding:', error);
-      setOnboardingCompleted(false);
-      return false;
+      console.error('Error loading profile:', error);
+      setProfile({ kind: 'missing' });
     } finally {
       setInitialized(true);
     }
@@ -101,53 +107,47 @@ export default function RootLayout() {
   useEffect(() => {
     if (!initialized) return;
 
-    const inAuthGroup = segments[0] === '(tabs)';
-    const isWelcome = segments[0] === 'welcome';
-    const isLoginOrSignup = segments[0] === 'login' || segments[0] === 'signup';
+    const root = segments[0];
+    const isQuestionnaireEdit = root === 'questionnaire' && mode === 'edit';
 
-    console.log(`[Auth] Session: ${!!session}, Onboarding: ${onboardingCompleted}, Path: ${segments.join('/')}, Mode: ${mode}`);
+    console.log(`[Auth] Session: ${!!session}, Profile: ${profile.kind}, Path: ${segments.join('/')}, Mode: ${mode}`);
 
     if (!session) {
-      // If not logged in, only allow welcome/login/signup
-      if (!isWelcome && !isLoginOrSignup) {
-        router.replace('/welcome');
+      const allowed = root === 'login' || root === 'signup';
+      if (!allowed) {
+        router.replace('/login');
       }
-    } else if (onboardingCompleted === false) {
-      // If logged in but onboarding not completed
-      const isOnboardingFlow = segments[0] === 'student-verification' || 
-                               segments[0] === 'verification' || 
-                               segments[0] === 'questionnaire' ||
-                               segments[0] === 'signup'; // Allow signup to finish its own redirect
-      
-      if (inAuthGroup) {
-        // Mismatch! User is in tabs but state says onboarding not completed.
-        // Re-check before redirecting.
-        checkOnboarding(session.user.id).then(completed => {
-          if (!completed) {
-            router.replace('/student-verification');
-          }
-        });
-        return;
-      }
-
-      if (!isOnboardingFlow) {
-        // If "lost", go to the start of onboarding
-        router.replace('/student-verification');
-      }
-    } else if (onboardingCompleted === true) {
-      // If logged in and onboarding completed, don't allow welcome/login/signup
-      let isForbidden = isWelcome || isLoginOrSignup;
-      
-      // Also forbid questionnaire UNLESS mode is edit
-      if (segments[0] === 'questionnaire' && mode !== 'edit') {
-        isForbidden = true;
-      }
-      
-      if (isForbidden) {
-        router.replace('/(tabs)');
-      }
+      return;
     }
-  }, [session, initialized, onboardingCompleted, segments, mode]);
+
+    if (profile.kind === 'unknown') return;
+
+    if (profile.kind === 'missing') {
+      if (root !== 'signup') {
+        router.replace('/signup');
+      }
+      return;
+    }
+
+    if (!profile.onboardingCompleted) {
+      if (root !== 'questionnaire') {
+        router.replace('/questionnaire');
+      }
+      return;
+    }
+
+    const forbiddenWhenComplete =
+      root === 'login' ||
+      root === 'signup' ||
+      root === 'welcome' ||
+      root === 'student-verification' ||
+      root === 'verification' ||
+      (root === 'questionnaire' && !isQuestionnaireEdit);
+
+    if (forbiddenWhenComplete) {
+      router.replace('/(tabs)');
+    }
+  }, [session, initialized, profile, segments, mode]);
 
   if (!initialized) {
     return (
