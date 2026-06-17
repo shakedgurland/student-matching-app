@@ -573,7 +573,7 @@ export default function QuestionnaireScreen() {
 
         logFormSubmit('Questionnaire', 'edit_onboarding_submitted');
         Alert.alert('הצלחה', 'השאלון עודכן בהצלחה');
-        router.back();
+        router.replace('/(tabs)/my-profile');
       }
     } catch (error: any) {
       console.error('Error saving questionnaire:', error);
@@ -581,6 +581,17 @@ export default function QuestionnaireScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveAndClose = async () => {
+    if (!formData.firstName.trim()) {
+      logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'firstName', via: 'save_and_close' } });
+      Alert.alert('שדה חובה', 'יש להזין את השם שלך');
+      return;
+    }
+    logButtonTap('Questionnaire', 'save_and_close', { step: currentStep });
+    const targetMode: 'fast' | 'deep' = userProfile?.onboarding_mode === 'deep' ? 'deep' : 'fast';
+    await handleSubmit(targetMode);
   };
 
   const nextStep = () => {
@@ -1222,6 +1233,14 @@ export default function QuestionnaireScreen() {
                     onPress={nextStep}
                     disabled={loading}>
                     {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                  </TouchableOpacity>
+                )}
+                {isEditMode && !(currentStep === 6 && userProfile?.onboarding_mode === 'fast') && (
+                  <TouchableOpacity
+                    style={[styles.navButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: UI_COLORS.primary }]}
+                    onPress={handleSaveAndClose}
+                    disabled={loading}>
+                    <ThemedText style={[styles.primaryNavText, { color: UI_COLORS.primary }]}>שמור וסגור</ThemedText>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
