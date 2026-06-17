@@ -106,6 +106,7 @@ export default function SignupScreen() {
             <TextInput
               style={styles.input}
               placeholder="שם משתמש"
+              placeholderTextColor="#999999"
               value={username}
               onChangeText={setUsername}
               textAlign="right"
@@ -118,6 +119,7 @@ export default function SignupScreen() {
               ref={emailRef}
               style={styles.input}
               placeholder="אימייל"
+              placeholderTextColor="#999999"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -132,6 +134,7 @@ export default function SignupScreen() {
               ref={passwordRef}
               style={styles.input}
               placeholder="סיסמה"
+              placeholderTextColor="#999999"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -145,6 +148,7 @@ export default function SignupScreen() {
               ref={confirmPasswordRef}
               style={styles.input}
               placeholder="אימות סיסמה"
+              placeholderTextColor="#999999"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -206,6 +210,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     fontSize: 16,
+    color: '#111111',
   },
   primaryButton: {
     backgroundColor: '#477D9B',
