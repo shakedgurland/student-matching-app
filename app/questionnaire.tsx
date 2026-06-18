@@ -28,8 +28,8 @@ import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 0: Intro, 1-5: Basic (V2 spec), 7: Choice, 8-17: Deep (V2 spec, 10 grouped sections)
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
+// 0: Intro, 1-5: Basic (V2 spec), 7: Choice, 8-18: Deep (V2 spec, 11 grouped sections; 18 = שוברי קרח)
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
 
 // Design Constants for Bright Premium Style
 const UI_COLORS = {
@@ -303,6 +303,7 @@ const DEGREE_TYPE_OPTIONS = [
   { label: 'תואר שני', value: 'masters' },
   { label: 'דוקטורט', value: 'phd' },
   { label: 'לימודי תעודה', value: 'certificate' },
+  { label: 'אחר', value: 'other' },
 ];
 
 const STUDY_YEAR_OPTIONS = [
@@ -348,6 +349,9 @@ const HOBBY_OPTIONS_V2 = [
   { label: 'חתולים', value: 'cats' },
   { label: 'טכנולוגיה', value: 'tech' },
   { label: 'יזמות', value: 'entrepreneurship' },
+  { label: 'טניס', value: 'tennis' },
+  { label: 'אופנוע ים', value: 'jet_ski' },
+  { label: 'אחר', value: 'other' },
 ];
 
 const DATE_TYPE_OPTIONS = [
@@ -397,38 +401,41 @@ const FEEL_INTEREST_OPTIONS = [
 ];
 
 const ELEVATOR_OPTIONS_V2 = [
-  { label: 'אפתח שיחה', value: 'open_conversation' },
-  { label: 'אחייך ואבדוק אם יש עניין', value: 'smile_check_interest' },
-  { label: 'אחכה להזדמנות אחרת', value: 'wait_other_chance' },
-  { label: 'כנראה לא אעשה כלום', value: 'do_nothing' },
+  { label: 'ישר אפתח שיחה', value: 'open_conversation' },
+  { label: 'אעשה כאילו אני קורא/ת הודעות בטלפון', value: 'fake_phone_reading' },
+  { label: 'אנסה לבדוק אם יש קשר עין, ואם כן אפתח שיחה על מזג האוויר רק כדי שלא יהיה מביך', value: 'eye_contact_weather' },
+  { label: 'אעשה כאילו אני מדבר/ת בטלפון', value: 'fake_phone_call' },
+  { label: 'אלחץ, אכנס לפאניקה ואנסה למצוא דרך לצאת משם', value: 'panic_exit' },
 ];
 
 const KARAOKE_OPTIONS_V2 = [
   { label: 'ראשון/ה על הבמה', value: 'first_on_stage' },
   { label: 'שר/ה אם משכנעים אותי', value: 'sing_if_convinced' },
   { label: 'מעדיף/ה לצפות', value: 'prefer_watching' },
-  { label: 'מחפש/ת דרך להתחמק', value: 'find_escape' },
+  { label: 'אשיר רק אחרי כמה שוטים', value: 'shots_first' },
 ];
 
 const FAMILIAR_FACE_OPTIONS_V2 = [
-  { label: 'ניגש/ת לדבר מיד', value: 'approach_immediately' },
-  { label: 'אומר/ת שלום קצר', value: 'brief_hello' },
-  { label: 'מחכה שהוא ייגש', value: 'wait_for_them' },
-  { label: 'מעדיף/ה להמשיך בדרכי', value: 'continue_my_way' },
+  { label: 'ישר מנופף/ת בהתלהבות וצועק/ת את השם שלו/ה שישימו לב', value: 'enthusiastic_wave' },
+  { label: 'מסתכל/ת להבין אם יש קשר עין, ואם כן מנופף/ת לשלום', value: 'eye_contact_wave' },
+  { label: 'מחכה לראות אם הוא/היא אומר/ת לי שלום, ורק אם כן אגיד בחזרה', value: 'wait_for_them' },
+  { label: 'עושה כאילו אני בטלפון ומתעלם/ת', value: 'phone_ignore' },
+  { label: 'ישר הולך/ת לכיוון השני ומאריך/ה את הדרך שלי בחצי שעה', value: 'detour' },
 ];
 
 const SPONTANEITY_OPTIONS_V2 = [
-  { label: 'סוגר/ת מזוודה עכשיו', value: 'pack_now' },
-  { label: 'תלוי עם מי', value: 'depends_who' },
-  { label: 'צריך/ה זמן לתכנן', value: 'need_planning_time' },
-  { label: 'כנראה לא אטוס', value: 'probably_no' },
+  { label: 'אומר/ת להם שאני בא/ה ומארגן/ת מזוודה', value: 'pack_now' },
+  { label: 'בודק/ת מי בא, אם יש לי משהו חשוב בלימודים/עבודה, ואז זורם/ת', value: 'check_then_flow' },
+  { label: 'נלחץ/ת ואומר/ת שאני צריך/ה זמן לתכנן ולבקש חופש', value: 'need_planning_time' },
+  { label: 'לא טס/ה', value: 'no_go' },
 ];
 
 const SPONTANEOUS_PLAN_OPTIONS = [
   { label: 'בפנים בלי לחשוב פעמיים', value: 'in_immediately' },
   { label: 'בדרך כלל זורם/ת', value: 'usually_flow' },
   { label: 'תלוי במצב רוח', value: 'mood_dependent' },
-  { label: 'מעדיף/ה לתכנן מראש', value: 'prefer_planning' },
+  { label: 'אני גמור/ה מהעבודה, אין סיכוי', value: 'too_tired' },
+  { label: 'צריך/ה התראה מראש של לפחות כמה ימים', value: 'need_advance_notice' },
 ];
 
 const RELATIONSHIP_TOP_VALUES_OPTIONS = [
@@ -441,6 +448,7 @@ const RELATIONSHIP_TOP_VALUES_OPTIONS = [
   { label: 'עצמאות', value: 'independence' },
   { label: 'שאפתנות', value: 'ambition' },
   { label: 'משפחתיות', value: 'family' },
+  { label: 'אחר', value: 'other' },
 ];
 
 const LOVE_LANGUAGE_OPTIONS_V2 = [
@@ -479,6 +487,7 @@ const DEALBREAKERS_OPTIONS = [
   { label: 'קנאה מוגזמת', value: 'excessive_jealousy' },
   { label: 'חוסר עצמאות', value: 'no_independence' },
   { label: 'יחס לא מכבד', value: 'disrespect' },
+  { label: 'אחר', value: 'other' },
 ];
 
 const RELATIONSHIP_STRENGTHS_OPTIONS = [
@@ -521,6 +530,7 @@ const PARTNER_QUALITIES_OPTIONS = [
   { label: 'ספונטניות', value: 'spontaneity' },
   { label: 'ערכים דומים', value: 'similar_values' },
   { label: 'בגרות רגשית', value: 'emotional_maturity' },
+  { label: 'אחר', value: 'other' },
 ];
 
 const PERSONAL_SPACE_OPTIONS = [
@@ -549,6 +559,29 @@ const PARTNER_SHOULD_FEEL_OPTIONS = [
   { label: 'נרגשים', value: 'excited' },
   { label: 'מובנים', value: 'understood' },
   { label: 'חופשיים להיות עצמם', value: 'free_to_be_themselves' },
+];
+
+const RELIGION_TYPE_OPTIONS = [
+  { label: 'יהודי/ה', value: 'jewish' },
+  { label: 'מוסלמי/ת', value: 'muslim' },
+  { label: 'נוצרי/ה', value: 'christian' },
+  { label: 'דרוזי/ת', value: 'druze' },
+  { label: 'אחר', value: 'other' },
+  { label: 'מעדיף/ה לא לומר', value: 'prefer_not_to_say' },
+];
+
+const RELIGION_IMPORTANCE_OPTIONS = [
+  { label: 'לא חשוב לי', value: 'not_important' },
+  { label: 'נחמד אם כן, לא חובה', value: 'nice_to_have' },
+  { label: 'די חשוב לי', value: 'somewhat_important' },
+  { label: 'חשוב לי מאוד', value: 'very_important' },
+];
+
+const RELIGIOUS_LEVEL_IMPORTANCE_OPTIONS = [
+  { label: 'לא חשוב לי', value: 'not_important' },
+  { label: 'עדיף דומה, אבל לא חובה', value: 'similar_preferred' },
+  { label: 'חשוב לי שיהיה דומה', value: 'similar_important' },
+  { label: 'חשוב לי מאוד', value: 'very_important' },
 ];
 
 export default function QuestionnaireScreen() {
@@ -644,6 +677,23 @@ export default function QuestionnaireScreen() {
     chemistry_vs_longterm: '',
     stability_vs_adventure: '',
     partner_should_feel: [] as string[],
+
+    // === v2 polish fields (TestFlight QA) ===
+    university_other: '',
+    faculty_other: '',
+    degree_type_other: '',
+    hobbies_other: '',
+    religion_type: '',
+    religion_type_other: '',
+    religion_importance: '',
+    religious_level_importance: '',
+    relationship_top_values_other: '',
+    dealbreakers_other: '',
+    partner_qualities_other: '',
+    love_languages: [] as string[],
+    partner_should_know_text: '',
+    conversation_starter: '',
+    green_flag: '',
   });
 
   useEffect(() => {
@@ -707,6 +757,31 @@ export default function QuestionnaireScreen() {
           chemistry_vs_longterm: answersRes.data.answers.chemistry_vs_longterm || '',
           stability_vs_adventure: answersRes.data.answers.stability_vs_adventure || '',
           partner_should_feel: answersRes.data.answers.partner_should_feel || [],
+
+          // v2 polish defaults (TestFlight QA)
+          university_other: answersRes.data.answers.university_other || '',
+          faculty_other: answersRes.data.answers.faculty_other || '',
+          degree_type_other: answersRes.data.answers.degree_type_other || '',
+          hobbies_other: answersRes.data.answers.hobbies_other || '',
+          religion_type: answersRes.data.answers.religion_type || '',
+          religion_type_other: answersRes.data.answers.religion_type_other || '',
+          religion_importance: answersRes.data.answers.religion_importance || '',
+          religious_level_importance: answersRes.data.answers.religious_level_importance || '',
+          relationship_top_values_other: answersRes.data.answers.relationship_top_values_other || '',
+          dealbreakers_other: answersRes.data.answers.dealbreakers_other || '',
+          partner_qualities_other: answersRes.data.answers.partner_qualities_other || '',
+          // love_languages: prefer the new array; fall back to wrapping the legacy single value if present.
+          love_languages: Array.isArray(answersRes.data.answers.love_languages)
+            ? answersRes.data.answers.love_languages
+            : (answersRes.data.answers.love_language ? [answersRes.data.answers.love_language] : []),
+          // partner_should_know_text: prefer the new text; otherwise join the legacy array as a comma-separated fallback for edit-mode display.
+          partner_should_know_text:
+            answersRes.data.answers.partner_should_know_text ||
+            (Array.isArray(answersRes.data.answers.partner_should_know) && answersRes.data.answers.partner_should_know.length > 0
+              ? answersRes.data.answers.partner_should_know.join(', ')
+              : ''),
+          conversation_starter: answersRes.data.answers.conversation_starter || '',
+          green_flag: answersRes.data.answers.green_flag || '',
         }));
       }
       if (profileRes.data) {
@@ -935,7 +1010,17 @@ export default function QuestionnaireScreen() {
         Alert.alert('חסרה תמונה', 'חובה להוסיף לפחות תמונה אחת.');
         return;
       }
-      if (!formData.gender || !formData.age || !formData.heightCm || !formData.city.trim() || !formData.religion || !formData.intent_type) {
+      if (
+        !formData.gender ||
+        !formData.age ||
+        !formData.heightCm ||
+        !formData.city.trim() ||
+        !formData.religion ||
+        !formData.religion_type ||
+        !formData.religion_importance ||
+        !formData.religious_level_importance ||
+        !formData.intent_type
+      ) {
         logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step1_basics' } });
         Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
         return;
@@ -999,7 +1084,7 @@ export default function QuestionnaireScreen() {
       return;
     }
 
-    if (currentStep === 17) {
+    if (currentStep === 18) {
       handleSubmit('deep');
     } else {
       const next = (currentStep + 1) as Step;
@@ -1022,7 +1107,7 @@ export default function QuestionnaireScreen() {
     }
   };
 
-  const toggleMultiSelectField = (field: 'hobbies' | 'interestedInGenders' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds' | 'match_preferences' | 'shared_hobbies_priority' | 'relationship_top_values' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel', val: string, max?: number) => {
+  const toggleMultiSelectField = (field: 'hobbies' | 'interestedInGenders' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds' | 'match_preferences' | 'shared_hobbies_priority' | 'relationship_top_values' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel' | 'love_languages', val: string, max?: number) => {
     setFormData((prev) => {
       const currentList = prev[field] as string[];
       if (currentList.includes(val)) {
@@ -1167,6 +1252,30 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>מה הדת שלך?</ThemedText>
+        {renderEnumSelect('religion_type', RELIGION_TYPE_OPTIONS)}
+        {formData.religion_type === 'other' && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="פרט/י..."
+            placeholderTextColor={dynamicColors.textLight}
+            value={formData.religion_type_other}
+            onChangeText={(v) => setFormData({ ...formData, religion_type_other: v })}
+          />
+        )}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>עד כמה חשוב לך שבן/בת הזוג יהיו מאותה דת?</ThemedText>
+        {renderEnumSelect('religion_importance', RELIGION_IMPORTANCE_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>עד כמה חשוב לך שבן/בת הזוג יהיו קרובים אלייך ברמת הדתיות?</ThemedText>
+        {renderEnumSelect('religious_level_importance', RELIGIOUS_LEVEL_IMPORTANCE_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
         <ThemedText style={styles.label}>מה את/ה מחפש/ת באפליקציה?</ThemedText>
         {renderEnumSelect('intent_type', APP_INTENT_OPTIONS)}
       </View>
@@ -1192,16 +1301,43 @@ export default function QuestionnaireScreen() {
           { label: 'אוניברסיטת אריאל', value: 'ariel' },
           { label: 'אחר', value: 'other' },
         ])}
+        {formData.university === 'other' && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="שם המוסד..."
+            placeholderTextColor={dynamicColors.textLight}
+            value={formData.university_other}
+            onChangeText={(v) => setFormData({ ...formData, university_other: v })}
+          />
+        )}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>תחום לימודים</ThemedText>
         {renderEnumSelect('faculty', FIELD_OF_STUDY_OPTIONS)}
+        {formData.faculty === 'other' && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="התחום שלך..."
+            placeholderTextColor={dynamicColors.textLight}
+            value={formData.faculty_other}
+            onChangeText={(v) => setFormData({ ...formData, faculty_other: v })}
+          />
+        )}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>סוג התואר</ThemedText>
         {renderEnumSelect('degree_type', DEGREE_TYPE_OPTIONS)}
+        {formData.degree_type === 'other' && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="סוג התואר שלך..."
+            placeholderTextColor={dynamicColors.textLight}
+            value={formData.degree_type_other}
+            onChangeText={(v) => setFormData({ ...formData, degree_type_other: v })}
+          />
+        )}
       </View>
 
       <View style={styles.formGroup}>
@@ -1293,6 +1429,15 @@ export default function QuestionnaireScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        {formData.hobbies.includes('other') && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="תחביב נוסף..."
+            placeholderTextColor={dynamicColors.textLight}
+            value={formData.hobbies_other}
+            onChangeText={(v) => setFormData({ ...formData, hobbies_other: v })}
+          />
+        )}
       </View>
 
       <View style={styles.formGroup}>
@@ -1319,18 +1464,13 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>איזה דייט נשמע לך הכי כיף?</ThemedText>
+        <ThemedText style={styles.label}>מה הדייט הראשון המושלם בשבילך?</ThemedText>
         {renderEnumSelect('preferred_first_date', DATE_TYPE_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>איזה קצב מתאים לך?</ThemedText>
         {renderEnumSelect('relationship_pace', RELATIONSHIP_PACE_OPTIONS_V2)}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>עד כמה את/ה פנוי/ה לקשר עכשיו?</ThemedText>
-        {renderScale('availability_level')}
       </View>
     </View>
   );
@@ -1387,7 +1527,7 @@ export default function QuestionnaireScreen() {
   );
 
   const renderMultiChips = (
-    field: 'relationship_top_values' | 'dealbreakers' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel',
+    field: 'relationship_top_values' | 'dealbreakers' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel' | 'love_languages',
     options: { label: string; value: string }[],
     max?: number,
   ) => (
@@ -1417,6 +1557,7 @@ export default function QuestionnaireScreen() {
     15: 'מה מחפשים בבן/בת זוג',
     16: 'שאלות עומק אחרונות',
     17: 'תחושה בקשר',
+    18: 'שוברי קרח',
   };
 
   const renderDeepSteps = () => (
@@ -1455,7 +1596,7 @@ export default function QuestionnaireScreen() {
       {currentStep === 10 && (
         <>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>מישהי/ו שמוצא חן בעינייך איתך במעלית. מה תעשה?</ThemedText>
+            <ThemedText style={styles.label}>נתקעת עם אדם נוסף במעלית שאת/ה לא מכיר/ה. מה תעשה/י?</ThemedText>
             {renderEnumSelect('elevatorScenario', ELEVATOR_OPTIONS_V2)}
           </View>
           <View style={styles.formGroup}>
@@ -1463,7 +1604,7 @@ export default function QuestionnaireScreen() {
             {renderEnumSelect('karaokeChance', KARAOKE_OPTIONS_V2)}
           </View>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>פגשת אדם שלא ראית שנים ברחוב:</ThemedText>
+            <ThemedText style={styles.label}>את/ה רואה ברחוב מולך מישהו/י שאת/ה מכיר/ה מהלימודים:</ThemedText>
             {renderEnumSelect('familiarFace', FAMILIAR_FACE_OPTIONS_V2)}
           </View>
         </>
@@ -1472,11 +1613,11 @@ export default function QuestionnaireScreen() {
       {currentStep === 11 && (
         <>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>מציעים לך לטוס לחו״ל בעוד יומיים:</ThemedText>
+            <ThemedText style={styles.label}>חברים מתקשרים אלייך ואומרים שהם סוגרים טיסה למחר בבוקר ובאים לאסוף אותך לשדה בעוד כמה שעות. מה תעשה/י?</ThemedText>
             {renderEnumSelect('spontaneity', SPONTANEITY_OPTIONS_V2)}
           </View>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>חברים מציעים תוכנית ספונטנית לערב:</ThemedText>
+            <ThemedText style={styles.label}>חברים מתקשרים אלייך ואומרים לך להתארגן כי יוצאים לבאולינג. מה תעשה/י?</ThemedText>
             {renderEnumSelect('spontaneous_plan_response', SPONTANEOUS_PLAN_OPTIONS)}
           </View>
         </>
@@ -1487,10 +1628,19 @@ export default function QuestionnaireScreen() {
           <View style={styles.formGroup}>
             <ThemedText style={styles.label}>מה הכי חשוב לך בזוגיות? (עד 3)</ThemedText>
             {renderMultiChips('relationship_top_values', RELATIONSHIP_TOP_VALUES_OPTIONS, 3)}
+            {formData.relationship_top_values.includes('other') && (
+              <TextInput
+                style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+                placeholder="ערך נוסף..."
+                placeholderTextColor={dynamicColors.textLight}
+                value={formData.relationship_top_values_other}
+                onChangeText={(v) => setFormData({ ...formData, relationship_top_values_other: v })}
+              />
+            )}
           </View>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>איך את/ה מראה אהבה ואכפתיות?</ThemedText>
-            {renderEnumSelect('love_language', LOVE_LANGUAGE_OPTIONS_V2)}
+            <ThemedText style={styles.label}>איך את/ה מראה אהבה ואכפתיות? (אפשר לבחור כמה)</ThemedText>
+            {renderMultiChips('love_languages', LOVE_LANGUAGE_OPTIONS_V2)}
           </View>
           <View style={styles.formGroup}>
             <ThemedText style={styles.label}>אני בדרך כלל נמשך/ת ל:</ThemedText>
@@ -1508,6 +1658,15 @@ export default function QuestionnaireScreen() {
           <View style={styles.formGroup}>
             <ThemedText style={styles.label}>מה יכול לגרום לך לפסול התאמה? (עד 3)</ThemedText>
             {renderMultiChips('dealbreakers', DEALBREAKERS_OPTIONS, 3)}
+            {formData.dealbreakers.includes('other') && (
+              <TextInput
+                style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+                placeholder="סיבה נוספת..."
+                placeholderTextColor={dynamicColors.textLight}
+                value={formData.dealbreakers_other}
+                onChangeText={(v) => setFormData({ ...formData, dealbreakers_other: v })}
+              />
+            )}
           </View>
         </>
       )}
@@ -1520,7 +1679,13 @@ export default function QuestionnaireScreen() {
           </View>
           <View style={styles.formGroup}>
             <ThemedText style={styles.label}>מה חשוב שבן/בת הזוג יידעו עלייך?</ThemedText>
-            {renderMultiChips('partner_should_know', PARTNER_SHOULD_KNOW_OPTIONS)}
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="משהו קטן שחשוב להבין עליי…"
+              placeholderTextColor={dynamicColors.textLight}
+              value={formData.partner_should_know_text}
+              onChangeText={(v) => setFormData({ ...formData, partner_should_know_text: v })}
+            />
           </View>
         </>
       )}
@@ -1529,6 +1694,15 @@ export default function QuestionnaireScreen() {
         <View style={styles.formGroup}>
           <ThemedText style={styles.label}>מה את/ה מחפש/ת בבן/בת זוג? (עד 5)</ThemedText>
           {renderMultiChips('partner_qualities', PARTNER_QUALITIES_OPTIONS, 5)}
+          {formData.partner_qualities.includes('other') && (
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="תכונה נוספת..."
+              placeholderTextColor={dynamicColors.textLight}
+              value={formData.partner_qualities_other}
+              onChangeText={(v) => setFormData({ ...formData, partner_qualities_other: v })}
+            />
+          )}
         </View>
       )}
 
@@ -1554,6 +1728,31 @@ export default function QuestionnaireScreen() {
           <ThemedText style={styles.label}>מה היית רוצה שבן/בת הזוג ירגישו כשהם איתך? (עד 3)</ThemedText>
           {renderMultiChips('partner_should_feel', PARTNER_SHOULD_FEEL_OPTIONS, 3)}
         </View>
+      )}
+
+      {currentStep === 18 && (
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>איזה פרט קטן עלייך יכול להפוך לשיחה של שעה?</ThemedText>
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="משהו מוזר, מצחיק או מפתיע שאפשר לדבר עליו מלא…"
+              placeholderTextColor={dynamicColors.textLight}
+              value={formData.conversation_starter}
+              onChangeText={(v) => setFormData({ ...formData, conversation_starter: v })}
+            />
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה ה־green flag הכי מוזר שלך?</ThemedText>
+            <TextInput
+              style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+              placeholder="משהו קטן ולא צפוי שגורם לך לחשוב: אוקיי, זה בן אדם טוב…"
+              placeholderTextColor={dynamicColors.textLight}
+              value={formData.green_flag}
+              onChangeText={(v) => setFormData({ ...formData, green_flag: v })}
+            />
+          </View>
+        </>
       )}
     </View>
   );
@@ -1600,10 +1799,10 @@ export default function QuestionnaireScreen() {
             <View style={styles.progressHeader}>
                <View style={styles.progressContainer}>
                   {(() => {
-                    // 5 basic segments (steps 1-5) + 10 deep segments (steps 8-17).
-                    // For fast-only users segments 6-15 stay inactive.
+                    // 5 basic segments (steps 1-5) + 11 deep segments (steps 8-18, including שוברי קרח).
+                    // For fast-only users segments 6-16 stay inactive.
                     const filled = currentStep <= 5 ? currentStep : currentStep >= 8 ? 5 + (currentStep - 7) : 5;
-                    return Array.from({ length: 15 }).map((_, i) => (
+                    return Array.from({ length: 16 }).map((_, i) => (
                       <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= filled ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
                     ));
                   })()}
@@ -1648,7 +1847,7 @@ export default function QuestionnaireScreen() {
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
                     onPress={nextStep}
                     disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 17 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 18 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
