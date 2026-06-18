@@ -1,6 +1,6 @@
 // supabase/functions/match-create/index.ts
 //
-// Phase 1B-2 — dry-run scoring orchestrator.
+// Phase 1B-3 — backend-authoritative match creation.
 //
 // Flow:
 //   1. CORS preflight.
@@ -12,17 +12,26 @@
 //   6. Fetch candidate pool via service role.
 //   7. Filter out capped candidates and candidates with active matches.
 //   8. Run scoring → pickBestCandidate.
-//   9. Return DRY-RUN response { status: 'scored_not_inserted', ... }.
-//      The atomic INSERT via create_authorized_match RPC lands in Phase 1B-3.
+//   9. Call create_authorized_match RPC (service-role only) for the
+//      atomic INSERT. The RPC re-verifies every invariant — cap on
+//      both sides, active match on both sides, no-rematch, gender
+//      bi-directional, height must_have bi-directional. Phase 1B-3
+//      maps the RPC's `candidate_unavailable` status to `no_candidate`;
+//      retry-next-best is deferred to Phase 1B-4.
 //
 // SECURITY:
 //   - The only trusted user identifier is admin.auth.getUser(jwt).id.
-//   - Request body is never read for any user_id / candidate_id / score.
+//   - Request body is never read for any user_id / candidate_id /
+//     score / reasons / depth. All RPC params come from server-side
+//     state (verified JWT) or server-side computation (scoring output).
 //   - JWT, Authorization header, service role key, env values, and raw
 //     questionnaire answers are never logged.
 //   - Only the chosen candidate's id + score + reasons + depth are
 //     returned to the client. The full candidate pool never leaves the
 //     server.
+//   - The RPC is granted EXECUTE only to service_role; authenticated
+//     clients calling it directly receive "permission denied for
+//     function". This Edge Function is the only path that can reach it.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
@@ -252,17 +261,57 @@ serve(async (req) => {
     const winner = pickBestCandidate(callerProfile, callerAnswers, candidatesForScoring)
     if (!winner) return jsonResponse({ status: 'no_candidate' })
 
-    // 12. DRY-RUN return. Phase 1B-3 will replace this with a call to
-    //     create_authorized_match. We deliberately do NOT insert into
-    //     matches here, do NOT call the RPC, and do NOT return any
-    //     candidate data beyond the chosen winner.
-    return jsonResponse({
-      status: 'scored_not_inserted',
-      candidate_id: winner.candidateId,
-      score: winner.score,
-      reasons: winner.reasons,
-      depth: winner.depth,
-    })
+    // 12. Atomic insert via service-role RPC. The RPC re-verifies all
+    //     invariants (caller + winner onboarding, gender, height
+    //     must_have, no-rematch, both-sides monthly cap, both-sides
+    //     active-match) and returns a jsonb status payload. We surface
+    //     its result verbatim to the client, mapping the race-condition
+    //     "candidate_unavailable" outcome to "no_candidate" for this
+    //     phase. Retry-next-best is planned for Phase 1B-4.
+    //
+    //     The RPC params are entirely server-derived:
+    //       p_user_id   = callerId (from verified JWT)
+    //       p_winner_id = winner.candidateId (from server scoring)
+    //       p_score     = winner.score      (server-clamped)
+    //       p_reasons   = winner.reasons    (server-generated Hebrew)
+    //       p_depth     = winner.depth      ('fast' | 'deep')
+    //     Nothing here is sourced from the request body.
+    const { data: rpcResult, error: rpcErr } = await admin.rpc(
+      'create_authorized_match',
+      {
+        p_user_id:   callerId,
+        p_winner_id: winner.candidateId,
+        p_score:     winner.score,
+        p_reasons:   winner.reasons,
+        p_depth:     winner.depth,
+      },
+    )
+
+    if (rpcErr) {
+      // Likely paths here: function not yet deployed (migration 016 not
+      // applied), network blip, or an unexpected SQL exception. Surface a
+      // generic 'error' status; do not echo internal details beyond what
+      // the supabase-js client already exposed.
+      return jsonResponse({ status: 'error', message: rpcErr.message }, 500)
+    }
+    if (!rpcResult || typeof rpcResult !== 'object') {
+      return jsonResponse({ status: 'error', message: 'empty rpc response' }, 500)
+    }
+
+    const rpcStatus = (rpcResult as Record<string, unknown>).status
+
+    if (rpcStatus === 'candidate_unavailable') {
+      // Phase 1B-3: collapse to no_candidate so the client treats it as a
+      // transient empty-state. The internal `reason` (gender_mismatch /
+      // candidate_capped / candidate_has_active / etc.) is intentionally
+      // not surfaced to the client to avoid leaking other-user state.
+      // Phase 1B-4 will replace this branch with a retry-next-best loop.
+      return jsonResponse({ status: 'no_candidate' })
+    }
+
+    // Pass through 'created' / 'monthly_cap_reached' / 'already_has_active'
+    // / 'incomplete_profile' / 'error' verbatim.
+    return jsonResponse(rpcResult)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown error'
     return jsonResponse({ status: 'error', message }, 500)
