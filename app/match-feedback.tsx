@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
   },
   chipContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     justifyContent: 'flex-start',

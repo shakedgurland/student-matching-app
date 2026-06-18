@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   profileHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   infoRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 8,
   },
   infoLabel: {
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bulletItem: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
   },

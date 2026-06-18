@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     gap: 32,
   },
   header: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 10,

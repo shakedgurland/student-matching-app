@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   starterHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
