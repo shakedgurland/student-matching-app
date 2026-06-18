@@ -134,6 +134,32 @@ export default function RootLayout() {
     }
 
     if (!profile.onboardingCompleted) {
+      const inMainApp =
+        root === '(tabs)' ||
+        root === 'match-result' ||
+        root === 'active-match' ||
+        root === 'chat' ||
+        root === 'match-feedback';
+
+      if (inMainApp) {
+        // Local profile state may be stale (e.g., the questionnaire submit just
+        // flipped onboarding_completed to true and we haven't observed the DB
+        // write yet). Re-fetch once before bouncing the user out of the main app.
+        supabase
+          .from('profiles')
+          .select('onboarding_completed')
+          .eq('id', session.user.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.onboarding_completed) {
+              setProfile({ kind: 'present', onboardingCompleted: true });
+            } else {
+              router.replace('/questionnaire');
+            }
+          });
+        return;
+      }
+
       if (root !== 'questionnaire') {
         router.replace('/questionnaire');
       }
