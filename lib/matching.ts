@@ -160,6 +160,7 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
   let highestScore = -1;
   let bestReasons: string[] = [];
   let bestDepth: 'fast' | 'deep' = 'fast';
+  let bestBreakdown: ScoreBreakdown | null = null;
 
   for (const candidate of candidates) {
     if (excludeIds.has(candidate.id)) continue;
@@ -179,7 +180,7 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
     const myHeightPref = currentProfile.height_preference_importance || 'none';
     const myMinHeight = currentProfile.min_preferred_height_cm || 0;
     const myHeight = currentProfile.height_cm || 0;
-    
+
     const candidateHeight = candidate.height_cm || 0;
     const candidateHeightPref = candidate.height_preference_importance || 'none';
     const candidateMinHeight = candidate.min_preferred_height_cm || 0;
@@ -191,19 +192,32 @@ export async function findAndCreateBestMatch(currentUserId: string): Promise<Mat
     const depth: 'fast' | 'deep' = (currentProfile.onboarding_mode === 'deep' && candidate.onboarding_mode === 'deep') ? 'deep' : 'fast';
 
     // Calculate Score
-    const { score, reasons } = calculateCompatibility(currentProfile, currentAnswers, candidate, candidateAnswers, depth);
+    const { score, reasons, breakdown } = calculateCompatibility(currentProfile, currentAnswers, candidate, candidateAnswers, depth);
 
     if (score > highestScore) {
       highestScore = score;
       bestCandidate = candidate;
       bestReasons = reasons;
       bestDepth = depth;
+      bestBreakdown = breakdown;
     }
   }
 
   if (!bestCandidate) {
     console.log('No suitable match found after scoring.');
     return null;
+  }
+
+  // Dev-only score breakdown for the winning candidate. Discarded in
+  // production builds. Not user-facing. Includes the candidate's preferences
+  // (for calibration), so we deliberately keep this out of analytics —
+  // analytics persists to the public app_events table and we do not want
+  // candidate-preference data leaking there.
+  if (__DEV__ && bestBreakdown) {
+    console.debug('[matching] winning score breakdown', {
+      ...bestBreakdown,
+      candidateId: bestCandidate.id,
+    });
   }
 
   // 5. Create Match in database
@@ -307,6 +321,57 @@ interface Penalty {
   points: number; // negative
   severity: PenaltySeverity;
   caveat: string;
+}
+
+// ----------------------------------------------------------------------
+// Internal debug breakdown (dev-only — never returned in MatchResult)
+// ----------------------------------------------------------------------
+// Each candidate scored produces a breakdown for inspection in dev builds.
+// In production the breakdown is computed but discarded by the
+// __DEV__-guarded log call. Not user-facing.
+
+interface BasicScoreBreakdown {
+  intentAndPace: number;
+  communicationLegacy: number;
+  hobbies: number;
+  region: number;
+  sharedHobbiesPriority: number;
+  city: number;
+  age: number;
+  preferences: number;
+  studies: number;
+  religion: number;
+  totalBasic: number;
+}
+
+interface DeepScoreBreakdown {
+  legacyDeepEquality: number;
+  traitCloseness: number;
+  relationshipTopValues: number;
+  relationshipStrengths: number;
+  partnerShouldFeel: number;
+  loveLanguages: number;
+  freeTextPresenceBonus: number;
+  totalDeepBeforeCap: number;
+  totalDeepAfterCap: number;
+}
+
+interface PenaltyBreakdown {
+  myPreferencesVsCandidateTraits: Penalty[];
+  candidatePreferencesVsMyTraits: Penalty[];
+  totalBeforeCap: number;
+  totalAfterCap: number;
+}
+
+interface ScoreBreakdown {
+  candidateId?: string;
+  depth: 'fast' | 'deep';
+  basic: BasicScoreBreakdown;
+  deep: DeepScoreBreakdown;
+  penalties: PenaltyBreakdown;
+  blendedBeforeClamp: number;
+  finalScore: number;
+  reasons: string[];
 }
 
 function minTraitScore(...vals: (number | null)[]): number | null {
@@ -467,7 +532,7 @@ function collectPenalties(
 function calculatePenalties(
   myAnswers: any,
   candidateAnswers: any,
-): { penalty: number; caveatReason: string | null } {
+): { penalty: number; caveatReason: string | null; breakdown: PenaltyBreakdown } {
   const myTraits = deriveTraits(myAnswers);
   const candidateTraits = deriveTraits(candidateAnswers);
   const myPrefs = derivePreferences(myAnswers);
@@ -488,7 +553,14 @@ function calculatePenalties(
   const total = [...fromMyPrefs, ...fromCandidatePrefs].reduce((sum, p) => sum + p.points, 0);
   const penalty = Math.max(-25, total);
 
-  return { penalty, caveatReason };
+  const breakdown: PenaltyBreakdown = {
+    myPreferencesVsCandidateTraits: fromMyPrefs,
+    candidatePreferencesVsMyTraits: fromCandidatePrefs,
+    totalBeforeCap: total,
+    totalAfterCap: penalty,
+  };
+
+  return { penalty, caveatReason, breakdown };
 }
 
 function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile: any, candidateAnswers: any, depth: 'fast' | 'deep') {
@@ -612,18 +684,29 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   if (religionScore >= 5) reasons.push('יש התאמה באורח החיים הדתי');
   fastScore += religionScore;
 
-  // 7. Deep Factors (if applicable — max 50 pts, capped at the end)
+  // 7. Deep Factors (if applicable — max 50 pts, capped at the end).
+  // Per-subcomponent variables are tracked separately so the debug breakdown
+  // shows where the score actually came from. Sums are folded into deepScore
+  // at the end; behaviour is identical to the previous flat addition.
+  let legacyDeepSum = 0;
+  let traitClosenessScore = 0;
+  let topValuesScore = 0;
+  let strengthsScore = 0;
+  let shouldFeelScore = 0;
+  let loveLangScore = 0;
+  let freeTextBonus = 0;
+  let totalDeepBeforeCap = 0;
   if (depth === 'deep') {
     // Legacy single-answer equality (still cheap, complements the trait layer).
     // money_style + love_language stay guarded so V2-vs-V2 doesn't double-count.
-    if (bothMeaningfulAndEqual(myAnswers.spontaneity, candidateAnswers.spontaneity)) deepScore += 2.5;
-    if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) deepScore += 2.5;
-    if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) deepScore += 2.5;
-    if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) deepScore += 2.5;
-    if (bothMeaningfulAndEqual(myAnswers.money_style, candidateAnswers.money_style)) deepScore += 5;
-    if (bothMeaningfulAndEqual(myAnswers.love_language, candidateAnswers.love_language)) deepScore += 5;
-    if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) deepScore += 5;
-    if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) deepScore += 5;
+    if (bothMeaningfulAndEqual(myAnswers.spontaneity, candidateAnswers.spontaneity)) legacyDeepSum += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) legacyDeepSum += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) legacyDeepSum += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) legacyDeepSum += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.money_style, candidateAnswers.money_style)) legacyDeepSum += 5;
+    if (bothMeaningfulAndEqual(myAnswers.love_language, candidateAnswers.love_language)) legacyDeepSum += 5;
+    if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) legacyDeepSum += 5;
+    if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) legacyDeepSum += 5;
 
     // V2: trait closeness across 12 personality dimensions (max 12 pts).
     // Each trait contributes 0..1 based on how close the two derived scores are.
@@ -639,22 +722,16 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
     for (const t of TRAITS_TO_SCORE) {
       traitClosenessSum += traitCloseness(myTraits[t], candidateTraits[t]);
     }
-    deepScore += Math.round(traitClosenessSum * 10) / 10;
+    traitClosenessScore = Math.round(traitClosenessSum * 10) / 10;
 
     // V2: multi-select overlaps (max 16 pts combined)
     const topValuesOverlap = countOverlap(myAnswers.relationship_top_values, candidateAnswers.relationship_top_values);
-    const topValuesScore = Math.min(6, topValuesOverlap * 2);
-    deepScore += topValuesScore;
+    topValuesScore = Math.min(6, topValuesOverlap * 2);
     if (topValuesScore >= 4) reasons.push('יש ביניכם התאמה בערכים זוגיים');
 
-    const strengthsScore = Math.min(4, countOverlap(myAnswers.relationship_strengths, candidateAnswers.relationship_strengths));
-    deepScore += strengthsScore;
-
-    const shouldFeelScore = Math.min(3, countOverlap(myAnswers.partner_should_feel, candidateAnswers.partner_should_feel));
-    deepScore += shouldFeelScore;
-
-    const loveLangScore = Math.min(3, countOverlap(myAnswers.love_languages, candidateAnswers.love_languages));
-    deepScore += loveLangScore;
+    strengthsScore = Math.min(4, countOverlap(myAnswers.relationship_strengths, candidateAnswers.relationship_strengths));
+    shouldFeelScore = Math.min(3, countOverlap(myAnswers.partner_should_feel, candidateAnswers.partner_should_feel));
+    loveLangScore = Math.min(3, countOverlap(myAnswers.love_languages, candidateAnswers.love_languages));
 
     // Communication-style affinity reason: both sides land close on the
     // worse of (communication_directness, conflict_engagement).
@@ -675,13 +752,17 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
     // populate these, so the guards typically evaluate false for new users —
     // that's the intended behaviour. Free-text interpretation overall remains
     // TODO until an AI / keyword commit is approved.
-    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) deepScore += 1;
-    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) deepScore += 1;
+    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) freeTextBonus += 1;
+    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) freeTextBonus += 1;
 
-    if (deepScore >= 25) reasons.push('יש גם התאמה בשאלות העומק');
+    totalDeepBeforeCap =
+      legacyDeepSum + traitClosenessScore + topValuesScore +
+      strengthsScore + shouldFeelScore + loveLangScore + freeTextBonus;
+
+    if (totalDeepBeforeCap >= 25) reasons.push('יש גם התאמה בשאלות העומק');
 
     // Cap deep contribution to keep the blended formula balanced (max 50).
-    deepScore = Math.min(50, deepScore);
+    deepScore = Math.min(50, totalDeepBeforeCap);
   }
 
   // Calculate Final Score
@@ -698,8 +779,9 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   // preferences vs my traits. Total cap at -25 lives inside calculatePenalties.
   // Free-text fields (partner_should_know_text, conversation_starter,
   // green_flag, *_other) are intentionally not interpreted in this commit.
-  const { penalty, caveatReason } = calculatePenalties(myAnswers, candidateAnswers);
-  finalScore += penalty;
+  const { penalty, caveatReason, breakdown: penaltyBreakdownDetail } = calculatePenalties(myAnswers, candidateAnswers);
+  const blendedBeforeClamp = finalScore + penalty;
+  finalScore = blendedBeforeClamp;
 
   // Final Cleanup
   finalScore = Math.round(Math.max(40, Math.min(100, finalScore)));
@@ -715,5 +797,40 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   const positiveReasons = Array.from(new Set(reasons)).slice(0, caveatReason ? 2 : 3);
   if (caveatReason) positiveReasons.push(caveatReason);
 
-  return { score: finalScore, reasons: positiveReasons };
+  // Internal debug breakdown — never returned in MatchResult, logged only in
+  // dev builds by the caller. Includes raw per-category numbers so we can
+  // calibrate weights without rerunning a full session.
+  const breakdown: ScoreBreakdown = {
+    depth,
+    basic: {
+      intentAndPace: intentPaceScore,
+      communicationLegacy: commScore,
+      hobbies: interestScore,
+      region: regionScore,
+      sharedHobbiesPriority: sharedPriorityScore,
+      city: cityScore,
+      age: ageScore,
+      preferences: prefScore,
+      studies: studyScore,
+      religion: religionScore,
+      totalBasic: fastScore,
+    },
+    deep: {
+      legacyDeepEquality: legacyDeepSum,
+      traitCloseness: traitClosenessScore,
+      relationshipTopValues: topValuesScore,
+      relationshipStrengths: strengthsScore,
+      partnerShouldFeel: shouldFeelScore,
+      loveLanguages: loveLangScore,
+      freeTextPresenceBonus: freeTextBonus,
+      totalDeepBeforeCap,
+      totalDeepAfterCap: deepScore,
+    },
+    penalties: penaltyBreakdownDetail,
+    blendedBeforeClamp,
+    finalScore,
+    reasons: positiveReasons.slice(),
+  };
+
+  return { score: finalScore, reasons: positiveReasons, breakdown };
 }
