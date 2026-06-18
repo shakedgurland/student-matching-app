@@ -935,10 +935,18 @@ export default function QuestionnaireScreen() {
         Alert.alert('חסרה תמונה', 'חובה להוסיף לפחות תמונה אחת.');
         return;
       }
-      if (!formData.gender || !formData.age || !formData.heightCm) {
-         logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step1_basics' } });
-         Alert.alert('שדות חובה', 'יש למלא גיל, מגדר וגובה.');
-         return;
+      if (!formData.gender || !formData.age || !formData.heightCm || !formData.city.trim() || !formData.religion || !formData.intent_type) {
+        logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step1_basics' } });
+        Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
+        return;
+      }
+    }
+
+    if (currentStep === 2) {
+      if (!formData.university || !formData.faculty || !formData.degree_type || !formData.degree_stage) {
+        logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step2_studies' } });
+        Alert.alert('שדות חובה', 'יש למלא את כל פרטי הלימודים');
+        return;
       }
     }
 
@@ -961,26 +969,37 @@ export default function QuestionnaireScreen() {
         Alert.alert('שדות חובה', 'יש לבחור את מי היית רוצה להכיר');
         return;
       }
-    }
-
-    if (currentStep === 4) {
-      if (!formData.intent_type || !formData.relationship_pace || !formData.preferred_first_date) {
-        Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
+      if (formData.match_preferences.length === 0) {
+        Alert.alert('שדות חובה', 'יש לבחור לפחות העדפת התאמה אחת');
         return;
       }
     }
 
-    if (currentStep === 6) {
+    if (currentStep === 4) {
+      if (formData.hobbies.length === 0) {
+        Alert.alert('שדות חובה', 'יש לבחור לפחות תחביב אחד');
+        return;
+      }
+    }
+
+    if (currentStep === 5) {
+      if (!formData.preferred_first_date || !formData.relationship_pace) {
+        Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
+        return;
+      }
       if (isEditMode) {
         if (userProfile?.onboarding_mode === 'deep') {
           setCurrentStep(8);
         } else {
-          // Stay on step 6 and let the footer handle the choice
+          // Stay on step 5 and let the footer handle the choice
         }
       } else {
         setCurrentStep(7); // Show choice screen
       }
-    } else if (currentStep === 20) {
+      return;
+    }
+
+    if (currentStep === 20) {
       handleSubmit('deep');
     } else {
       const next = (currentStep + 1) as Step;
@@ -993,7 +1012,7 @@ export default function QuestionnaireScreen() {
 
   const prevStep = () => {
     if (currentStep > 0) {
-      const prev = (currentStep === 8 ? 6 : currentStep - 1) as Step;
+      const prev = (currentStep === 8 || currentStep === 7 ? 5 : currentStep - 1) as Step;
       logButtonTap('Questionnaire', 'previous_step', { from: currentStep, to: prev });
       setCurrentStep(prev);
       scrollThresholds.current.clear();
@@ -1003,7 +1022,7 @@ export default function QuestionnaireScreen() {
     }
   };
 
-  const toggleMultiSelectField = (field: 'hobbies' | 'interestedInGenders' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds', val: string, max?: number) => {
+  const toggleMultiSelectField = (field: 'hobbies' | 'interestedInGenders' | 'importantInPartner' | 'careLanguage' | 'dealbreakers' | 'comfortNeeds' | 'match_preferences' | 'shared_hobbies_priority' | 'relationship_top_values' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel', val: string, max?: number) => {
     setFormData((prev) => {
       const currentList = prev[field] as string[];
       if (currentList.includes(val)) {
@@ -1067,8 +1086,8 @@ export default function QuestionnaireScreen() {
   const renderStep1 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>קצת עליי</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 1 מתוך 5</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>פרופיל אישי</ThemedText>
       </View>
 
       <View style={styles.formGroup}>
@@ -1082,7 +1101,7 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>1. תמונות פרופיל</ThemedText>
+        <ThemedText style={styles.label}>תמונות פרופיל</ThemedText>
         <View style={styles.photoGrid}>
           {photos.map((p, i) => (
             <View key={i} style={styles.photoWrapper}>
@@ -1101,23 +1120,12 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>2. מגדר</ThemedText>
+        <ThemedText style={styles.label}>מגדר</ThemedText>
         {renderEnumSelect('gender', GENDER_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>3. גובה (בס״מ)</ThemedText>
-        <TextInput
-          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
-          placeholder="170"
-          keyboardType="number-pad"
-          value={formData.heightCm}
-          onChangeText={(v) => setFormData({ ...formData, heightCm: v })}
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>4. גיל</ThemedText>
+        <ThemedText style={styles.label}>גיל</ThemedText>
         <TextInput
           style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
           placeholder="24"
@@ -1128,14 +1136,34 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>5. ספר/י על עצמך בכמה מילים</ThemedText>
+        <ThemedText style={styles.label}>גובה (בס״מ)</ThemedText>
         <TextInput
-          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 80, textAlignVertical: 'top', paddingTop: 10 }]}
-          placeholder="משהו קצר שיעזור לצד השני להבין מי את/ה מעבר לשאלון."
-          multiline
-          value={formData.about_me}
-          onChangeText={(v) => setFormData({ ...formData, about_me: v })}
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+          placeholder="170"
+          keyboardType="number-pad"
+          value={formData.heightCm}
+          onChangeText={(v) => setFormData({ ...formData, heightCm: v })}
         />
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>עיר מגורים</ThemedText>
+        <TextInput
+          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+          placeholder="לדוגמה: תל אביב"
+          value={formData.city}
+          onChangeText={(v) => setFormData({ ...formData, city: v })}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>רמת דתיות</ThemedText>
+        {renderEnumSelect('religion', RELIGIOUS_LEVEL_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>מה את/ה מחפש/ת באפליקציה?</ThemedText>
+        {renderEnumSelect('intent_type', APP_INTENT_OPTIONS)}
       </View>
     </View>
   );
@@ -1143,17 +1171,12 @@ export default function QuestionnaireScreen() {
   const renderStep2 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 2 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>לימודים ומיקום</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 2 מתוך 5</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>לימודים</ThemedText>
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>5. אזור מגורים</ThemedText>
-        {renderEnumSelect('region', REGION_OPTIONS)}
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>6. מוסד לימודים</ThemedText>
+        <ThemedText style={styles.label}>מוסד לימודים</ThemedText>
         {renderEnumSelect('university', [
           { label: 'האוניברסיטה העברית', value: 'huji' },
           { label: 'אוניברסיטת תל אביב', value: 'tau' },
@@ -1167,8 +1190,18 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>7. שלב בתואר</ThemedText>
-        {renderEnumSelect('degree_stage', DEGREE_STAGE_OPTIONS)}
+        <ThemedText style={styles.label}>תחום לימודים</ThemedText>
+        {renderEnumSelect('faculty', FIELD_OF_STUDY_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>סוג התואר</ThemedText>
+        {renderEnumSelect('degree_type', DEGREE_TYPE_OPTIONS)}
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>שנת לימודים</ThemedText>
+        {renderEnumSelect('degree_stage', STUDY_YEAR_OPTIONS)}
       </View>
     </View>
   );
@@ -1176,14 +1209,14 @@ export default function QuestionnaireScreen() {
   const renderStep3 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 3 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>העדפות ותחביבים</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 3 מתוך 5</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>העדפות היכרות</ThemedText>
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>8. את מי היית רוצה להכיר?</ThemedText>
+        <ThemedText style={styles.label}>את מי היית רוצה להכיר?</ThemedText>
         <View style={styles.chipGrid}>
-          {INTERESTED_IN_OPTIONS.map((opt) => (
+          {INTERESTED_IN_OPTIONS_V2.map((opt) => (
             <TouchableOpacity
               key={opt.value}
               style={[styles.chip, { borderColor: dynamicColors.border }, formData.interestedInGenders.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
@@ -1195,7 +1228,7 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>9. איזה גילאים היית רוצה להכיר?</ThemedText>
+        <ThemedText style={styles.label}>טווח גילאים</ThemedText>
         <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
           <View style={{ flex: 1 }}>
             <ThemedText style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>גיל מינימלי</ThemedText>
@@ -1221,14 +1254,14 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>10. תחביבים בשעות הפנאי</ThemedText>
+        <ThemedText style={styles.label}>מה חשוב לך בהתאמה?</ThemedText>
         <View style={styles.chipGrid}>
-          {HOBBY_OPTIONS.map((opt) => (
+          {MATCH_PREFERENCES_OPTIONS.map((opt) => (
             <TouchableOpacity
               key={opt.value}
-              style={[styles.chip, { borderColor: dynamicColors.border }, formData.hobbies.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
-              onPress={() => toggleMultiSelectField('hobbies', opt.value)}>
-              <ThemedText style={[styles.chipText, formData.hobbies.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+              style={[styles.chip, { borderColor: dynamicColors.border }, formData.match_preferences.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+              onPress={() => toggleMultiSelectField('match_preferences', opt.value)}>
+              <ThemedText style={[styles.chipText, formData.match_preferences.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
             </TouchableOpacity>
           ))}
         </View>
@@ -1239,20 +1272,36 @@ export default function QuestionnaireScreen() {
   const renderStep4 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 4 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>כוונות וקצב</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 4 מתוך 5</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>תחביבים</ThemedText>
       </View>
+
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>11. מה את/ה מחפש/ת כרגע?</ThemedText>
-        {renderEnumSelect('intent_type', INTENT_OPTIONS)}
+        <ThemedText style={styles.label}>מה התחביבים שלך?</ThemedText>
+        <View style={styles.chipGrid}>
+          {HOBBY_OPTIONS_V2.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.chip, { borderColor: dynamicColors.border }, formData.hobbies.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+              onPress={() => toggleMultiSelectField('hobbies', opt.value)}>
+              <ThemedText style={[styles.chipText, formData.hobbies.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
+
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>12. איזה קצב מרגיש לך נכון בתחילת קשר?</ThemedText>
-        {renderEnumSelect('relationship_pace', PACE_OPTIONS)}
-      </View>
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>13. איזה דייט ראשון הכי מתאים לך?</ThemedText>
-        {renderEnumSelect('preferred_first_date', FIRST_DATE_OPTIONS)}
+        <ThemedText style={styles.label}>אילו תחביבים חשוב לך לחלוק?</ThemedText>
+        <View style={styles.chipGrid}>
+          {HOBBY_OPTIONS_V2.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.chip, { borderColor: dynamicColors.border }, formData.shared_hobbies_priority.includes(opt.value) && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+              onPress={() => toggleMultiSelectField('shared_hobbies_priority', opt.value)}>
+              <ThemedText style={[styles.chipText, formData.shared_hobbies_priority.includes(opt.value) && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -1260,37 +1309,23 @@ export default function QuestionnaireScreen() {
   const renderStep5 = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 5 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>תקשורת וערכים</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 5 מתוך 5</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>כוונות וקצב</ThemedText>
       </View>
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>14. כשיש ריב או אי־הבנה, מה נכון לך?</ThemedText>
-        {renderEnumSelect('conflict_style', CONFLICT_OPTIONS)}
-      </View>
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>15. מה הכי חשוב שיכבדו אצלך?</ThemedText>
-        {renderEnumSelect('respect_priority', RESPECT_OPTIONS)}
-      </View>
-    </View>
-  );
 
-  const renderStep6 = () => (
-    <View style={styles.stepContent}>
-      <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שלב 6 מתוך 6</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>חיבור והתאמה</ThemedText>
-      </View>
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>16. איך את/ה מרגיש/ה שמישהו בעניין שלך?</ThemedText>
-        {renderEnumSelect('interest_signals', INTEREST_SIGNAL_OPTIONS)}
+        <ThemedText style={styles.label}>איזה דייט נשמע לך הכי כיף?</ThemedText>
+        {renderEnumSelect('preferred_first_date', DATE_TYPE_OPTIONS)}
       </View>
+
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>17. איזה סוג שיחה מושך אותך בדייט?</ThemedText>
-        {renderEnumSelect('conversation_style', CONVERSATION_OPTIONS)}
+        <ThemedText style={styles.label}>איזה קצב מתאים לך?</ThemedText>
+        {renderEnumSelect('relationship_pace', RELATIONSHIP_PACE_OPTIONS_V2)}
       </View>
+
       <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>18. באיזה תחום הכי קשה לך להתפשר?</ThemedText>
-        {renderEnumSelect('compromise_area', COMPROMISE_OPTIONS)}
+        <ThemedText style={styles.label}>עד כמה את/ה פנוי/ה לקשר עכשיו?</ThemedText>
+        {renderScale('availability_level')}
       </View>
     </View>
   );
@@ -1324,7 +1359,7 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
-  const renderScale = (field: 'tradition_self_rating' | 'tradition_partner_importance') => (
+  const renderScale = (field: 'tradition_self_rating' | 'tradition_partner_importance' | 'availability_level') => (
     <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingHorizontal: 10, marginTop: 10 }}>
       {[1, 2, 3, 4, 5].map((val) => (
         <TouchableOpacity
@@ -1547,13 +1582,12 @@ export default function QuestionnaireScreen() {
             {currentStep === 3 && renderStep3()}
             {currentStep === 4 && renderStep4()}
             {currentStep === 5 && renderStep5()}
-            {currentStep === 6 && renderStep6()}
             {currentStep === 7 && renderChoiceScreen()}
             {currentStep >= 8 && renderDeepSteps()}
 
             {currentStep !== 0 && currentStep !== 7 && (
               <View style={styles.navigation}>
-                {isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'fast' ? (
+                {isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'fast' ? (
                   <>
                     <TouchableOpacity
                       style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
@@ -1573,7 +1607,7 @@ export default function QuestionnaireScreen() {
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
                     onPress={nextStep}
                     disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
