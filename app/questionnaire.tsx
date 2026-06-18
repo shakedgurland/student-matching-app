@@ -1518,7 +1518,7 @@ export default function QuestionnaireScreen() {
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>טווח גילאים</ThemedText>
-        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1 }}>
             <ThemedText style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>גיל מינימלי</ThemedText>
             <TextInput
@@ -1995,7 +1995,13 @@ export default function QuestionnaireScreen() {
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
                     onPress={nextStep}
                     disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 18 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{
+                      currentStep === 18
+                        ? 'סיום'
+                        : (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep')
+                          ? 'המשך לשאלון מעמיק'
+                          : 'המשך'
+                    }</ThemedText>}
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
@@ -2024,17 +2030,17 @@ const styles = StyleSheet.create({
   label: { fontSize: 16, fontWeight: '700', textAlign: 'right' },
   input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right' },
   optionList: { gap: 10 },
-  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1, alignItems: 'flex-end' },
+  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1 },
   optionText: { fontSize: 15, textAlign: 'right' },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '600' },
-  photoGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoWrapper: { width: '30%', aspectRatio: 0.8, borderRadius: 10, overflow: 'hidden' },
   gridPhoto: { width: '100%', height: '100%' },
   deletePhotoBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   addPhotoPlaceholder: { width: '30%', aspectRatio: 0.8, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', borderColor: UI_COLORS.border },
-  choiceCard: { flexDirection: 'row-reverse', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15 },
+  choiceCard: { flexDirection: 'row', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15 },
   choiceIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: UI_COLORS.surface, justifyContent: 'center', alignItems: 'center' },
   choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: 4 },
   choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', lineHeight: 20 },
