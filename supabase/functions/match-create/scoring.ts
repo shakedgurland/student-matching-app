@@ -545,18 +545,23 @@ export interface ScoredCandidate {
 }
 
 /**
- * Apply hard filters, score every passing candidate, return the highest-
- * scored or null. Pure: no I/O, no Supabase, no logging.
+ * Apply hard filters, score every passing candidate, and return the
+ * sorted list (highest score first). Pure: no I/O, no Supabase, no
+ * logging.
+ *
+ * Tie-breaking: `Array.prototype.sort` is stable in V8 / Deno, so
+ * candidates with identical scores keep their input order — matching
+ * the prior "first encountered wins" behavior of pickBestCandidate.
  *
  * The caller is responsible for any further filtering (no-rematch,
  * monthly cap, active match) — those require DB context and belong in
  * the Edge Function orchestrator.
  */
-export function pickBestCandidate(
+export function rankCandidates(
   callerProfile: Record<string, unknown>,
   callerAnswers: Record<string, unknown>,
   candidates: CandidateInput[],
-): ScoredCandidate | null {
+): ScoredCandidate[] {
   const myGender = asString(callerProfile.gender);
   const myInterestedIn = asStringArray(callerProfile.interested_in_genders);
   const myHeightPref = asString(callerProfile.height_preference_importance) || 'none';
@@ -566,8 +571,7 @@ export function pickBestCandidate(
   const myHeight = typeof callerProfile.height_cm === 'number' ? callerProfile.height_cm : 0;
   const myMode = asString(callerProfile.onboarding_mode);
 
-  let best: ScoredCandidate | null = null;
-  let bestScore = -1;
+  const scored: ScoredCandidate[] = [];
 
   for (const c of candidates) {
     const candGender = asString(c.profile.gender);
@@ -598,11 +602,23 @@ export function pickBestCandidate(
       depth,
     );
 
-    if (score > bestScore) {
-      bestScore = score;
-      best = { candidateId: c.id, score, reasons, depth };
-    }
+    scored.push({ candidateId: c.id, score, reasons, depth });
   }
 
-  return best;
+  scored.sort((a, b) => b.score - a.score);
+  return scored;
+}
+
+/**
+ * Convenience wrapper preserved for callers that only need the top
+ * winner. Delegates to rankCandidates so the scoring/hard-filter
+ * behavior stays bit-identical between the two entry points.
+ */
+export function pickBestCandidate(
+  callerProfile: Record<string, unknown>,
+  callerAnswers: Record<string, unknown>,
+  candidates: CandidateInput[],
+): ScoredCandidate | null {
+  const ranked = rankCandidates(callerProfile, callerAnswers, candidates);
+  return ranked.length > 0 ? ranked[0] : null;
 }

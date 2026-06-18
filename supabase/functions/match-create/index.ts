@@ -1,6 +1,6 @@
 // supabase/functions/match-create/index.ts
 //
-// Phase 1B-3 — backend-authoritative match creation.
+// Phase 1B-4 — backend-authoritative match creation with retry.
 //
 // Flow:
 //   1. CORS preflight.
@@ -11,13 +11,17 @@
 //   5. Fetch caller's past peers (no-rematch exclusion).
 //   6. Fetch candidate pool via service role.
 //   7. Filter out capped candidates and candidates with active matches.
-//   8. Run scoring → pickBestCandidate.
-//   9. Call create_authorized_match RPC (service-role only) for the
-//      atomic INSERT. The RPC re-verifies every invariant — cap on
-//      both sides, active match on both sides, no-rematch, gender
-//      bi-directional, height must_have bi-directional. Phase 1B-3
-//      maps the RPC's `candidate_unavailable` status to `no_candidate`;
-//      retry-next-best is deferred to Phase 1B-4.
+//   8. Run scoring → rankCandidates (top-N ranked by score desc).
+//   9. Retry loop: call create_authorized_match RPC (service-role
+//      only) for the top MIN(ranked.length, MAX_ATTEMPTS) candidates.
+//      The RPC re-verifies every invariant — cap on both sides,
+//      active match on both sides, no-rematch, gender bi-directional,
+//      height must_have bi-directional. Only the race-condition
+//      status `candidate_unavailable` triggers a retry; all other
+//      statuses ('created' / 'monthly_cap_reached' / 'already_has_active'
+//      / 'incomplete_profile' / 'error') stop and pass through verbatim.
+//      If every attempt returns `candidate_unavailable`, the response
+//      is collapsed to `no_candidate`.
 //
 // SECURITY:
 //   - The only trusted user identifier is admin.auth.getUser(jwt).id.
@@ -35,12 +39,17 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { pickBestCandidate, type CandidateInput } from "./scoring.ts"
+import { rankCandidates, type CandidateInput } from "./scoring.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Maximum RPC attempts per invocation. Bounds Edge Function latency
+// (each round-trip ~50-200ms; 3 attempts ≲ 600ms worst-case) and
+// caps wasted work when the top candidates lose a race.
+const MAX_ATTEMPTS = 3
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -257,61 +266,84 @@ serve(async (req) => {
       }
     })
 
-    // 11. Score.
-    const winner = pickBestCandidate(callerProfile, callerAnswers, candidatesForScoring)
-    if (!winner) return jsonResponse({ status: 'no_candidate' })
+    // 11. Rank eligible candidates by score (descending). Each candidate
+    //     has already passed pre-filters (no-rematch, not-capped, no
+    //     active match) so this pass adds only the hard-filter +
+    //     scoring layer.
+    const ranked = rankCandidates(callerProfile, callerAnswers, candidatesForScoring)
+    if (ranked.length === 0) return jsonResponse({ status: 'no_candidate' })
 
-    // 12. Atomic insert via service-role RPC. The RPC re-verifies all
-    //     invariants (caller + winner onboarding, gender, height
-    //     must_have, no-rematch, both-sides monthly cap, both-sides
-    //     active-match) and returns a jsonb status payload. We surface
-    //     its result verbatim to the client, mapping the race-condition
-    //     "candidate_unavailable" outcome to "no_candidate" for this
-    //     phase. Retry-next-best is planned for Phase 1B-4.
+    // 12. Retry loop: try the top MIN(ranked.length, MAX_ATTEMPTS)
+    //     candidates until the RPC accepts one or terminates with a
+    //     non-retryable status.
     //
-    //     The RPC params are entirely server-derived:
+    //     The RPC re-verifies every invariant atomically (caller +
+    //     winner onboarding, gender, height must_have, no-rematch,
+    //     both-sides monthly cap, both-sides active match). Only
+    //     'candidate_unavailable' triggers a retry — that status
+    //     signals a race condition (a candidate became capped/active
+    //     in the gap between our pre-filter and the RPC's re-check).
+    //     All other statuses stop the loop immediately:
+    //       'created'              → success, returned verbatim
+    //       'monthly_cap_reached'  → caller-side; retry can't help
+    //       'already_has_active'   → caller-side; retry would race
+    //       'incomplete_profile'   → caller-side
+    //       'error'                → likely structural; do not retry
+    //     A transport-level rpcErr also stops the loop.
+    //
+    //     The RPC params are entirely server-derived per attempt:
     //       p_user_id   = callerId (from verified JWT)
-    //       p_winner_id = winner.candidateId (from server scoring)
-    //       p_score     = winner.score      (server-clamped)
-    //       p_reasons   = winner.reasons    (server-generated Hebrew)
-    //       p_depth     = winner.depth      ('fast' | 'deep')
+    //       p_winner_id = ranked[i].candidateId (server scoring)
+    //       p_score     = ranked[i].score      (server-clamped)
+    //       p_reasons   = ranked[i].reasons    (server Hebrew)
+    //       p_depth     = ranked[i].depth      ('fast' | 'deep')
     //     Nothing here is sourced from the request body.
-    const { data: rpcResult, error: rpcErr } = await admin.rpc(
-      'create_authorized_match',
-      {
-        p_user_id:   callerId,
-        p_winner_id: winner.candidateId,
-        p_score:     winner.score,
-        p_reasons:   winner.reasons,
-        p_depth:     winner.depth,
-      },
-    )
+    //
+    //     The internal 'reason' field on 'candidate_unavailable' is
+    //     consumed locally to decide whether to continue, then
+    //     discarded — never forwarded to the client. Rejected
+    //     candidate IDs likewise never leave the function.
+    const attempts = Math.min(ranked.length, MAX_ATTEMPTS)
+    for (let i = 0; i < attempts; i++) {
+      const candidate = ranked[i]
+      const { data: rpcResult, error: rpcErr } = await admin.rpc(
+        'create_authorized_match',
+        {
+          p_user_id:   callerId,
+          p_winner_id: candidate.candidateId,
+          p_score:     candidate.score,
+          p_reasons:   candidate.reasons,
+          p_depth:     candidate.depth,
+        },
+      )
 
-    if (rpcErr) {
-      // Likely paths here: function not yet deployed (migration 016 not
-      // applied), network blip, or an unexpected SQL exception. Surface a
-      // generic 'error' status; do not echo internal details beyond what
-      // the supabase-js client already exposed.
-      return jsonResponse({ status: 'error', message: rpcErr.message }, 500)
+      if (rpcErr) {
+        // Likely paths: function not yet deployed (migration 016 not
+        // applied), network blip, or unexpected SQL exception. Stop
+        // the loop and surface a generic 'error' status.
+        return jsonResponse({ status: 'error', message: rpcErr.message }, 500)
+      }
+      if (!rpcResult || typeof rpcResult !== 'object') {
+        return jsonResponse({ status: 'error', message: 'empty rpc response' }, 500)
+      }
+
+      const rpcStatus = (rpcResult as Record<string, unknown>).status
+
+      if (rpcStatus === 'candidate_unavailable') {
+        // Race-condition signal. Try the next-best candidate.
+        continue
+      }
+
+      // Pass through 'created' / 'monthly_cap_reached' /
+      // 'already_has_active' / 'incomplete_profile' / 'error' verbatim.
+      return jsonResponse(rpcResult)
     }
-    if (!rpcResult || typeof rpcResult !== 'object') {
-      return jsonResponse({ status: 'error', message: 'empty rpc response' }, 500)
-    }
 
-    const rpcStatus = (rpcResult as Record<string, unknown>).status
-
-    if (rpcStatus === 'candidate_unavailable') {
-      // Phase 1B-3: collapse to no_candidate so the client treats it as a
-      // transient empty-state. The internal `reason` (gender_mismatch /
-      // candidate_capped / candidate_has_active / etc.) is intentionally
-      // not surfaced to the client to avoid leaking other-user state.
-      // Phase 1B-4 will replace this branch with a retry-next-best loop.
-      return jsonResponse({ status: 'no_candidate' })
-    }
-
-    // Pass through 'created' / 'monthly_cap_reached' / 'already_has_active'
-    // / 'incomplete_profile' / 'error' verbatim.
-    return jsonResponse(rpcResult)
+    // Exhausted all attempts with 'candidate_unavailable'. Collapse to
+    // 'no_candidate' so the client treats it as a transient empty
+    // state. Attempt count and tried-candidate IDs are deliberately
+    // not surfaced.
+    return jsonResponse({ status: 'no_candidate' })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown error'
     return jsonResponse({ status: 'error', message }, 500)
