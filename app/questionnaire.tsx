@@ -28,8 +28,8 @@ import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 0: Intro, 1-6: Short, 7: Choice, 8-20: Deep
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
+// 0: Intro, 1-5: Basic (V2 spec), 7: Choice, 8-17: Deep (V2 spec, 10 grouped sections)
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
 
 // Design Constants for Bright Premium Style
 const UI_COLORS = {
@@ -999,7 +999,7 @@ export default function QuestionnaireScreen() {
       return;
     }
 
-    if (currentStep === 20) {
+    if (currentStep === 17) {
       handleSubmit('deep');
     } else {
       const next = (currentStep + 1) as Step;
@@ -1381,142 +1381,173 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
+  const renderMultiChips = (
+    field: 'relationship_top_values' | 'dealbreakers' | 'relationship_strengths' | 'partner_should_know' | 'partner_qualities' | 'partner_should_feel',
+    options: { label: string; value: string }[],
+    max?: number,
+  ) => (
+    <View style={styles.chipGrid}>
+      {options.map((opt) => {
+        const selected = (formData[field] as string[]).includes(opt.value);
+        return (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.chip, { borderColor: dynamicColors.border }, selected && { backgroundColor: dynamicColors.selectedBg, borderColor: UI_COLORS.primary }]}
+            onPress={() => toggleMultiSelectField(field, opt.value, max)}>
+            <ThemedText style={[styles.chipText, selected && { color: UI_COLORS.selectedText }]}>{opt.label}</ThemedText>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+  const DEEP_SECTION_TITLES: Record<number, string> = {
+    8: 'קונפליקטים ותקשורת',
+    9: 'משיכה ויוזמה',
+    10: 'אישיות חברתית',
+    11: 'ספונטניות והרפתקנות',
+    12: 'זוגיות וערכים',
+    13: 'התאמה זוגית',
+    14: 'חוזקות וצרכים בזוגיות',
+    15: 'מה מחפשים בבן/בת זוג',
+    16: 'שאלות עומק אחרונות',
+    17: 'תחושה בקשר',
+  };
+
   const renderDeepSteps = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שאלון מעמיק</ThemedText>
-        <ThemedText style={styles.stepSubtitle}>אופי וסגנון חברתי</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שאלון מעמיק — שלב {currentStep - 7} מתוך 10</ThemedText>
+        <ThemedText style={styles.stepSubtitle}>{DEEP_SECTION_TITLES[currentStep] || ''}</ThemedText>
       </View>
 
       {currentStep === 8 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>ספונטניות</ThemedText>
-          {renderEnumSelect('spontaneity', [
-            { label: 'ברור, אני כבר אורז/ת. חיים פעם אחת.', value: 'very_spontaneous' },
-            { label: 'רגע, מי בא איפה ישנים כמה זה עולה ואז כנראה אזרום.', value: 'calculated_spontaneous' },
-            { label: 'תלוי עם מי ותלוי מתי — אני ספונטני/ת, אבל עם גבולות.', value: 'selective_spontaneous' },
-            { label: 'אין מצב. אני צריך/ה לדעת מראש', value: 'not_spontaneous' }
-          ])}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>כשיש ריב אני בדרך כלל:</ThemedText>
+            {renderEnumSelect('conflict_style', CONFLICT_RESPONSE_OPTIONS)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>כשיש בעיה בקשר חשוב לי:</ThemedText>
+            {renderEnumSelect('problem_response_style', PROBLEM_RESPONSE_OPTIONS)}
+          </View>
+        </>
       )}
 
       {currentStep === 9 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>סיטואציית מעלית</ThemedText>
-          {renderEnumSelect('elevatorScenario', [
-            { label: 'אני אתחיל שיחה כאילו אנחנו מכירים מהצבא / מהגן.', value: 'initiator' },
-            { label: 'אני אזרוק הערה מצחיקה ואבדוק אם יש עם מי לדבר.', value: 'humorous' },
-            { label: 'אני אחייך בנימוס ואקווה שהשקט לא יהיה מוזר מדי.', value: 'polite_quiet' },
-            { label: 'אני אבדוק את הטלפון כאילו יש לי משהו ממש חשוב.', value: 'avoidant' },
-            { label: 'אני אהיה זה/זו שמנסה להרגיע את כולם וללחוץ על כל הכפתורים הנכונים.', value: 'problem_solver' }
-          ])}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>כשמישהו מוצא חן בעיניי אני בדרך כלל:</ThemedText>
+            {renderEnumSelect('attraction_initiative_style', ATTRACTION_INITIATIVE_OPTIONS)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>כשאני מרגיש/ה שמישהו מעוניין בי:</ThemedText>
+            {renderEnumSelect('feel_interest_response', FEEL_INTEREST_OPTIONS)}
+          </View>
+        </>
       )}
 
       {currentStep === 10 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>קריוקי</ThemedText>
-          {renderEnumSelect('karaokeChance', [
-            { label: 'אני כבר בוחר/ת שיר. תנו לי מיקרופון.', value: 'performer' },
-            { label: 'רק אם עוד מישהו עולה איתי.', value: 'duet' },
-            { label: 'אני אעודד את כולם מהצד ואנסה שלא יקראו לי.', value: 'encourager' },
-            { label: 'אולי אחרי קצת זמן ואווירה טובה.', value: 'needs_vibe' },
-            { label: 'אין סיכוי. אני הקהל, לא ההופעה.', value: 'spectator' }
-          ])}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מישהי/ו שמוצא חן בעינייך איתך במעלית. מה תעשה?</ThemedText>
+            {renderEnumSelect('elevatorScenario', ELEVATOR_OPTIONS_V2)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>את/ה בקריוקי עם חברים:</ThemedText>
+            {renderEnumSelect('karaokeChance', KARAOKE_OPTIONS_V2)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>פגשת אדם שלא ראית שנים ברחוב:</ThemedText>
+            {renderEnumSelect('familiarFace', FAMILIAR_FACE_OPTIONS_V2)}
+          </View>
+        </>
       )}
 
       {currentStep === 11 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>פנים מוכרות</ThemedText>
-          {renderEnumSelect('familiarFace', [
-            { label: 'אנופף בלי לחשוב יותר מדי.', value: 'wave' },
-            { label: 'אחכה לראות אם הוא/היא מזהה אותי קודם.', value: 'wait_and_see' },
-            { label: 'אסתכל בטלפון כאילו אני באמצע משימה חשובה.', value: 'phone_check' },
-            { label: 'אעשה חצי חיוך כזה של "ראינו לא ראינו"', value: 'half_smile' },
-            { label: 'אשנה כיוון ואעמיד פנים שזה היה מתוכנן.', value: 'change_direction' }
-          ])}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מציעים לך לטוס לחו״ל בעוד יומיים:</ThemedText>
+            {renderEnumSelect('spontaneity', SPONTANEITY_OPTIONS_V2)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>חברים מציעים תוכנית ספונטנית לערב:</ThemedText>
+            {renderEnumSelect('spontaneous_plan_response', SPONTANEOUS_PLAN_OPTIONS)}
+          </View>
+        </>
       )}
 
       {currentStep === 12 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>כשיוצאים יחד, מה הכי טבעי לך?</ThemedText>
-          {renderEnumSelect('money_style', MONEY_STYLE_OPTIONS)}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה הכי חשוב לך בזוגיות? (עד 3)</ThemedText>
+            {renderMultiChips('relationship_top_values', RELATIONSHIP_TOP_VALUES_OPTIONS, 3)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>איך את/ה מראה אהבה ואכפתיות?</ThemedText>
+            {renderEnumSelect('love_language', LOVE_LANGUAGE_OPTIONS_V2)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>אני בדרך כלל נמשך/ת ל:</ThemedText>
+            {renderEnumSelect('similarity_preference', SIMILARITY_PREF_OPTIONS_V2)}
+          </View>
+        </>
       )}
 
       {currentStep === 13 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>איך את/ה הכי נוטה להראות אהבה או אכפתיות?</ThemedText>
-          {renderEnumSelect('love_language', LOVE_LANGUAGE_OPTIONS)}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה הדייט המושלם מבחינתך?</ThemedText>
+            {renderEnumSelect('perfect_date', PERFECT_DATE_OPTIONS_V2)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה יכול לגרום לך לפסול התאמה? (עד 3)</ThemedText>
+            {renderMultiChips('dealbreakers', DEALBREAKERS_OPTIONS, 3)}
+          </View>
+        </>
       )}
 
       {currentStep === 14 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>את/ה בדרך כלל נמשך/ת יותר למישהו/י ש...</ThemedText>
-          {renderEnumSelect('similarity_preference', SIMILARITY_PREF_OPTIONS)}
-        </View>
+        <>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה החוזקות שלך בזוגיות? (עד 4)</ThemedText>
+            {renderMultiChips('relationship_strengths', RELATIONSHIP_STRENGTHS_OPTIONS, 4)}
+          </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>מה חשוב שבן/בת הזוג יידעו עלייך?</ThemedText>
+            {renderMultiChips('partner_should_know', PARTNER_SHOULD_KNOW_OPTIONS)}
+          </View>
+        </>
       )}
 
       {currentStep === 15 && (
         <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>מה ההגדרה הדתית שלך?</ThemedText>
-          {renderEnumSelect('religion', RELIGION_OPTIONS)}
+          <ThemedText style={styles.label}>מה את/ה מחפש/ת בבן/בת זוג? (עד 5)</ThemedText>
+          {renderMultiChips('partner_qualities', PARTNER_QUALITIES_OPTIONS, 5)}
         </View>
       )}
 
       {currentStep === 16 && (
-        <View style={{ gap: 30 }}>
+        <>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>עד כמה את/ה קרוב/ה למסורת?</ThemedText>
-            {renderScale('tradition_self_rating')}
+            <ThemedText style={styles.label}>בזוגיות אני בדרך כלל:</ThemedText>
+            {renderEnumSelect('personal_space_style', PERSONAL_SPACE_OPTIONS)}
           </View>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>עד כמה חשוב לך שבן/בת הזוג יהיו קרובים למסורת?</ThemedText>
-            {renderScale('tradition_partner_importance')}
+            <ThemedText style={styles.label}>מה חשוב יותר?</ThemedText>
+            {renderEnumSelect('chemistry_vs_longterm', CHEMISTRY_VS_LONGTERM_OPTIONS)}
           </View>
-        </View>
+          <View style={styles.formGroup}>
+            <ThemedText style={styles.label}>אם היית צריך/ה לבחור:</ThemedText>
+            {renderEnumSelect('stability_vs_adventure', STABILITY_VS_ADVENTURE_OPTIONS)}
+          </View>
+        </>
       )}
 
       {currentStep === 17 && (
         <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>מה הדייט המושלם בעיניך?</ThemedText>
-          {renderEnumSelect('perfect_date', PERFECT_DATE_OPTIONS)}
-        </View>
-      )}
-
-      {currentStep === 18 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>מה דיל־ברייקר מבחינתך?</ThemedText>
-          {renderEnumSelect('main_dealbreaker', MAIN_DEALBREAKER_OPTIONS)}
-        </View>
-      )}
-
-      {currentStep === 19 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>מה לדעתך הצדדים החזקים שלך בקשר?</ThemedText>
-          <TextInput
-            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top', paddingTop: 10 }]}
-            placeholder="ספר/י לנו..."
-            multiline
-            value={formData.relationship_strengths_text}
-            onChangeText={(v) => setFormData({ ...formData, relationship_strengths_text: v })}
-          />
-        </View>
-      )}
-
-      {currentStep === 20 && (
-        <View style={styles.formGroup}>
-          <ThemedText style={styles.label}>ומה משהו שחשוב שידעו עלייך?</ThemedText>
-          <TextInput
-            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border, height: 100, textAlignVertical: 'top', paddingTop: 10 }]}
-            placeholder="ספר/י לנו משהו נוסף..."
-            multiline
-            value={formData.relationship_growth_text}
-            onChangeText={(v) => setFormData({ ...formData, relationship_growth_text: v })}
-          />
+          <ThemedText style={styles.label}>מה היית רוצה שבן/בת הזוג ירגישו כשהם איתך? (עד 3)</ThemedText>
+          {renderMultiChips('partner_should_feel', PARTNER_SHOULD_FEEL_OPTIONS, 3)}
         </View>
       )}
     </View>
@@ -1563,9 +1594,14 @@ export default function QuestionnaireScreen() {
           {currentStep > 0 && currentStep !== 7 && (
             <View style={styles.progressHeader}>
                <View style={styles.progressContainer}>
-                  {Array.from({ length: 20 }).map((_, i) => (
-                     <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= currentStep ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
-                  ))}
+                  {(() => {
+                    // 5 basic segments (steps 1-5) + 10 deep segments (steps 8-17).
+                    // For fast-only users segments 6-15 stay inactive.
+                    const filled = currentStep <= 5 ? currentStep : currentStep >= 8 ? 5 + (currentStep - 7) : 5;
+                    return Array.from({ length: 15 }).map((_, i) => (
+                      <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= filled ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
+                    ));
+                  })()}
                </View>
                <BrandMark size={20} />
             </View>
@@ -1607,7 +1643,7 @@ export default function QuestionnaireScreen() {
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
                     onPress={nextStep}
                     disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
+                    {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 17 || (isEditMode && currentStep === 5 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
