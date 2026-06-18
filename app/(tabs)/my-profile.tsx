@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -11,6 +11,9 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,6 +39,42 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
+// Carousel width = screen width minus the ScrollView contentContainer's
+// horizontal padding (24 each side). pagingEnabled snaps to this width.
+const CAROUSEL_WIDTH = Dimensions.get('window').width - 48;
+
+// V2 questionnaire-answer Hebrew labels for the profile preview rows.
+// Source of truth for the option values lives in app/questionnaire.tsx.
+const LABEL_MAPS: Record<string, Record<string, string>> = {
+  intent_type: {
+    long_term: 'קשר לטווח ארוך',
+    short_term: 'קשר קצר',
+    casual: 'סטוצים / קשר לא מחייב',
+    open_flow: 'ראש פתוח וזורם',
+  },
+  preferred_first_date: {
+    coffee: 'בית קפה',
+    restaurant: 'מסעדה',
+    bar: 'בר / דרינק',
+    picnic: 'פיקניק',
+    nature_walk: 'טיול בטבע',
+    active: 'פעילות אקטיבית',
+    home_evening: 'ערב ביתי',
+    connection_matters: 'לא משנה מה עושים, העיקר החיבור',
+  },
+  conflict_style: {
+    talk_immediately: 'רוצה לדבר מיד',
+    need_cooldown: 'צריך/ה זמן להירגע',
+    avoidant: 'נמנע/ת מעימותים',
+    situational: 'תלוי במצב',
+  },
+};
+
+function labelFor(field: keyof typeof LABEL_MAPS, value: unknown): string {
+  if (typeof value !== 'string' || !value) return 'לא צוין';
+  return LABEL_MAPS[field]?.[value] ?? 'לא צוין';
+}
+
 export default function MyProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -53,6 +92,29 @@ export default function MyProfileScreen() {
   // Editable fields
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
+
+  // Photo carousel index (clamped at render time against photos.length).
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const carouselRef = useRef<ScrollView>(null);
+
+  // When a photo is deleted, clamp currentPhotoIndex and scroll the carousel
+  // to the new last cell so the user doesn't end up looking at blank space.
+  useEffect(() => {
+    if (photos.length === 0) {
+      setCurrentPhotoIndex(0);
+      return;
+    }
+    if (currentPhotoIndex >= photos.length) {
+      const newIndex = photos.length - 1;
+      setCurrentPhotoIndex(newIndex);
+      carouselRef.current?.scrollTo({ x: newIndex * CAROUSEL_WIDTH, animated: false });
+    }
+  }, [photos.length]);
+
+  const handleCarouselScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    setCurrentPhotoIndex(idx);
+  };
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -342,19 +404,95 @@ export default function MyProfileScreen() {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.avatarContainer}>
-                <View style={[styles.avatarFrame, { borderColor: UI_COLORS.branding }]}>
-                  {profile?.avatar_url ? (
-                    <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-                  ) : (
-                    <ThemedText style={styles.avatarText}>{(profile?.username || '?')[0]}</ThemedText>
-                  )}
-                </View>
-                {!editing ? (
-                  <TouchableOpacity style={styles.editBadge} onPress={() => setEditing(true)}>
-                    <IconSymbol name="pencil" size={16} color="white" />
-                  </TouchableOpacity>
-                ) : null}
+              <View style={styles.carouselSection}>
+                {photos.length > 0 ? (
+                  <>
+                    <ScrollView
+                      ref={carouselRef}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={handleCarouselScrollEnd}
+                      scrollEventThrottle={16}
+                    >
+                      {photos.map((photo) => (
+                        <View key={photo.id} style={[styles.carouselCell, { width: CAROUSEL_WIDTH }]}>
+                          <View style={[styles.carouselImageWrapper, { borderColor: UI_COLORS.branding }]}>
+                            <Image source={{ uri: photo.url }} style={styles.carouselImage} />
+                            <TouchableOpacity
+                              style={styles.carouselDeleteBadge}
+                              onPress={() => removePhoto(photo.id, photo.storage_path)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              activeOpacity={0.7}
+                            >
+                              <IconSymbol name="xmark" size={14} color="white" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                    {photos.length > 1 && (
+                      <View style={styles.dotsRow}>
+                        {photos.map((_, idx) => {
+                          const activeIndex = Math.min(currentPhotoIndex, photos.length - 1);
+                          const isActive = idx === activeIndex;
+                          return (
+                            <View
+                              key={idx}
+                              style={[
+                                styles.dot,
+                                { backgroundColor: dynamicColors.border },
+                                isActive && { backgroundColor: UI_COLORS.branding, width: 20 },
+                              ]}
+                            />
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View style={[styles.carouselCell, { width: CAROUSEL_WIDTH }]}>
+                    <TouchableOpacity
+                      style={[styles.carouselEmptyCell, { borderColor: dynamicColors.border, backgroundColor: dynamicColors.card }]}
+                      onPress={pickImage}
+                      disabled={uploading}
+                      activeOpacity={0.7}
+                    >
+                      {uploading ? (
+                        <ActivityIndicator size="large" color={UI_COLORS.primary} />
+                      ) : (
+                        <>
+                          <IconSymbol name="camera" size={48} color={dynamicColors.textLight} />
+                          <ThemedText style={{ color: dynamicColors.textLight, marginTop: 12, fontSize: 16, fontWeight: '600' }}>
+                            הוספת תמונה
+                          </ThemedText>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {photos.length > 0 && (
+                  <View style={styles.addPhotoRow}>
+                    <TouchableOpacity
+                      style={[styles.addPhotoButton, { borderColor: UI_COLORS.primary }]}
+                      onPress={pickImage}
+                      disabled={uploading}
+                      activeOpacity={0.85}
+                    >
+                      {uploading ? (
+                        <ActivityIndicator size="small" color={UI_COLORS.primary} />
+                      ) : (
+                        <>
+                          <IconSymbol name="plus.circle.fill" size={18} color={UI_COLORS.primary} />
+                          <ThemedText style={[styles.addPhotoButtonText, { color: UI_COLORS.primary }]}>
+                            הוספת תמונה
+                          </ThemedText>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               <View style={styles.infoSection}>
@@ -399,34 +537,16 @@ export default function MyProfileScreen() {
                     ) : (
                       <ThemedText style={[styles.bioPlaceholder, { color: dynamicColors.textLight }]}>עדיין אין ביו... כדאי להוסיף!</ThemedText>
                     )}
+                    <TouchableOpacity
+                      style={styles.editProfileLinkButton}
+                      onPress={() => setEditing(true)}
+                      hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}
+                      activeOpacity={0.7}
+                    >
+                      <ThemedText style={[styles.editProfileLink, { color: UI_COLORS.branding }]}>ערוך פרופיל</ThemedText>
+                    </TouchableOpacity>
                   </View>
                 )}
-              </View>
-
-              <View style={styles.photoSection}>
-                <View style={styles.sectionHeader}>
-                  <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>תמונות שלי</ThemedText>
-                  <TouchableOpacity onPress={pickImage} disabled={uploading}>
-                    {uploading ? <ActivityIndicator size="small" color={UI_COLORS.primary} /> : <IconSymbol name="plus.circle.fill" size={24} color={UI_COLORS.primary} />}
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.photoGrid}>
-                  {photos.map((photo) => (
-                    <View key={photo.id} style={styles.photoWrapper}>
-                      <Image source={{ uri: photo.url }} style={styles.gridPhoto} />
-                      <TouchableOpacity style={styles.deletePhotoBadge} onPress={() => removePhoto(photo.id, photo.storage_path)}>
-                         <IconSymbol name="xmark" size={12} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                  {photos.length === 0 && !uploading && (
-                    <TouchableOpacity style={[styles.addPhotoPlaceholder, { borderColor: dynamicColors.border }]} onPress={pickImage}>
-                       <IconSymbol name="camera" size={32} color={dynamicColors.textLight} />
-                       <ThemedText style={{ color: dynamicColors.textLight, marginTop: 8 }}>הוספת תמונה</ThemedText>
-                    </TouchableOpacity>
-                  )}
-                </View>
               </View>
 
               <View style={styles.questionnaireSection}>
@@ -439,12 +559,9 @@ export default function MyProfileScreen() {
                  
                  {answers ? (
                    <View style={styles.answersPreview}>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מחפש/ת: {answers.intent_type || 'לא צוין'}</ThemedText>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• סגנון תקשורת: {answers.communicationStyle || 'לא צוין'}</ThemedText>
-                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מפגש ראשון: {answers.preferred_first_date || 'לא צוין'}</ThemedText>
-                      {answers.relationship_growth_text ? (
-                        <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• חשוב שידעו עליי: {answers.relationship_growth_text}</ThemedText>
-                      ) : null}
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מחפש/ת: {labelFor('intent_type', answers.intent_type)}</ThemedText>
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• סגנון תקשורת: {labelFor('conflict_style', answers.conflict_style)}</ThemedText>
+                      <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מפגש ראשון: {labelFor('preferred_first_date', answers.preferred_first_date)}</ThemedText>
                    </View>
                  ) : (
                    <ThemedText style={[styles.onboardingNote, { color: dynamicColors.textLight }]}>
@@ -493,7 +610,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 10,
@@ -502,41 +619,80 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
   },
-  avatarContainer: {
-    alignItems: 'center',
-    marginTop: 10,
+  // Photo carousel (replaces the legacy small avatar + tile grid).
+  carouselSection: {
+    gap: 16,
+    marginTop: 4,
   },
-  avatarFrame: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
+  carouselCell: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFF0EA',
-    overflow: 'hidden',
   },
-  avatarImage: {
+  carouselImageWrapper: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#FFF0EA',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  carouselImage: {
     width: '100%',
     height: '100%',
   },
-  avatarText: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#FF3D57',
-  },
-  editBadge: {
+  carouselDeleteBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: '35%',
-    backgroundColor: '#FF3D57',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  carouselEmptyCell: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: 24,
     borderWidth: 2,
-    borderColor: 'white',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  addPhotoRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  addPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  addPhotoButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   infoSection: {
     gap: 16,
@@ -613,8 +769,14 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
-  photoSection: {
-    gap: 16,
+  editProfileLinkButton: {
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  editProfileLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   sectionHeader: {
     flexDirection: 'row-reverse',
@@ -624,41 +786,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-  },
-  photoGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  photoWrapper: {
-    width: '30%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  gridPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  deletePhotoBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPhotoPlaceholder: {
-    width: '30%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   questionnaireSection: {
     gap: 16,
