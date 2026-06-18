@@ -1,5 +1,23 @@
 import { supabase } from './supabase';
 
+// Returns true when the value is something the user actually picked
+// (non-empty string, non-empty array, finite number, boolean). Used to
+// prevent two users with default/empty answers from being treated as
+// "equal" by the equality scorer, which would otherwise grant free
+// compatibility points for fields neither user actually answered.
+function hasMeaningfulAnswer(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  return Boolean(value);
+}
+
+function bothMeaningfulAndEqual(a: unknown, b: unknown): boolean {
+  return hasMeaningfulAnswer(a) && hasMeaningfulAnswer(b) && a === b;
+}
+
 export interface MatchResult {
   matchId: string;
   candidateProfile: any;
@@ -217,16 +235,20 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
 
   // 1. Intent & Pace (20 pts)
   let intentPaceScore = 0;
-  if (myAnswers.intent_type === candidateAnswers.intent_type) intentPaceScore += 10;
-  if (myAnswers.relationship_pace === candidateAnswers.relationship_pace) intentPaceScore += 10;
+  if (bothMeaningfulAndEqual(myAnswers.intent_type, candidateAnswers.intent_type)) intentPaceScore += 10;
+  if (bothMeaningfulAndEqual(myAnswers.relationship_pace, candidateAnswers.relationship_pace)) intentPaceScore += 10;
   if (intentPaceScore >= 10) reasons.push('יש לכם קצב היכרות וכוונות דומות');
   fastScore += intentPaceScore;
 
   // 2. Communication & Style (20 pts)
+  // Note: conversation_style and compromise_area are no longer collected by the
+  // V2 questionnaire (both stay as '' in formData). The guards below ensure
+  // those equality checks no longer grant free points to V2-vs-V2 pairings.
+  // conflict_style is V2-deep only — guard prevents fast-vs-fast inflation.
   let commScore = 0;
-  if (myAnswers.conflict_style === candidateAnswers.conflict_style) commScore += 7;
-  if (myAnswers.conversation_style === candidateAnswers.conversation_style) commScore += 7;
-  if (myAnswers.compromise_area === candidateAnswers.compromise_area) commScore += 6;
+  if (bothMeaningfulAndEqual(myAnswers.conflict_style, candidateAnswers.conflict_style)) commScore += 7;
+  if (bothMeaningfulAndEqual(myAnswers.conversation_style, candidateAnswers.conversation_style)) commScore += 7;
+  if (bothMeaningfulAndEqual(myAnswers.compromise_area, candidateAnswers.compromise_area)) commScore += 6;
   if (commScore >= 13) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
   fastScore += commScore;
 
@@ -245,10 +267,13 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   fastScore += ageScore;
 
   // 5. Preferences (10 + 10 = 20 pts)
+  // Note: respect_priority and interest_signals are no longer collected by the
+  // V2 questionnaire. The guards ensure those equality checks no longer grant
+  // free +5 points to V2-vs-V2 pairings.
   let prefScore = 0;
-  if (myAnswers.preferred_first_date === candidateAnswers.preferred_first_date) prefScore += 10;
-  if (myAnswers.respect_priority === candidateAnswers.respect_priority) prefScore += 5;
-  if (myAnswers.interest_signals === candidateAnswers.interest_signals) prefScore += 5;
+  if (bothMeaningfulAndEqual(myAnswers.preferred_first_date, candidateAnswers.preferred_first_date)) prefScore += 10;
+  if (bothMeaningfulAndEqual(myAnswers.respect_priority, candidateAnswers.respect_priority)) prefScore += 5;
+  if (bothMeaningfulAndEqual(myAnswers.interest_signals, candidateAnswers.interest_signals)) prefScore += 5;
   if (prefScore >= 10) reasons.push('יש לכם העדפות דומות לחיבור ראשוני');
   fastScore += prefScore;
 
@@ -260,28 +285,40 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   // 7. Deep Factors (if applicable - 40 pts max)
   if (depth === 'deep') {
     // Social (10 pts)
-    if (myAnswers.spontaneity === candidateAnswers.spontaneity) deepScore += 2.5;
-    if (myAnswers.elevatorScenario === candidateAnswers.elevatorScenario) deepScore += 2.5;
-    if (myAnswers.karaokeChance === candidateAnswers.karaokeChance) deepScore += 2.5;
-    if (myAnswers.familiarFace === candidateAnswers.familiarFace) deepScore += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.spontaneity, candidateAnswers.spontaneity)) deepScore += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) deepScore += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) deepScore += 2.5;
+    if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) deepScore += 2.5;
 
     // Values (10 pts)
-    if (myAnswers.money_style === candidateAnswers.money_style) deepScore += 5;
-    if (myAnswers.love_language === candidateAnswers.love_language) deepScore += 5;
+    // Note: money_style is no longer collected by V2. love_language stays '' for
+    // V2 users (replaced by the love_languages array); the guard keeps both
+    // checks from inflating V2-vs-V2 pairings.
+    if (bothMeaningfulAndEqual(myAnswers.money_style, candidateAnswers.money_style)) deepScore += 5;
+    if (bothMeaningfulAndEqual(myAnswers.love_language, candidateAnswers.love_language)) deepScore += 5;
 
     // Dating & Similar (10 pts)
-    if (myAnswers.perfect_date === candidateAnswers.perfect_date) deepScore += 5;
-    if (myAnswers.similarity_preference === candidateAnswers.similarity_preference) deepScore += 5;
+    if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) deepScore += 5;
+    if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) deepScore += 5;
 
-    // Religion (10 pts)
-    if (myAnswers.religion === candidateAnswers.religion) deepScore += 5;
-    const tradDiff = Math.abs((myAnswers.tradition_self_rating || 3) - (candidateAnswers.tradition_partner_importance || 3));
-    const tradDiffReverse = Math.abs((candidateAnswers.tradition_self_rating || 3) - (myAnswers.tradition_partner_importance || 3));
-    if (tradDiff <= 1 && tradDiffReverse <= 1) deepScore += 5;
+    // Religion (5 pts)
+    if (bothMeaningfulAndEqual(myAnswers.religion, candidateAnswers.religion)) deepScore += 5;
+    // Tradition scoring removed: V2 no longer collects tradition_self_rating /
+    // tradition_partner_importance, and the legacy formData defaulted both to 3.
+    // A presence guard alone can't help because both users will have value 3
+    // by default, so the old `|| 3` formula always returned diff = 0 and
+    // granted everyone +5. Re-enable with proper guards if/when these fields
+    // are reintroduced to the questionnaire.
 
-    // Tiny completeness bonus (max 2 points, capped within 40 deep total)
-    if (myAnswers.about_me && candidateAnswers.about_me) deepScore = Math.min(40, deepScore + 1);
-    if (myAnswers.relationship_strengths_text && candidateAnswers.relationship_strengths_text) deepScore = Math.min(40, deepScore + 1);
+    // Tiny completeness bonus (max 2 points, capped within 40 deep total).
+    // These free-text fields are also not collected by V2, so the guards will
+    // typically evaluate false for new users — that is the intended behaviour.
+    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) {
+      deepScore = Math.min(40, deepScore + 1);
+    }
+    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) {
+      deepScore = Math.min(40, deepScore + 1);
+    }
 
     if (deepScore >= 25) {
         reasons.push('יש גם התאמה בשאלות העומק');
