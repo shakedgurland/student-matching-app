@@ -1512,6 +1512,19 @@ export default function QuestionnaireScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}
         >
+          {isEditMode && (
+            <View style={styles.editModeHeader}>
+              <TouchableOpacity
+                onPress={handleSaveAndClose}
+                disabled={loading}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="שמור וסגור"
+              >
+                <ThemedText style={styles.editModeHeaderAction}>שמור וסגור</ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
           {currentStep > 0 && currentStep !== 7 && (
             <View style={styles.progressHeader}>
                <View style={styles.progressContainer}>
@@ -1563,14 +1576,6 @@ export default function QuestionnaireScreen() {
                     {loading ? <ActivityIndicator color="white" /> : <ThemedText style={styles.primaryNavText}>{currentStep === 20 || (isEditMode && currentStep === 6 && userProfile?.onboarding_mode === 'deep') ? 'סיום' : 'המשך'}</ThemedText>}
                   </TouchableOpacity>
                 )}
-                {isEditMode && !(currentStep === 6 && userProfile?.onboarding_mode === 'fast') && (
-                  <TouchableOpacity
-                    style={[styles.navButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: UI_COLORS.primary }]}
-                    onPress={handleSaveAndClose}
-                    disabled={loading}>
-                    <ThemedText style={[styles.primaryNavText, { color: UI_COLORS.primary }]}>שמור וסגור</ThemedText>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity style={styles.navButton} onPress={prevStep}>
                   <ThemedText style={{ color: UI_COLORS.primary, fontWeight: '700' }}>חזרה</ThemedText>
                 </TouchableOpacity>
@@ -1618,4 +1623,18 @@ const styles = StyleSheet.create({
   navButton: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryNav: { shadowColor: UI_COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 3 },
   primaryNavText: { color: 'white', fontSize: 18, fontWeight: '800' },
+  editModeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  editModeHeaderAction: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: UI_COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
 });
