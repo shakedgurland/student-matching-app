@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deriveTraits, derivePreferences, type DerivedTraits, type DerivedPreferences } from './matching-traits';
 
 // Returns true when the value is something the user actually picked
 // (non-empty string, non-empty array, finite number, boolean). Used to
@@ -222,6 +223,215 @@ function scoreAgeCompatibility(myAnswers: any, myBirthYear: number | null, candi
   return 0;
 }
 
+// ----------------------------------------------------------------------
+// Trait-based preference penalties (rule-based, closed-answer only)
+// ----------------------------------------------------------------------
+//
+// Strategy: for each preference the user declared (partner_qualities,
+// dealbreakers, religion_importance, religious_level_importance), check the
+// CANDIDATE's derived traits and apply a penalty if there is a real gap.
+// Penalties are bidirectional — A's preferences vs B's traits AND
+// B's preferences vs A's traits — so the score is symmetric. Total penalty
+// is capped at -25 to prevent stacking many weak signals into a rejection.
+//
+// Free-text fields (partner_should_know_text, conversation_starter,
+// green_flag, *_other) are NOT interpreted here. They are deferred to a
+// future AI / keyword-mapping commit.
+//
+// Caveat reasons surfaced in the match UI are derived from the CURRENT
+// user's side only ("ייתכן פער ... לעומת מה שחיפשת"), never from the
+// candidate's side, to avoid exposing what the other person flagged.
+
+type PenaltySeverity = 'soft' | 'strong';
+
+interface Penalty {
+  points: number; // negative
+  severity: PenaltySeverity;
+  caveat: string;
+}
+
+function minTraitScore(...vals: (number | null)[]): number | null {
+  const nums = vals.filter((v): v is number => v !== null);
+  if (nums.length === 0) return null;
+  return Math.min(...nums);
+}
+
+// Generic "did I want this quality but the candidate is below the bar?" check.
+// trait < 3 → soft mismatch (-5); trait ≤ 2 → strong mismatch (-10).
+// Returns null if there is no derived signal for the trait at all.
+function thresholdPenalty(
+  trait: number | null,
+  caveat: string,
+  softPoints: number = -5,
+  strongPoints: number = -10,
+): Penalty | null {
+  if (trait === null) return null;
+  if (trait <= 2) return { points: strongPoints, severity: 'strong', caveat };
+  if (trait < 3) return { points: softPoints, severity: 'soft', caveat };
+  return null;
+}
+
+function penaltyForPartnerQuality(quality: string, candidateTraits: DerivedTraits): Penalty | null {
+  switch (quality) {
+    case 'self_confidence':
+      return thresholdPenalty(candidateTraits.social_confidence, 'ייתכן פער בביטחון החברתי לעומת מה שחיפשת');
+    case 'good_communication':
+      return thresholdPenalty(
+        minTraitScore(candidateTraits.communication_directness, candidateTraits.conflict_engagement),
+        'ייתכן פער בסגנון התקשורת לעומת מה שחיפשת',
+      );
+    case 'ambition':
+      return thresholdPenalty(candidateTraits.ambition_career_focus, 'ייתכן פער בשאפתנות לעומת מה שחיפשת');
+    case 'spontaneity':
+      return thresholdPenalty(candidateTraits.spontaneity_level, 'ייתכן פער ברמת הספונטניות לעומת מה שחיפשת');
+    case 'family':
+      return thresholdPenalty(candidateTraits.family_orientation, 'ייתכן פער במשפחתיות לעומת מה שחיפשת');
+    case 'emotional_maturity':
+      return thresholdPenalty(candidateTraits.conflict_engagement, 'ייתכן פער בבגרות רגשית לעומת מה שחיפשת');
+    case 'humor':
+      return thresholdPenalty(candidateTraits.humor_playfulness, 'ייתכן פער בסגנון ההומור לעומת מה שחיפשת');
+    case 'stability':
+      return thresholdPenalty(candidateTraits.relationship_stability_preference, 'ייתכן פער בהעדפת היציבות לעומת מה שחיפשת');
+    case 'open_minded':
+      return thresholdPenalty(candidateTraits.openness_to_new_people, 'ייתכן פער בפתיחות לאנשים חדשים לעומת מה שחיפשת');
+    case 'sensitivity':
+      return thresholdPenalty(candidateTraits.warmth_affection, 'ייתכן פער בחום וברגישות לעומת מה שחיפשת');
+    // 'intelligence', 'honesty', 'physical_attraction', 'similar_values' — no
+    // clear derived signal yet; skip per current scope.
+    default:
+      return null;
+  }
+}
+
+function penaltyForDealbreaker(dealbreaker: string, candidateTraits: DerivedTraits): Penalty | null {
+  // Dealbreakers are stronger signals — only fire on clearly-low values
+  // (trait ≤ 2). Most apply -15; "no_independence" stays soft (-8) because
+  // low independence_need can mean "togetherness-loving", not necessarily bad.
+  switch (dealbreaker) {
+    case 'poor_communication': {
+      const t = minTraitScore(candidateTraits.communication_directness, candidateTraits.conflict_engagement);
+      if (t === null || t > 2) return null;
+      return { points: -15, severity: 'strong', caveat: 'ייתכן פער בסגנון התקשורת לעומת מה שחשוב לך' };
+    }
+    case 'no_ambition': {
+      const t = candidateTraits.ambition_career_focus;
+      if (t === null || t > 2) return null;
+      return { points: -15, severity: 'strong', caveat: 'ייתכן פער בשאפתנות לעומת מה שחשוב לך' };
+    }
+    case 'no_independence': {
+      const t = candidateTraits.independence_need;
+      if (t === null || t > 2) return null;
+      return { points: -8, severity: 'soft', caveat: 'ייתכן פער בעצמאות לעומת מה שחשוב לך' };
+    }
+    // 'different_values' — defer (needs proper shared-values overlap helper).
+    // 'smoking', 'excessive_jealousy', 'disrespect', 'no_attraction' — no
+    // signal from closed answers; defer.
+    // 'other' — TODO: handle via AI / keyword interpretation once enabled.
+    default:
+      return null;
+  }
+}
+
+// Religion type (jewish/muslim/christian/druze/other/prefer_not_to_say).
+// Fires only when both sides declared a concrete religion (no "prefer_not_to_say")
+// AND they differ. Severity scales with religion_importance.
+// NOT promoted to a hard filter in this commit — conservative.
+function penaltyForReligionType(myPrefs: DerivedPreferences, candidatePrefs: DerivedPreferences): Penalty | null {
+  const myType = myPrefs.religion_type;
+  const candType = candidatePrefs.religion_type;
+  if (!myType || !candType) return null;
+  if (myType === 'prefer_not_to_say' || candType === 'prefer_not_to_say') return null;
+  if (myType === candType) return null;
+  switch (myPrefs.religion_importance) {
+    case 'very_important':
+      return { points: -15, severity: 'strong', caveat: 'ייתכן פער בדת לעומת מה שחשוב לך' };
+    case 'somewhat_important':
+      return { points: -10, severity: 'strong', caveat: 'ייתכן פער בדת לעומת מה שחשוב לך' };
+    case 'nice_to_have':
+      return { points: -5, severity: 'soft', caveat: 'ייתכן פער בדת לעומת מה שחשוב לך' };
+    default:
+      return null;
+  }
+}
+
+// Religious lifestyle level (secular/traditional/religious_national/religious/haredi).
+// Fires when the levels differ by 1+ steps AND the user marked the level
+// compatibility important. Conservative: only -8 to -15 even at very_important.
+function penaltyForReligiousLevel(myPrefs: DerivedPreferences, candidatePrefs: DerivedPreferences): Penalty | null {
+  const myLevel = myPrefs.religion;
+  const candLevel = candidatePrefs.religion;
+  if (!myLevel || !candLevel) return null;
+  const LEVEL_ORDER = ['secular', 'traditional', 'religious_national', 'religious', 'haredi'];
+  const myIdx = LEVEL_ORDER.indexOf(myLevel);
+  const candIdx = LEVEL_ORDER.indexOf(candLevel);
+  if (myIdx < 0 || candIdx < 0) return null;
+  const distance = Math.abs(myIdx - candIdx);
+  if (distance === 0) return null;
+  switch (myPrefs.religious_level_importance) {
+    case 'very_important':
+      if (distance >= 2) return { points: -15, severity: 'strong', caveat: 'ייתכן פער ברמת הדתיות לעומת מה שחשוב לך' };
+      return { points: -8, severity: 'soft', caveat: 'ייתכן פער ברמת הדתיות לעומת מה שחשוב לך' };
+    case 'similar_important':
+      if (distance >= 2) return { points: -10, severity: 'strong', caveat: 'ייתכן פער ברמת הדתיות לעומת מה שחשוב לך' };
+      return null;
+    case 'similar_preferred':
+      if (distance >= 2) return { points: -5, severity: 'soft', caveat: 'ייתכן פער ברמת הדתיות לעומת מה שחשוב לך' };
+      return null;
+    default:
+      return null;
+  }
+}
+
+// Collect every penalty implied by `prefs` against `candidateTraits` and
+// `candidatePrefs`. Returns one Penalty per fired rule; caller sums + caps.
+function collectPenalties(
+  prefs: DerivedPreferences,
+  candidatePrefs: DerivedPreferences,
+  candidateTraits: DerivedTraits,
+): Penalty[] {
+  const out: Penalty[] = [];
+  for (const quality of prefs.partner_qualities) {
+    const p = penaltyForPartnerQuality(quality, candidateTraits);
+    if (p) out.push(p);
+  }
+  for (const dealbreaker of prefs.dealbreakers) {
+    const p = penaltyForDealbreaker(dealbreaker, candidateTraits);
+    if (p) out.push(p);
+  }
+  const rType = penaltyForReligionType(prefs, candidatePrefs);
+  if (rType) out.push(rType);
+  const rLevel = penaltyForReligiousLevel(prefs, candidatePrefs);
+  if (rLevel) out.push(rLevel);
+  return out;
+}
+
+function calculatePenalties(
+  myAnswers: any,
+  candidateAnswers: any,
+): { penalty: number; caveatReason: string | null } {
+  const myTraits = deriveTraits(myAnswers);
+  const candidateTraits = deriveTraits(candidateAnswers);
+  const myPrefs = derivePreferences(myAnswers);
+  const candidatePrefs = derivePreferences(candidateAnswers);
+
+  const fromMyPrefs = collectPenalties(myPrefs, candidatePrefs, candidateTraits);
+  const fromCandidatePrefs = collectPenalties(candidatePrefs, myPrefs, myTraits);
+
+  // Caveat shown to the current user comes from MY side only (it should
+  // read as "you wanted X, may be a gap" — not as "they wanted X, may be
+  // a gap", which would expose the other person's preferences).
+  let caveatReason: string | null = null;
+  const strongestMine = fromMyPrefs
+    .filter(p => p.severity === 'strong')
+    .sort((a, b) => a.points - b.points)[0];
+  if (strongestMine) caveatReason = strongestMine.caveat;
+
+  const total = [...fromMyPrefs, ...fromCandidatePrefs].reduce((sum, p) => sum + p.points, 0);
+  const penalty = Math.max(-25, total);
+
+  return { penalty, caveatReason };
+}
+
 function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile: any, candidateAnswers: any, depth: 'fast' | 'deep') {
   let fastScore = 0;
   let deepScore = 0;
@@ -335,6 +545,14 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
     finalScore = fastScore;
   }
 
+  // Apply trait-based penalties (rule-based, closed-answer only).
+  // Bidirectional: my preferences vs candidate traits, and candidate
+  // preferences vs my traits. Total cap at -25 lives inside calculatePenalties.
+  // Free-text fields (partner_should_know_text, conversation_starter,
+  // green_flag, *_other) are intentionally not interpreted in this commit.
+  const { penalty, caveatReason } = calculatePenalties(myAnswers, candidateAnswers);
+  finalScore += penalty;
+
   // Final Cleanup
   finalScore = Math.round(Math.max(40, Math.min(100, finalScore)));
 
@@ -343,8 +561,11 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
     reasons.push('התאמה כללית טובה');
   }
 
-  // Deduplicate and slice reasons
-  const uniqueReasons = Array.from(new Set(reasons)).slice(0, 3);
+  // Deduplicate positive reasons; reserve room for a caveat if one fired.
+  // Caveat (gentle Hebrew phrasing) reflects only MY-side preferences and
+  // never exposes raw trait names.
+  const positiveReasons = Array.from(new Set(reasons)).slice(0, caveatReason ? 2 : 3);
+  if (caveatReason) positiveReasons.push(caveatReason);
 
-  return { score: finalScore, reasons: uniqueReasons };
+  return { score: finalScore, reasons: positiveReasons };
 }
