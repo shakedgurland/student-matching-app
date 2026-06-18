@@ -243,9 +243,12 @@ export default function MyProfileScreen() {
         quality: 1,
       });
 
-      if (!result.canceled) {
-        uploadImage(result.assets[0].uri);
+      // Treat any cancel/empty-asset shape as a silent no-op so dismiss gestures
+      // never surface as a phantom upload error.
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
       }
+      uploadImage(result.assets[0].uri);
     } catch (error) {
       logError('MyProfile', 'image_picker_failed', error);
       console.error('Error picking image:', error);

@@ -593,10 +593,18 @@ export default function QuestionnaireScreen() {
   const [currentStep, setCurrentStep] = useState<Step>(isEditMode ? 1 : 0);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [photos, setPhotos] = useState<{ uri: string }[]>([]);
+  // Photos already saved to profile_photos carry `id` and `storage_path`.
+  // Newly picked photos have only `uri`; the edit-mode save uses this distinction
+  // to decide what to upload vs. keep vs. delete.
+  const [photos, setPhotos] = useState<{ uri: string; id?: string; storage_path?: string; display_order?: number }[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   
   const scrollThresholds = React.useRef<Set<number>>(new Set());
+  // IDs of photos we successfully loaded from profile_photos into the photo grid.
+  // handleSubmit consults this to distinguish "user explicitly removed photo X"
+  // (X was loaded, then taken out of state) from "photo X failed to load and was
+  // never visible" (X is not in this set, so it must NOT be treated as a removal).
+  const loadedPhotoIdsRef = React.useRef<Set<string>>(new Set());
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -713,9 +721,10 @@ export default function QuestionnaireScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      const [answersRes, profileRes] = await Promise.all([
+      const [answersRes, profileRes, photosRes] = await Promise.all([
         supabase.from('questionnaire_answers').select('answers').eq('user_id', user.id).single(),
-        supabase.from('profiles').select('onboarding_mode, full_name').eq('id', user.id).single()
+        supabase.from('profiles').select('onboarding_mode, full_name, avatar_storage_path').eq('id', user.id).single(),
+        supabase.from('profile_photos').select('id, storage_path, display_order').eq('user_id', user.id).order('display_order', { ascending: true }),
       ]);
 
       if (answersRes.data?.answers) {
@@ -790,6 +799,27 @@ export default function QuestionnaireScreen() {
           setFormData(prev => ({ ...prev, firstName: profileRes.data.full_name }));
         }
       }
+
+      if (photosRes.data && photosRes.data.length > 0) {
+        const signed = await Promise.all(photosRes.data.map(async (p) => {
+          const { data, error } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(p.storage_path, 3600);
+          if (error || !data?.signedUrl) return null;
+          return {
+            uri: data.signedUrl,
+            id: p.id,
+            storage_path: p.storage_path,
+            display_order: p.display_order,
+          };
+        }));
+        const valid = signed.filter((p): p is NonNullable<typeof p> => p !== null);
+        if (valid.length > 0) setPhotos(valid);
+        // Record which IDs actually made it into state. Any DB row whose URL
+        // failed to sign is intentionally absent here, so the save reconciliation
+        // will leave that row alone instead of treating it as user-removed.
+        loadedPhotoIdsRef.current = new Set(valid.map(p => p.id));
+      }
     } catch (e) {
       console.error('Failed to load answers for edit', e);
     } finally {
@@ -808,9 +838,12 @@ export default function QuestionnaireScreen() {
         quality: 1,
       });
 
-      if (!result.canceled) {
-        setPhotos([...photos, { uri: result.assets[0].uri }]);
+      // Treat any cancel/empty-asset shape as a silent no-op so dismiss gestures
+      // never surface as an error to the user.
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
       }
+      setPhotos([...photos, { uri: result.assets[0].uri }]);
     } catch (error) {
       logError('Questionnaire', 'pickImage_failed', error);
       console.error('Error picking image:', error);
@@ -972,6 +1005,121 @@ export default function QuestionnaireScreen() {
         if (profileError) {
           logError('Questionnaire', 'edit_profile_update_failed', profileError);
           throw profileError;
+        }
+
+        // === Photo reconciliation ===
+        // The questionnaire photo grid is the source of truth in edit mode.
+        // After save, profile_photos + storage should mirror `photos` state:
+        //   - Photos with `id` already exist in DB → keep, no-op.
+        //   - Photos in state without `id` → newly picked → upload + insert.
+        //   - Photos in DB whose id is no longer in state → user removed them → delete.
+        const { data: currentDbPhotos } = await supabase
+          .from('profile_photos')
+          .select('id, storage_path, display_order')
+          .eq('user_id', user.id);
+
+        const stateIds = new Set(photos.filter(p => p.id).map(p => p.id!));
+        // Only photos we actually loaded into the UI are eligible for deletion;
+        // a DB row that failed to sign at load time was never shown to the user
+        // and must not be deleted just because it's absent from state.
+        const removedFromState = (currentDbPhotos ?? [])
+          .filter(p => loadedPhotoIdsRef.current.has(p.id))
+          .filter(p => !stateIds.has(p.id));
+        const removedStoragePaths = new Set(removedFromState.map(p => p.storage_path).filter(Boolean));
+
+        for (const dbPhoto of removedFromState) {
+          await supabase.from('profile_photos').delete().eq('id', dbPhoto.id);
+          if (dbPhoto.storage_path) {
+            await supabase.storage.from('profile-photos').remove([dbPhoto.storage_path]);
+          }
+        }
+
+        // Upload new photos (those in state without `id`). Track the storage path
+        // assigned to each state slot so we can compute the new "first photo" for
+        // the avatar cascade below.
+        const pathByIndex: (string | null)[] = photos.map(p => p.storage_path ?? null);
+        const survivingExistingCount = (currentDbPhotos ?? []).length - removedFromState.length;
+        let nextOrder = survivingExistingCount;
+        for (let i = 0; i < photos.length; i++) {
+          const p = photos[i];
+          if (p.id) continue;
+
+          const manipResult = await ImageManipulator.manipulateAsync(
+            p.uri,
+            [{ resize: { width: 1200 } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (!manipResult.base64) {
+            logEvent('photo_upload_failed', { screen: 'Questionnaire', action: 'edit_compression', metadata: { index: i } });
+            continue;
+          }
+
+          const fileName = `${user.id}/${Date.now()}_${i}.jpg`;
+          pathByIndex[i] = fileName;
+
+          const { error: storageError } = await supabase.storage
+            .from('profile-photos')
+            .upload(fileName, decode(manipResult.base64), {
+              contentType: 'image/jpeg',
+              cacheControl: '3600',
+              upsert: false,
+            });
+          if (storageError) {
+            logError('Questionnaire', 'edit_photo_upload_failed', storageError);
+            throw storageError;
+          }
+
+          const { error: insertError } = await supabase
+            .from('profile_photos')
+            .insert({
+              user_id: user.id,
+              storage_path: fileName,
+              display_order: nextOrder,
+            });
+          if (insertError) {
+            logError('Questionnaire', 'edit_photo_db_insert_failed', insertError);
+            throw insertError;
+          }
+          nextOrder++;
+        }
+
+        // === Avatar cascade (Option B) ===
+        // Walk the visible photo order, take the first slot that has a known
+        // storage_path after reconciliation. That is the new "first photo".
+        const firstPhotoPath = pathByIndex.find(p => p !== null) ?? null;
+        const oldAvatarPath = userProfile?.avatar_storage_path ?? null;
+        const avatarPhotoWasDeleted = !!oldAvatarPath && removedStoragePaths.has(oldAvatarPath);
+
+        // After save, the true profile_photos row count is the surviving
+        // existing count plus newly inserted rows, which `nextOrder` already
+        // reflects (it starts at survivingExistingCount and increments per insert).
+        // Use that, NOT `firstPhotoPath === null`, to gate the "clear avatar"
+        // branch — otherwise a failed photo load would null the avatar even
+        // though the DB still has photos.
+        const dbCountAfter = nextOrder;
+        let nextAvatarPath: string | null | undefined;
+        if (dbCountAfter === 0 && oldAvatarPath !== null) {
+          // DB truly has no photos — clear the orphan avatar reference.
+          nextAvatarPath = null;
+        } else if (oldAvatarPath === null && firstPhotoPath !== null) {
+          // No avatar before, but photos exist now — adopt the first.
+          nextAvatarPath = firstPhotoPath;
+        } else if (avatarPhotoWasDeleted) {
+          // Current avatar's underlying photo was deleted — promote the first remaining.
+          nextAvatarPath = firstPhotoPath;
+        }
+        // Otherwise (avatar still backed by a kept photo, or both null) leave it alone.
+
+        if (nextAvatarPath !== undefined) {
+          const { error: avatarUpdateError } = await supabase
+            .from('profiles')
+            .update({ avatar_storage_path: nextAvatarPath })
+            .eq('id', user.id);
+          if (avatarUpdateError) {
+            logError('Questionnaire', 'edit_avatar_cascade_failed', avatarUpdateError);
+            // Non-fatal: photos are saved; avatar will self-heal next time the
+            // user touches photos. Don't throw.
+          }
         }
 
         logFormSubmit('Questionnaire', 'edit_onboarding_submitted');
