@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { deriveTraits, derivePreferences, type DerivedTraits, type DerivedPreferences } from './matching-traits';
+import { deriveTraits, derivePreferences, type DerivedTraits, type DerivedPreferences, type TraitName } from './matching-traits';
 
 // Returns true when the value is something the user actually picked
 // (non-empty string, non-empty array, finite number, boolean). Used to
@@ -17,6 +17,65 @@ function hasMeaningfulAnswer(value: unknown): boolean {
 
 function bothMeaningfulAndEqual(a: unknown, b: unknown): boolean {
   return hasMeaningfulAnswer(a) && hasMeaningfulAnswer(b) && a === b;
+}
+
+// ----------------------------------------------------------------------
+// V2 positive-scoring helpers (rule-based; closed answers only)
+// ----------------------------------------------------------------------
+
+function asString(v: unknown): string {
+  return typeof v === 'string' ? v : '';
+}
+
+function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+// Intent compatibility: exact match scores high; adjacent intents on the
+// "serious ↔ casual" spectrum score partial; opposite ends score 0.
+function intentCompatibility(a: unknown, b: unknown): number {
+  if (typeof a !== 'string' || !a || typeof b !== 'string' || !b) return 0;
+  if (a === b) return 10;
+  const ADJACENT = new Set<string>([
+    'long_term:open_flow', 'open_flow:long_term',
+    'open_flow:short_term', 'short_term:open_flow',
+    'short_term:casual', 'casual:short_term',
+  ]);
+  return ADJACENT.has(`${a}:${b}`) ? 5 : 0;
+}
+
+// Pace compatibility: exact = 10, one step apart = 5, otherwise 0.
+const PACE_ORDER = ['very_slow', 'gradual', 'medium', 'fast_with_connection'];
+function paceCompatibility(a: unknown, b: unknown): number {
+  if (typeof a !== 'string' || !a || typeof b !== 'string' || !b) return 0;
+  if (a === b) return 10;
+  const i = PACE_ORDER.indexOf(a);
+  const j = PACE_ORDER.indexOf(b);
+  if (i < 0 || j < 0) return 0;
+  return Math.abs(i - j) === 1 ? 5 : 0;
+}
+
+// Trait closeness on 1–5 scale → fraction 0..1 (max 1 per trait).
+// diff 0 → 1.0, diff 1 → 0.75, diff 2 → 0.5, diff 3 → 0.25, diff 4 → 0.
+// Returns 0 if either side has no signal (null).
+function traitCloseness(a: number | null, b: number | null): number {
+  if (a === null || b === null) return 0;
+  const diff = Math.abs(a - b);
+  return Math.max(0, 1 - diff / 4);
+}
+
+// Array intersection count. Tolerant of non-array / null / undefined inputs.
+function countOverlap(a: unknown, b: unknown): number {
+  if (!Array.isArray(a) || !Array.isArray(b)) return 0;
+  let n = 0;
+  for (const x of a) if (b.includes(x)) n++;
+  return n;
+}
+
+// Normalize city / location free-text for case-insensitive equality.
+function normalizeCity(s: unknown): string {
+  if (typeof s !== 'string') return '';
+  return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 export interface MatchResult {
@@ -437,17 +496,12 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   let deepScore = 0;
   const reasons: string[] = [];
 
-  // Helper for array overlap
-  const getOverlap = (arr1: any, arr2: any) => {
-    if (!arr1 || !arr2 || !Array.isArray(arr1) || !Array.isArray(arr2)) return 0;
-    return arr1.filter(item => arr2.includes(item)).length;
-  };
-
   // 1. Intent & Pace (20 pts)
-  let intentPaceScore = 0;
-  if (bothMeaningfulAndEqual(myAnswers.intent_type, candidateAnswers.intent_type)) intentPaceScore += 10;
-  if (bothMeaningfulAndEqual(myAnswers.relationship_pace, candidateAnswers.relationship_pace)) intentPaceScore += 10;
-  if (intentPaceScore >= 10) reasons.push('יש לכם קצב היכרות וכוונות דומות');
+  // V2 smarter scoring: exact = full points, adjacent intents/paces = partial.
+  const intentScore = intentCompatibility(myAnswers.intent_type, candidateAnswers.intent_type);
+  const paceScore = paceCompatibility(myAnswers.relationship_pace, candidateAnswers.relationship_pace);
+  const intentPaceScore = intentScore + paceScore;
+  if (intentPaceScore >= 10) reasons.push('יש לכם כוונות וקצב היכרות דומים');
   fastScore += intentPaceScore;
 
   // 2. Communication & Style (20 pts)
@@ -462,14 +516,28 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   if (commScore >= 13) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
   fastScore += commScore;
 
-  // 3. Interests & Region (15 + 10 = 25 pts)
-  const hobbyOverlap = getOverlap(myProfile.hobbies || myAnswers.hobbies, candidateProfile.hobbies || candidateAnswers.hobbies);
+  // 3. Interests & Region/City (max ~28 pts)
+  const myHobbies = (myProfile.hobbies || myAnswers.hobbies) as unknown;
+  const candHobbies = (candidateProfile.hobbies || candidateAnswers.hobbies) as unknown;
+  const hobbyOverlap = countOverlap(myHobbies, candHobbies);
   const interestScore = Math.min(15, hobbyOverlap * 3);
   const regionScore = scoreRegionCompatibility(myProfile.region, candidateProfile.region);
-  
-  if (hobbyOverlap >= 2) reasons.push('יש חפיפה בתחומי העניין');
-  if (regionScore >= 7) reasons.push('יש לכם קרבה גיאוגרפית נוחה');
-  fastScore += (interestScore + regionScore);
+
+  // V2: shared_hobbies_priority — each of MY priorities found in CANDIDATE's
+  // hobbies (and vice versa) adds 1 pt, capped at 5 total.
+  const priorityMatches =
+    countOverlap(myAnswers.shared_hobbies_priority, candHobbies) +
+    countOverlap(candidateAnswers.shared_hobbies_priority, myHobbies);
+  const sharedPriorityScore = Math.min(5, priorityMatches);
+
+  // V2: city soft positive (profiles.campus stores the V2 city free-text).
+  const myCity = normalizeCity(myProfile.campus);
+  const candCity = normalizeCity(candidateProfile.campus);
+  const cityScore = myCity && myCity === candCity ? 3 : 0;
+
+  if (hobbyOverlap >= 2 || sharedPriorityScore >= 3) reasons.push('יש חפיפה בתחומי העניין');
+  if (regionScore >= 7 || cityScore >= 3) reasons.push('יש לכם קרבה גיאוגרפית נוחה');
+  fastScore += (interestScore + regionScore + sharedPriorityScore + cityScore);
 
   // 4. Age Range Compatibility (10 pts)
   const ageScore = scoreAgeCompatibility(myAnswers, myProfile.birth_year, candidateAnswers, candidateProfile.birth_year);
@@ -487,53 +555,133 @@ function calculateCompatibility(myProfile: any, myAnswers: any, candidateProfile
   if (prefScore >= 10) reasons.push('יש לכם העדפות דומות לחיבור ראשוני');
   fastScore += prefScore;
 
-  // 6. Degree Stage Small Bonus (5 pts)
-  if (myProfile.year_of_study === candidateProfile.year_of_study && myProfile.year_of_study) {
-    fastScore += 5;
+  // 6. Studies — V2 (max ~16 pts):
+  //    same university +5 (+3 if either side declared same_university preference)
+  //    same faculty +5 (+3 if either side declared same_faculty preference)
+  //    same year_of_study +3
+  let studyScore = 0;
+  const myMatchPrefs = asStringArray(myAnswers.match_preferences);
+  const candMatchPrefs = asStringArray(candidateAnswers.match_preferences);
+  const myUni = asString(myProfile.university);
+  const candUni = asString(candidateProfile.university);
+  if (myUni && myUni === candUni) {
+    studyScore += 5;
+    if (myMatchPrefs.includes('same_university') || candMatchPrefs.includes('same_university')) {
+      studyScore += 3;
+    }
   }
+  const myFac = asString(myProfile.faculty);
+  const candFac = asString(candidateProfile.faculty);
+  if (myFac && myFac === candFac) {
+    studyScore += 5;
+    if (myMatchPrefs.includes('same_faculty') || candMatchPrefs.includes('same_faculty')) {
+      studyScore += 3;
+    }
+  }
+  if (myProfile.year_of_study && myProfile.year_of_study === candidateProfile.year_of_study) {
+    studyScore += 3;
+  }
+  if (studyScore >= 5) reasons.push('יש התאמה ברקע הלימודי');
+  fastScore += studyScore;
 
-  // 7. Deep Factors (if applicable - 40 pts max)
+  // 6b. Religion — V2 (max 8 pts):
+  //    same religion_type +5 (skipped if either side picked prefer_not_to_say)
+  //    same religious level +3, adjacent level +1
+  let religionScore = 0;
+  const myType = asString(myAnswers.religion_type);
+  const candType = asString(candidateAnswers.religion_type);
+  if (
+    myType && candType &&
+    myType !== 'prefer_not_to_say' && candType !== 'prefer_not_to_say' &&
+    myType === candType
+  ) {
+    religionScore += 5;
+  }
+  const myLevel = asString(myAnswers.religion);
+  const candLevel = asString(candidateAnswers.religion);
+  if (myLevel && candLevel) {
+    if (myLevel === candLevel) {
+      religionScore += 3;
+    } else {
+      const LEVEL_ORDER = ['secular', 'traditional', 'religious_national', 'religious', 'haredi'];
+      const i = LEVEL_ORDER.indexOf(myLevel);
+      const j = LEVEL_ORDER.indexOf(candLevel);
+      if (i >= 0 && j >= 0 && Math.abs(i - j) === 1) religionScore += 1;
+    }
+  }
+  if (religionScore >= 5) reasons.push('יש התאמה באורח החיים הדתי');
+  fastScore += religionScore;
+
+  // 7. Deep Factors (if applicable — max 50 pts, capped at the end)
   if (depth === 'deep') {
-    // Social (10 pts)
+    // Legacy single-answer equality (still cheap, complements the trait layer).
+    // money_style + love_language stay guarded so V2-vs-V2 doesn't double-count.
     if (bothMeaningfulAndEqual(myAnswers.spontaneity, candidateAnswers.spontaneity)) deepScore += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) deepScore += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) deepScore += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) deepScore += 2.5;
-
-    // Values (10 pts)
-    // Note: money_style is no longer collected by V2. love_language stays '' for
-    // V2 users (replaced by the love_languages array); the guard keeps both
-    // checks from inflating V2-vs-V2 pairings.
     if (bothMeaningfulAndEqual(myAnswers.money_style, candidateAnswers.money_style)) deepScore += 5;
     if (bothMeaningfulAndEqual(myAnswers.love_language, candidateAnswers.love_language)) deepScore += 5;
-
-    // Dating & Similar (10 pts)
     if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) deepScore += 5;
     if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) deepScore += 5;
 
-    // Religion (5 pts)
-    if (bothMeaningfulAndEqual(myAnswers.religion, candidateAnswers.religion)) deepScore += 5;
-    // Tradition scoring removed: V2 no longer collects tradition_self_rating /
-    // tradition_partner_importance, and the legacy formData defaulted both to 3.
-    // A presence guard alone can't help because both users will have value 3
-    // by default, so the old `|| 3` formula always returned diff = 0 and
-    // granted everyone +5. Re-enable with proper guards if/when these fields
-    // are reintroduced to the questionnaire.
+    // V2: trait closeness across 12 personality dimensions (max 12 pts).
+    // Each trait contributes 0..1 based on how close the two derived scores are.
+    const myTraits = deriveTraits(myAnswers);
+    const candidateTraits = deriveTraits(candidateAnswers);
+    const TRAITS_TO_SCORE: TraitName[] = [
+      'social_confidence', 'social_initiative', 'openness_to_new_people',
+      'spontaneity_level', 'communication_directness', 'conflict_engagement',
+      'emotional_pace', 'relationship_stability_preference', 'independence_need',
+      'warmth_affection', 'humor_playfulness', 'family_orientation',
+    ];
+    let traitClosenessSum = 0;
+    for (const t of TRAITS_TO_SCORE) {
+      traitClosenessSum += traitCloseness(myTraits[t], candidateTraits[t]);
+    }
+    deepScore += Math.round(traitClosenessSum * 10) / 10;
 
-    // Tiny completeness bonus (max 2 points, capped within 40 deep total).
-    // These free-text fields are also not collected by V2, so the guards will
-    // typically evaluate false for new users — that is the intended behaviour.
-    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) {
-      deepScore = Math.min(40, deepScore + 1);
-    }
-    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) {
-      deepScore = Math.min(40, deepScore + 1);
+    // V2: multi-select overlaps (max 16 pts combined)
+    const topValuesOverlap = countOverlap(myAnswers.relationship_top_values, candidateAnswers.relationship_top_values);
+    const topValuesScore = Math.min(6, topValuesOverlap * 2);
+    deepScore += topValuesScore;
+    if (topValuesScore >= 4) reasons.push('יש ביניכם התאמה בערכים זוגיים');
+
+    const strengthsScore = Math.min(4, countOverlap(myAnswers.relationship_strengths, candidateAnswers.relationship_strengths));
+    deepScore += strengthsScore;
+
+    const shouldFeelScore = Math.min(3, countOverlap(myAnswers.partner_should_feel, candidateAnswers.partner_should_feel));
+    deepScore += shouldFeelScore;
+
+    const loveLangScore = Math.min(3, countOverlap(myAnswers.love_languages, candidateAnswers.love_languages));
+    deepScore += loveLangScore;
+
+    // Communication-style affinity reason: both sides land close on the
+    // worse of (communication_directness, conflict_engagement).
+    const myCommMin = minTraitScore(myTraits.communication_directness, myTraits.conflict_engagement);
+    const candCommMin = minTraitScore(candidateTraits.communication_directness, candidateTraits.conflict_engagement);
+    if (myCommMin !== null && candCommMin !== null && Math.abs(myCommMin - candCommMin) <= 1) {
+      reasons.push('סגנון התקשורת שלכם יכול להשתלב טוב');
     }
 
-    if (deepScore >= 25) {
-        reasons.push('יש גם התאמה בשאלות העומק');
-        reasons.push('יש התאמה טובה בערכים ובגבולות');
+    // Spontaneity + social-confidence affinity reason.
+    const sponClose = traitCloseness(myTraits.spontaneity_level, candidateTraits.spontaneity_level);
+    const socClose = traitCloseness(myTraits.social_confidence, candidateTraits.social_confidence);
+    if (sponClose >= 0.75 && socClose >= 0.75) {
+      reasons.push('יש לכם וייב דומה בספונטניות ובחברתיות');
     }
+
+    // Tiny completeness bonus from the legacy free-text fields. V2 doesn't
+    // populate these, so the guards typically evaluate false for new users —
+    // that's the intended behaviour. Free-text interpretation overall remains
+    // TODO until an AI / keyword commit is approved.
+    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) deepScore += 1;
+    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) deepScore += 1;
+
+    if (deepScore >= 25) reasons.push('יש גם התאמה בשאלות העומק');
+
+    // Cap deep contribution to keep the blended formula balanced (max 50).
+    deepScore = Math.min(50, deepScore);
   }
 
   // Calculate Final Score
