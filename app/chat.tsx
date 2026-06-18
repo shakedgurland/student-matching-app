@@ -81,7 +81,7 @@ export default function ChatScreen() {
                <View style={[styles.smallAvatar, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding }]}>
                  <ThemedText style={[styles.avatarText, { color: UI_COLORS.branding }]}>ש</ThemedText>
                </View>
-               <View style={[styles.smallAvatar, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.premium, marginLeft: -15 }]}>
+               <View style={[styles.smallAvatar, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.premium, marginStart: -15 }]}>
                  <ThemedText style={[styles.avatarText, { color: UI_COLORS.premium }]}>נ</ThemedText>
                </View>
             </View>
@@ -100,15 +100,15 @@ export default function ChatScreen() {
           </ScrollView>
 
           <View style={[styles.inputArea, { borderTopColor: dynamicColors.border, backgroundColor: isDark ? dynamicColors.bg : '#FFFFFF' }]}>
-            <TouchableOpacity style={[styles.sendButton, { backgroundColor: UI_COLORS.branding }]}>
-               <ThemedText style={styles.sendButtonText}>שלח</ThemedText>
-            </TouchableOpacity>
-            <TextInput 
+            <TextInput
               style={[styles.input, { color: isDark ? '#FFFFFF' : UI_COLORS.text, backgroundColor: isDark ? dynamicColors.card : '#F7F8FA', borderColor: dynamicColors.border }]}
               placeholder="כתבו הודעה..."
               placeholderTextColor={dynamicColors.textLight}
               textAlign="right"
             />
+            <TouchableOpacity style={[styles.sendButton, { backgroundColor: UI_COLORS.branding }]}>
+               <ThemedText style={styles.sendButtonText}>שלח</ThemedText>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
