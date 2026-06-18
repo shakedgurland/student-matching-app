@@ -218,16 +218,6 @@ export default function MatchSelectionScreen() {
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
                 מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.
               </ThemedText>
-              <TouchableOpacity 
-                style={[styles.outlineButton, { borderColor: UI_COLORS.border }, matching && { opacity: 0.5 }]}
-                onPress={() => handleFindMatch()}
-                disabled={matching}>
-                {matching ? (
-                  <ActivityIndicator size="small" color={dynamicColors.text} />
-                ) : (
-                  <ThemedText style={[styles.outlineButtonText, { color: dynamicColors.text }]}>חיפוש התאמה חדשה</ThemedText>
-                )}
-              </TouchableOpacity>
             </View>
           )}
 

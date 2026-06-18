@@ -26,6 +26,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="my-profile"
         options={{
+          // Route stays registered so router.push('/(tabs)/my-profile') and the
+          // top profile icon on the matching tab continue to work. href: null
+          // only hides the tab button itself from the bottom bar.
+          href: null,
           title: 'פרופיל',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
         }}
