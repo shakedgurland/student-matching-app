@@ -1112,7 +1112,12 @@ export default function QuestionnaireScreen() {
             </View>
           ))}
           {photos.length < 6 && (
-            <TouchableOpacity style={styles.addPhotoPlaceholder} onPress={pickImage}>
+            <TouchableOpacity
+              style={styles.addPhotoPlaceholder}
+              onPress={pickImage}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <IconSymbol name="plus" size={32} color={UI_COLORS.textLight} />
             </TouchableOpacity>
           )}
@@ -1664,7 +1669,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 24, paddingBottom: 60 },
   stepContent: { gap: 24, paddingTop: 10 },
   introHeader: { alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 40 },
-  introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding },
+  introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding, lineHeight: 40, paddingHorizontal: 16 },
   introText: { fontSize: 18, lineHeight: 28, textAlign: 'center', color: UI_COLORS.text, paddingHorizontal: 10 },
   stepTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
   stepSubtitle: { fontSize: 24, fontWeight: '800', textAlign: 'right', marginBottom: 10 },
