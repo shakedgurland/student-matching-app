@@ -452,6 +452,30 @@ export default function MyProfileScreen() {
                    </ThemedText>
                  )}
               </View>
+
+              <View style={styles.settingsSection}>
+                <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>הגדרות וחוקיות</ThemedText>
+                <View style={[styles.settingsCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
+                    <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
+                  </TouchableOpacity>
+                  <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
+                    <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
+                  </TouchableOpacity>
+                  <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
+                  <View
+                    style={styles.settingsRow}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: true }}
+                  >
+                    <ThemedText style={[styles.settingsRowText, { color: dynamicColors.textLight }]}>מחיקת חשבון</ThemedText>
+                    <View style={[styles.comingSoonBadge, { backgroundColor: dynamicColors.border }]}>
+                      <ThemedText style={[styles.comingSoonText, { color: dynamicColors.textLight }]}>בקרוב</ThemedText>
+                    </View>
+                  </View>
+                </View>
+              </View>
           </ScrollView>
         </SafeAreaView>
       </ThemedView>
@@ -655,5 +679,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 20,
+  },
+  settingsSection: {
+    gap: 12,
+    marginTop: 10,
+  },
+  settingsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  settingsRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  settingsRowText: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  settingsDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 16,
+  },
+  comingSoonBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  comingSoonText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

@@ -198,6 +198,16 @@ export default function LoginScreen() {
                 <Text style={styles.registerLink}>להרשמה</Text>
               </TouchableOpacity>
             </View>
+
+            <View style={styles.legalRow}>
+              <TouchableOpacity onPress={() => router.push('/terms-of-use' as any)} hitSlop={8}>
+                <Text style={styles.legalLinkText}>תנאי שימוש</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalSeparator}> · </Text>
+              <TouchableOpacity onPress={() => router.push('/privacy-policy' as any)} hitSlop={8}>
+                <Text style={styles.legalLinkText}>מדיניות פרטיות</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </TouchableWithoutFeedback>
@@ -295,5 +305,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: UI_COLORS.branding,
+  },
+  legalRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  legalLinkText: {
+    fontSize: 13,
+    color: UI_COLORS.textLight,
+    fontWeight: '600',
+  },
+  legalSeparator: {
+    fontSize: 13,
+    color: UI_COLORS.textLight,
+    paddingHorizontal: 4,
   },
 });

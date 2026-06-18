@@ -138,6 +138,17 @@ export default function SignupScreen() {
               onSubmitEditing={handleSignup}
             />
 
+            <Text style={styles.legalAck}>
+              בהרשמה לאפליקציה את/ה מאשר/ת את{' '}
+              <Text style={styles.legalLink} onPress={() => router.push('/terms-of-use' as any)}>
+                תנאי השימוש
+              </Text>
+              {' '}ו
+              <Text style={styles.legalLink} onPress={() => router.push('/privacy-policy' as any)}>
+                מדיניות הפרטיות
+              </Text>
+            </Text>
+
             <TouchableOpacity
               style={[styles.primaryButton, loading && styles.disabledButton]}
               onPress={handleSignup}
@@ -214,5 +225,18 @@ const styles = StyleSheet.create({
     color: '#477D9B',
     fontSize: 16,
     fontWeight: '600',
+  },
+  legalAck: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    color: '#667085',
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+  },
+  legalLink: {
+    color: '#FF3D57',
+    fontWeight: '700',
   },
 });
