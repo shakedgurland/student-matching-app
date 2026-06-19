@@ -139,7 +139,7 @@ export default function MyProfileScreen() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, bio, faculty, university, avatar_url, avatar_storage_path')
         .eq('id', user.id)
         .single();
 
