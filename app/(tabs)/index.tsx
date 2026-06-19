@@ -416,10 +416,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   tipText: {
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 });
