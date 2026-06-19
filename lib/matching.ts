@@ -80,12 +80,12 @@ export async function findAndCreateBestMatch(
     }
 
     // The Edge Function returns only the chosen candidate's id to keep its
-    // response payload minimal. Fetch the full profile row separately;
-    // RLS allows reading any user we share a match row with (per the
-    // policy created in migration 002).
+    // response payload minimal. Fetch only the columns the matching tab
+    // card consumes; never select email or other sensitive fields. Matched-
+    // peer SELECT access is granted by the policy from migration 020.
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, username, full_name, avatar_url, avatar_storage_path')
       .eq('id', candidateId)
       .single();
     if (profileError || !profile) {

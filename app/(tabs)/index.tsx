@@ -81,11 +81,13 @@ export default function MatchSelectionScreen() {
         const match = matches[0];
         setCurrentMatch(match);
 
-        // Fetch other user profile
+        // Fetch other user profile — minimal column set; never select email
+        // or other sensitive fields. Matched-peer SELECT access is granted
+        // by the policy from migration 020.
         const otherUserId = match.user_a_id === user.id ? match.user_b_id : match.user_a_id;
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id, username, full_name, avatar_url, avatar_storage_path')
           .eq('id', otherUserId)
           .single();
 
