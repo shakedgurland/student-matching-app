@@ -621,6 +621,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
+    textAlign: 'right',
   },
   // Photo carousel (replaces the legacy small avatar + tile grid).
   carouselSection: {
@@ -722,7 +723,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   editActions: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
     marginTop: 8,
   },
@@ -782,7 +783,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   sectionHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
@@ -820,7 +821,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   settingsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,

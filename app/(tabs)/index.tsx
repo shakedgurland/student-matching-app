@@ -259,12 +259,12 @@ export default function MatchSelectionScreen() {
                 <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
               </View>
               <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
-                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'מחפשים לך התאמה...'}
+                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'עדיין לא מצאנו לך התאמה'}
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
                 {capReached
                   ? 'בתחילת החודש הבא נוכל להציע לך התאמות חדשות.'
-                  : 'מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.'}
+                  : 'כרגע אין מספיק משתמשים שעומדים בהעדפות שלך. כשיצטרפו משתמשים מתאימים, נוכל להציע לך התאמה חדשה.'}
               </ThemedText>
             </View>
           )}
