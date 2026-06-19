@@ -191,12 +191,31 @@ serve(async (req) => {
       .eq('id', callerId)
       .single()
     if (profErr || !callerProfile) {
+      console.log(JSON.stringify({
+        event: 'match_create_preflight_fail',
+        branch: 'A',
+        callerIdPrefix: callerId.slice(0, 8),
+        profileErr: !!profErr,
+        profileErrCode: profErr?.code ?? null,
+        profileNull: !callerProfile,
+      }))
       return jsonResponse({ status: 'incomplete_profile' })
     }
     if (!callerProfile.onboarding_completed
         || !callerProfile.gender
         || !Array.isArray(callerProfile.interested_in_genders)
         || callerProfile.interested_in_genders.length === 0) {
+      console.log(JSON.stringify({
+        event: 'match_create_preflight_fail',
+        branch: 'B',
+        callerIdPrefix: callerId.slice(0, 8),
+        hasOnboarding: !!callerProfile.onboarding_completed,
+        hasGender: !!callerProfile.gender,
+        interestedIsArray: Array.isArray(callerProfile.interested_in_genders),
+        interestedLen: Array.isArray(callerProfile.interested_in_genders)
+          ? callerProfile.interested_in_genders.length
+          : 0,
+      }))
       return jsonResponse({ status: 'incomplete_profile' })
     }
 
@@ -217,6 +236,14 @@ serve(async (req) => {
       .eq('user_id', callerId)
       .single()
     if (ansErr || !callerAnswersRow) {
+      console.log(JSON.stringify({
+        event: 'match_create_preflight_fail',
+        branch: 'C',
+        callerIdPrefix: callerId.slice(0, 8),
+        ansErr: !!ansErr,
+        ansErrCode: ansErr?.code ?? null,
+        rowNull: !callerAnswersRow,
+      }))
       return jsonResponse({ status: 'incomplete_profile' })
     }
     const callerAnswers = (callerAnswersRow.answers ?? {}) as Record<string, unknown>
