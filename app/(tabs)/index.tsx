@@ -38,6 +38,12 @@ export default function MatchSelectionScreen() {
   const [matching, setMatching] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<any>(null);
   const [otherUser, setOtherUser] = useState<any>(null);
+  // Set to true when the backend returns { status: 'monthly_cap_reached' }.
+  // Drives the empty-state copy so the user sees a clear cap message instead
+  // of a "still searching..." text that would never resolve. Reset on every
+  // fetchCurrentMatch so a returning user (new month / new session) sees the
+  // default empty state again.
+  const [capReached, setCapReached] = useState(false);
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -56,6 +62,7 @@ export default function MatchSelectionScreen() {
   const fetchCurrentMatch = async () => {
     try {
       setLoading(true);
+      setCapReached(false);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -115,11 +122,14 @@ export default function MatchSelectionScreen() {
       if (!targetUserId) return;
 
       const newMatch = await findAndCreateBestMatch(targetUserId);
+
       if (newMatch && 'matchId' in newMatch) {
+        // Success path: backend returned 'created' and lib/matching loaded
+        // the candidate profile. Sign the avatar URL for the carousel and
+        // render the match card.
         logEvent('match_found', { metadata: { matchId: newMatch.matchId, score: newMatch.compatibilityScore } });
         let candidateProfile = newMatch.candidateProfile;
-        
-        // Generate signed URL for avatar if storage_path exists
+
         if (candidateProfile.avatar_storage_path) {
           const { data: signedData, error: signedError } = await supabase.storage
             .from('profile-photos')
@@ -132,19 +142,53 @@ export default function MatchSelectionScreen() {
         setCurrentMatch({
           id: newMatch.matchId,
           compatibility_score: newMatch.compatibilityScore,
-          compatibility_reasons: newMatch.compatibilityReasons
+          compatibility_reasons: newMatch.compatibilityReasons,
         });
         setOtherUser(candidateProfile);
-      } else if (newMatch && 'status' in newMatch && newMatch.status === 'incomplete_profile') {
-        logEvent('match_not_found', { metadata: { reason: 'incomplete_profile' } });
-        if (!silent) {
-          Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
+        return;
+      }
+
+      if (newMatch && 'status' in newMatch) {
+        logEvent('match_not_found', { metadata: { reason: newMatch.status } });
+        switch (newMatch.status) {
+          case 'no_candidate':
+            // Legitimate empty state — default empty-state copy already
+            // covers this. No Alert.
+            break;
+          case 'monthly_cap_reached':
+            // Drives the cap-aware empty-state copy below.
+            setCapReached(true);
+            break;
+          case 'already_has_active':
+            // Caller already has an active match (shouldn't normally fire
+            // because fetchCurrentMatch would have shown it). Re-fetch as
+            // a safety net so the user sees the existing one.
+            fetchCurrentMatch();
+            break;
+          case 'incomplete_profile':
+            if (!silent) {
+              Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
+            }
+            break;
+          case 'unauthorized':
+            if (!silent) {
+              Alert.alert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
+            }
+            break;
+          case 'error':
+            if (!silent) {
+              Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+            }
+            break;
         }
-      } else {
-        logEvent('match_not_found');
-        if (!silent) {
-          Alert.alert('לא נמצאה התאמה', 'לא הצלחנו למצוא לך התאמה כרגע. נסה שוב מאוחר יותר.');
-        }
+        return;
+      }
+
+      // Defensive: malformed response shape. Should not happen with the
+      // current Edge Function contract.
+      logEvent('match_not_found');
+      if (!silent) {
+        Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
       }
     } catch (error) {
       logError('Home', 'match_search_failed', error);
@@ -214,9 +258,13 @@ export default function MatchSelectionScreen() {
               <View style={styles.emptyIconContainer}>
                 <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
               </View>
-              <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>מחפשים לך התאמה...</ThemedText>
+              <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
+                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'מחפשים לך התאמה...'}
+              </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
-                מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.
+                {capReached
+                  ? 'בתחילת החודש הבא נוכל להציע לך התאמות חדשות.'
+                  : 'מערכת ההתאמה שלנו עוברת על כל הפרופילים כדי למצוא את החיבור המושלם עבורך. זה עשוי לקחת קצת זמן.'}
               </ThemedText>
             </View>
           )}
