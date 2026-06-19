@@ -109,8 +109,13 @@ export default function RootLayout() {
 
     const root: string | undefined = segments[0];
 
-    // Legal screens are reachable from any state — auth or no auth, mid-onboarding or completed.
-    if (root === 'privacy-policy' || root === 'terms-of-use') return;
+    // Legal & informational screens are reachable from any state —
+    // auth or no auth, mid-onboarding or completed.
+    if (
+      root === 'privacy-policy' ||
+      root === 'terms-of-use' ||
+      root === 'how-it-works'
+    ) return;
 
     const isQuestionnaireEdit = root === 'questionnaire' && mode === 'edit';
 
@@ -202,6 +207,7 @@ export default function RootLayout() {
         <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
         <Stack.Screen name="terms-of-use" options={{ headerShown: false }} />
+        <Stack.Screen name="how-it-works" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />

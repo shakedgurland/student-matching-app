@@ -576,6 +576,10 @@ export default function MyProfileScreen() {
               <View style={styles.settingsSection}>
                 <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>הגדרות וחוקיות</ThemedText>
                 <View style={[styles.settingsCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
+                    <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>איך זה עובד?</ThemedText>
+                  </TouchableOpacity>
+                  <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
                   </TouchableOpacity>
