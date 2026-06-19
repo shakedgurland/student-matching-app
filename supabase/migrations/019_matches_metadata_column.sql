@@ -1,0 +1,41 @@
+-- Migration 019: Add the metadata column required by create_authorized_match.
+--
+-- Why
+-- ───
+-- create_authorized_match (migration 016, INSERT at lines 226-235) writes
+-- into public.matches.metadata to persist the depth ('fast' | 'deep') that
+-- scoring used. Migration 002 defined the matches table with 10 columns
+-- and none of them is metadata; no later migration adds it.
+--
+-- Production verification:
+--   * information_schema.columns for public.matches shows 10 columns, none
+--     named 'metadata'.
+--   * After migration 018 fixed the service_role grants, the Edge Function
+--     reaches the RPC, the RPC reaches the INSERT, and the INSERT throws
+--     SQLSTATE 42703 ("column metadata of relation matches does not exist").
+--   * The RPC's EXCEPTION WHEN OTHERS block converts that to
+--     {status:'error', message:SQLERRM}; the Edge Function passes it
+--     through; the client logs match_not_found { reason: 'error' }; the
+--     user sees the silent empty state.
+--
+-- Idempotency
+-- ───────────
+-- ADD COLUMN IF NOT EXISTS is a no-op when the column is already present.
+-- The DEFAULT '{}'::jsonb back-fills any pre-existing row, so the NOT NULL
+-- constraint is safe to apply on column add.
+--
+-- NOT NULL is safe long-term because public.matches has no INSERT grant
+-- for the 'authenticated' role (migration 003 grants only SELECT, UPDATE),
+-- so the only INSERT path is via create_authorized_match (service_role),
+-- which always supplies a value at line 234 of migration 016.
+--
+-- Scope (intentionally narrow)
+-- ────────────────────────────
+--   * Adds public.matches.metadata only.
+--   * No grants changes.
+--   * No RLS changes.
+--   * No RPC body changes.
+--   * No edits to existing migrations.
+
+ALTER TABLE public.matches
+  ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
