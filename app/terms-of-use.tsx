@@ -170,6 +170,8 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   headerSpacer: {
     width: 24,
@@ -182,6 +184,7 @@ const styles = StyleSheet.create({
   lastUpdated: {
     fontSize: 13,
     textAlign: 'right',
+    writingDirection: 'rtl',
     fontStyle: 'italic',
   },
   section: {
@@ -191,11 +194,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   sectionBody: {
     fontSize: 15,
     lineHeight: 24,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   footerSpacer: {
     height: 20,

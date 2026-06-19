@@ -143,6 +143,8 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   headerSpacer: {
     width: 24,
@@ -155,6 +157,7 @@ const styles = StyleSheet.create({
   intro: {
     fontSize: 14,
     textAlign: 'right',
+    writingDirection: 'rtl',
     lineHeight: 22,
   },
   section: {
@@ -164,11 +167,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   sectionBody: {
     fontSize: 15,
     lineHeight: 24,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   linksCard: {
     borderRadius: 16,
@@ -180,6 +185,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     textAlign: 'right',
+    writingDirection: 'rtl',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
