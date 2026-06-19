@@ -199,7 +199,8 @@ export default function MatchSelectionScreen() {
   };
 
   const handleStartChat = () => {
-    router.push('/match-result');
+    if (!currentMatch?.id) return;
+    router.push({ pathname: '/match-result', params: { match_id: currentMatch.id } });
   };
 
   const handleProfile = () => {
