@@ -68,6 +68,13 @@ const LABEL_MAPS: Record<string, Record<string, string>> = {
     avoidant: 'נמנע/ת מעימותים',
     situational: 'תלוי במצב',
   },
+  region: {
+    north: 'צפון',
+    south: 'דרום',
+    center: 'מרכז',
+    jerusalem: 'ירושלים והסביבה',
+    haifa: 'חיפה והקריות',
+  },
 };
 
 function labelFor(field: keyof typeof LABEL_MAPS, value: unknown): string {
@@ -563,6 +570,9 @@ export default function MyProfileScreen() {
                  {answers ? (
                    <View style={styles.answersPreview}>
                       <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מחפש/ת: {labelFor('intent_type', answers.intent_type)}</ThemedText>
+                      {answers.region && (
+                        <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• אזור: {labelFor('region', answers.region)}</ThemedText>
+                      )}
                       <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• סגנון תקשורת: {labelFor('conflict_style', answers.conflict_style)}</ThemedText>
                       <ThemedText style={[styles.answerItem, { color: dynamicColors.text }]}>• מפגש ראשון: {labelFor('preferred_first_date', answers.preferred_first_date)}</ThemedText>
                    </View>
