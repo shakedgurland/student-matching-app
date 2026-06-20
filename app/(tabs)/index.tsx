@@ -233,14 +233,14 @@ export default function MatchSelectionScreen() {
             <View style={styles.matchCardContainer}>
               <View style={[styles.card, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
                 <ThemedText style={[styles.cardLabel, { color: UI_COLORS.branding }]}>התאמה פעילה</ThemedText>
-                <ThemedText style={[styles.cardTitle, { color: dynamicColors.text }]}>הכירו את {otherUser.username || 'ההתאמה שלך'}</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: dynamicColors.text }]}>הכירו את {otherUser.full_name || otherUser.username || 'ההתאמה שלך'}</ThemedText>
                 
                 <View style={styles.visualContainer}>
                    <View style={[styles.avatarPlaceholder, { borderColor: UI_COLORS.branding }]}>
                       {otherUser.avatar_url ? (
                         <Image source={{ uri: otherUser.avatar_url }} style={styles.avatarImage} />
                       ) : (
-                        <ThemedText style={styles.avatarText}>{(otherUser.username || '?')[0]}</ThemedText>
+                        <ThemedText style={styles.avatarText}>{(otherUser.full_name || otherUser.username || '?')[0]}</ThemedText>
                       )}
                    </View>
                 </View>

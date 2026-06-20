@@ -114,7 +114,7 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -122,6 +122,25 @@ export default function LoginScreen() {
       if (error) {
         Alert.alert('שגיאה בכניסה', 'אימייל או סיסמה שגויים');
         return;
+      }
+
+      // Backfill profiles.full_name from auth.users.raw_user_meta_data on
+      // first login for users who signed up under the email-confirm path
+      // (no client session at signup time, so signup.tsx could not UPDATE
+      // profiles directly). The .is('full_name', null) filter makes this
+      // a no-op for users who already have a name. Wrapped in try-catch
+      // so any failure here never blocks login.
+      try {
+        const metaName: string | undefined = data.user?.user_metadata?.full_name;
+        if (data.user && typeof metaName === 'string' && metaName.trim().length > 0) {
+          await supabase
+            .from('profiles')
+            .update({ full_name: metaName.trim() })
+            .eq('id', data.user.id)
+            .is('full_name', null);
+        }
+      } catch (backfillErr) {
+        console.log('full_name backfill skipped:', backfillErr);
       }
     } catch (err) {
       console.log('Unexpected login error:', err);
