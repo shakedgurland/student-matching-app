@@ -931,23 +931,54 @@ export default function QuestionnaireScreen() {
         throw answersError;
       }
 
-      // Trigger AI Traits Analysis if Deep Questionnaire is completed/updated.
-      // TODO: The v2 questionnaire spec drops the free-text inputs that this
-      // Edge Function (analyze-user-traits) reads — `about_me`,
-      // `relationship_strengths_text`, `relationship_growth_text`. Once those
-      // fields stop being populated by the new UI, the function will return its
-      // "No text to analyze" no-op path. To re-enable meaningful AI traits,
-      // re-introduce at least one free-text prompt (e.g. an optional
-      // "ספר/י על עצמך") and wire it into the same field(s).
-      if (finalMode === 'deep') {
-        supabase.functions.invoke('analyze-user-traits').then(({ error }) => {
-          if (error) {
-            logError('Questionnaire', 'ai_traits_analysis_failed', error);
+      // AI traits analysis (PR-AUDIT-D PR 2). Internal-only matching
+      // signal — no user-facing "AI analyzes you" claim. Gated client-
+      // side so we don't even open a network connection unless:
+      //   (a) the user completed the deep questionnaire, AND
+      //   (b) there is meaningful free text to analyze.
+      // The Edge Function applies the same gate as defense in depth and
+      // additionally hash-caches the input fingerprint, so a resave with
+      // unchanged free text is free (no OpenAI call).
+      //
+      // For deep + meaningful-text users we BOUNDED-AWAIT the call so the
+      // user's first match-create invocation can see a populated
+      // profile_ai_traits row instead of racing the Edge Function. The
+      // 9s ceiling covers a typical gpt-4o-mini round-trip (~2-5s) with
+      // headroom and never traps the user — on timeout or error we log
+      // and proceed. The first match then falls back to deterministic-
+      // only scoring; subsequent matches pick up the AI signal once the
+      // backend write lands. The wait happens inside the existing
+      // submit-loading state — no new UI flow needed.
+      const psk = (formData.partner_should_know_text || '').trim();
+      const cs  = (formData.conversation_starter || '').trim();
+      const gf  = (formData.green_flag || '').trim();
+      const meaningfulTextLen = psk.length + cs.length + gf.length;
+      if (finalMode === 'deep' && meaningfulTextLen >= 30) {
+        const TRAITS_TIMEOUT_MS = 9000;
+        try {
+          const timeoutSentinel = new Promise<{ error: Error; data?: unknown }>((resolve) =>
+            setTimeout(
+              () => resolve({ error: new Error('ai_traits_timeout') }),
+              TRAITS_TIMEOUT_MS,
+            ),
+          );
+          const result = (await Promise.race([
+            supabase.functions.invoke('analyze-user-traits'),
+            timeoutSentinel,
+          ])) as { error?: unknown; data?: unknown };
+          if (result.error) {
+            // Logged but not surfaced. First match proceeds without AI
+            // traits; deterministic + region + intent + values + height
+            // remain in play. Subsequent matches use AI once the row lands.
+            logError('Questionnaire', 'ai_traits_pre_match_wait_failed', result.error);
           }
-        }).catch(err => {
-          logError('Questionnaire', 'ai_traits_analysis_exception', err);
-        });
+        } catch (err) {
+          logError('Questionnaire', 'ai_traits_pre_match_wait_exception', err);
+        }
       }
+      // Deep users without enough free text simply skip AI traits — that
+      // is expected, not an error. They get deterministic-only matching,
+      // same as fast users.
 
       if (!isEditMode) {
         // 2. Upload Photos
