@@ -40,6 +40,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { rankCandidates, type CandidateInput } from "./scoring.ts"
+import { generateIcebreaker } from "./icebreaker.ts"
+
+// Fetch the LLM-derived traits blob for a single user, if any. Returns
+// null when the row is absent (fast users + deep users without enough
+// free text fall here). Errors return null so a transient
+// profile_ai_traits read never breaks match creation.
+async function fetchAiTraitsForUser(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await admin
+    .from('profile_ai_traits')
+    .select('traits')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error || !data || typeof data.traits !== 'object' || data.traits === null) return null
+  return data.traits as Record<string, unknown>
+}
+
+// Bulk fetch traits for a set of candidate user ids. Returns a Map so
+// the caller can attach the right blob to each CandidateInput in O(1).
+async function fetchAiTraitsForUsers(
+  admin: SupabaseClient,
+  userIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>()
+  if (userIds.length === 0) return out
+  const { data, error } = await admin
+    .from('profile_ai_traits')
+    .select('user_id, traits')
+    .in('user_id', userIds)
+  if (error || !data) return out
+  for (const row of data) {
+    if (row.user_id && typeof row.traits === 'object' && row.traits !== null) {
+      out.set(row.user_id as string, row.traits as Record<string, unknown>)
+    }
+  }
+  return out
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -298,11 +337,27 @@ serve(async (req) => {
       }
     })
 
+    // 10b. AI traits (PR-AUDIT-D PR 2). Fetch caller's row and bulk-fetch
+    //      every eligible candidate's row in parallel. Each is optional —
+    //      missing rows degrade gracefully to score-contribution 0 in
+    //      scoring.ts. Failure of either fetch is non-fatal: matching
+    //      still proceeds without the AI complement.
+    const candidateUserIds = candidatesForScoring.map((c) => c.id)
+    const [callerAiTraits, candidateAiMap] = await Promise.all([
+      fetchAiTraitsForUser(admin, callerId),
+      fetchAiTraitsForUsers(admin, candidateUserIds),
+    ])
+    for (const c of candidatesForScoring) {
+      c.aiTraits = candidateAiMap.get(c.id) ?? null
+    }
+
     // 11. Rank eligible candidates by score (descending). Each candidate
     //     has already passed pre-filters (no-rematch, not-capped, no
     //     active match) so this pass adds only the hard-filter +
-    //     scoring layer.
-    const ranked = rankCandidates(callerProfile, callerAnswers, candidatesForScoring)
+    //     scoring layer. AI traits enter as a capped ±8 soft complement
+    //     (scoring.ts § aiTraitContribution); zero when either side
+    //     lacks an AI traits row.
+    const ranked = rankCandidates(callerProfile, callerAnswers, callerAiTraits, candidatesForScoring)
     if (ranked.length === 0) return jsonResponse({ status: 'no_candidate' })
 
     // 12. Retry loop: try the top MIN(ranked.length, MAX_ATTEMPTS)
@@ -366,9 +421,62 @@ serve(async (req) => {
         continue
       }
 
+      // On 'created', generate a deterministic icebreaker from the
+      // already-loaded caller + winner data (no extra DB read) and
+      // persist via service-role UPDATE. Two-track observability:
+      //   * persist success → 'icebreaker_persisted' log (matchIdPrefix only)
+      //   * persist failure → 'icebreaker_persist_failed' with code + message
+      //   * generation throw → 'icebreaker_generate_exception'
+      // Match creation NEVER fails because of icebreaker work — the
+      // user still gets their match. The generated hint is captured in
+      // `icebreakerHint` and included in the JSON response as a
+      // best-effort echo so callers can render immediately even if the
+      // DB write was rejected by transient RLS / network.
+      let icebreakerHint: string | null = null
+      if (rpcStatus === 'created') {
+        const newMatchId = (rpcResult as Record<string, unknown>).match_id
+        const winnerForIcebreaker = candidatesForScoring.find((c) => c.id === candidate.candidateId)
+        if (typeof newMatchId === 'string' && winnerForIcebreaker) {
+          try {
+            const hint = generateIcebreaker(
+              { profile: callerProfile as Record<string, unknown>, answers: callerAnswers },
+              { profile: winnerForIcebreaker.profile, answers: winnerForIcebreaker.answers },
+            )
+            icebreakerHint = hint
+            const { error: icebreakerErr } = await admin
+              .from('matches')
+              .update({ icebreaker_hint: hint })
+              .eq('id', newMatchId)
+            if (icebreakerErr) {
+              console.log(JSON.stringify({
+                event: 'icebreaker_persist_failed',
+                matchIdPrefix: newMatchId.slice(0, 8),
+                code: icebreakerErr.code ?? null,
+                message: icebreakerErr.message ?? null,
+              }))
+            } else {
+              console.log(JSON.stringify({
+                event: 'icebreaker_persisted',
+                matchIdPrefix: newMatchId.slice(0, 8),
+              }))
+            }
+          } catch (e) {
+            console.log(JSON.stringify({
+              event: 'icebreaker_generate_exception',
+              message: e instanceof Error ? e.message : 'unknown',
+            }))
+          }
+        }
+      }
+
       // Pass through 'created' / 'monthly_cap_reached' /
-      // 'already_has_active' / 'incomplete_profile' / 'error' verbatim.
-      return jsonResponse(rpcResult)
+      // 'already_has_active' / 'incomplete_profile' / 'error' verbatim,
+      // augmenting 'created' with the generated icebreaker (when we
+      // produced one) so the client has it even if the DB UPDATE missed.
+      const responsePayload = icebreakerHint !== null
+        ? { ...(rpcResult as Record<string, unknown>), icebreaker_hint: icebreakerHint }
+        : rpcResult
+      return jsonResponse(responsePayload)
     }
 
     // Exhausted all attempts with 'candidate_unavailable'. Collapse to

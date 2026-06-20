@@ -397,14 +397,105 @@ function calculatePenalties(
 }
 
 // ---------------------------------------------------------------------------
+// AI-traits soft contribution (PR-AUDIT-D PR 2)
+//
+// Consumes the LLM-derived blob written by analyze-user-traits into
+// public.profile_ai_traits.traits:
+//   { emotional_tone, social_energy, communication_style, ambition_level,
+//     lifestyle_tone, humor_style, key_values[] }
+//
+// Contribution is intentionally bounded:
+//   • Capped at ±8 total (cannot dominate region/intent/values/hard filters)
+//   • Returns 0 silently when either side has no AI traits row
+//     (fast users + deep users with insufficient free text both fall here)
+//   • Reason "וייב דומה גם בהומור וערכים" pushed only when ≥2 dimensions
+//     strongly agreed AND the capped score is ≥+4
+// ---------------------------------------------------------------------------
+
+const EMOTIONAL_TONE_MATRIX: Record<string, Record<string, number>> = {
+  warm:      { warm: 2, energetic: 1, calm: 1, reserved: -2 },
+  energetic: { warm: 1, energetic: 2, calm: 0, reserved: -2 },
+  calm:      { warm: 1, energetic: 0, calm: 2, reserved: 1 },
+  reserved:  { warm: -2, energetic: -2, calm: 1, reserved: 1 },
+};
+
+const HUMOR_STYLE_MATRIX: Record<string, Record<string, number>> = {
+  witty:     { witty: 2, dry: 1, gentle: 1, sarcastic: 0, none: -1 },
+  dry:       { witty: 1, dry: 2, gentle: 0, sarcastic: 1, none: -1 },
+  gentle:    { witty: 1, dry: 0, gentle: 2, sarcastic: -2, none: 0 },
+  sarcastic: { witty: 0, dry: 1, gentle: -2, sarcastic: 2, none: -1 },
+  none:      { witty: -1, dry: -1, gentle: 0, sarcastic: -1, none: 1 },
+};
+
+const COMM_STYLE_MATRIX: Record<string, Record<string, number>> = {
+  direct:     { direct: 2, expressive: 1, thoughtful: 0, minimalist: -2 },
+  expressive: { direct: 1, expressive: 2, thoughtful: 1, minimalist: -1 },
+  thoughtful: { direct: 0, expressive: 1, thoughtful: 2, minimalist: 1 },
+  minimalist: { direct: -2, expressive: -1, thoughtful: 1, minimalist: 2 },
+};
+
+function aiTraitContribution(
+  myAi: Record<string, unknown> | null,
+  candAi: Record<string, unknown> | null,
+): { score: number; strong: boolean } {
+  if (!myAi || !candAi) return { score: 0, strong: false };
+
+  let total = 0;
+  let agreements = 0;
+
+  const myET = asString(myAi.emotional_tone);
+  const candET = asString(candAi.emotional_tone);
+  if (myET && candET && EMOTIONAL_TONE_MATRIX[myET]?.[candET] !== undefined) {
+    const v = EMOTIONAL_TONE_MATRIX[myET][candET];
+    total += v;
+    if (v >= 2) agreements++;
+  }
+
+  const myH = asString(myAi.humor_style);
+  const candH = asString(candAi.humor_style);
+  if (myH && candH && HUMOR_STYLE_MATRIX[myH]?.[candH] !== undefined) {
+    const v = HUMOR_STYLE_MATRIX[myH][candH];
+    total += v;
+    if (v >= 2) agreements++;
+  }
+
+  const myC = asString(myAi.communication_style);
+  const candC = asString(candAi.communication_style);
+  if (myC && candC && COMM_STYLE_MATRIX[myC]?.[candC] !== undefined) {
+    const v = COMM_STYLE_MATRIX[myC][candC];
+    total += v;
+    if (v >= 2) agreements++;
+  }
+
+  // key_values: case-insensitive token overlap, capped at +3.
+  const myKV = asStringArray(myAi.key_values).map(s => s.toLowerCase().trim()).filter(Boolean);
+  const candKVSet = new Set(asStringArray(candAi.key_values).map(s => s.toLowerCase().trim()).filter(Boolean));
+  if (myKV.length > 0 && candKVSet.size > 0) {
+    let overlap = 0;
+    for (const v of myKV) if (candKVSet.has(v)) overlap++;
+    if (overlap > 0) {
+      const v = Math.min(3, overlap);
+      total += v;
+      if (overlap >= 2) agreements++;
+    }
+  }
+
+  const capped = Math.max(-8, Math.min(8, total));
+  const strong = agreements >= 2 && capped >= 4;
+  return { score: capped, strong };
+}
+
+// ---------------------------------------------------------------------------
 // Main scorer (port of calculateCompatibility, breakdown emission removed)
 // ---------------------------------------------------------------------------
 
 function calculateCompatibility(
   myProfile: Record<string, unknown>,
   myAnswers: Record<string, unknown>,
+  myAi: Record<string, unknown> | null,
   candidateProfile: Record<string, unknown>,
   candidateAnswers: Record<string, unknown>,
+  candidateAi: Record<string, unknown> | null,
   depth: 'fast' | 'deep',
 ): { score: number; reasons: string[] } {
   let fastScore = 0;
@@ -592,6 +683,15 @@ function calculateCompatibility(
   //    from the trait-penalty -25 pool.
   finalScore = finalScore + heightSoftPenalty(myProfile, candidateProfile);
 
+  // 9. AI traits soft complement (capped ±8). Silent zero when either
+  //    side lacks a profile_ai_traits row — fast users and deep users
+  //    with insufficient free text both land here without breakage. A
+  //    user-facing reason is pushed only when the agreement is strong
+  //    (≥2 dimensions strongly aligned AND capped score ≥+4).
+  const aiContribution = aiTraitContribution(myAi, candidateAi);
+  finalScore = finalScore + aiContribution.score;
+  if (aiContribution.strong) reasons.push('וייב דומה גם בהומור וערכים');
+
   // Trait-based penalties (rule-based, closed-answer only)
   const { penalty, caveatReason } = calculatePenalties(myAnswers, candidateAnswers);
   finalScore = finalScore + penalty;
@@ -618,6 +718,11 @@ export interface CandidateInput {
   id: string;
   profile: Record<string, unknown>;
   answers: Record<string, unknown>;
+  // Optional LLM-derived traits (public.profile_ai_traits.traits).
+  // Null/undefined when the user is a fast onboarding user or a deep
+  // user with insufficient free text. aiTraitContribution returns 0
+  // silently in that case.
+  aiTraits?: Record<string, unknown> | null;
 }
 
 export interface ScoredCandidate {
@@ -643,6 +748,7 @@ export interface ScoredCandidate {
 export function rankCandidates(
   callerProfile: Record<string, unknown>,
   callerAnswers: Record<string, unknown>,
+  callerAiTraits: Record<string, unknown> | null,
   candidates: CandidateInput[],
 ): ScoredCandidate[] {
   const myGender = asString(callerProfile.gender);
@@ -680,8 +786,10 @@ export function rankCandidates(
     const { score, reasons } = calculateCompatibility(
       callerProfile,
       callerAnswers,
+      callerAiTraits,
       c.profile,
       c.answers,
+      c.aiTraits ?? null,
       depth,
     );
 
@@ -702,6 +810,8 @@ export function pickBestCandidate(
   callerAnswers: Record<string, unknown>,
   candidates: CandidateInput[],
 ): ScoredCandidate | null {
-  const ranked = rankCandidates(callerProfile, callerAnswers, candidates);
+  // Backwards-compat wrapper: no AI traits. Use rankCandidates directly
+  // from index.ts when AI traits are available.
+  const ranked = rankCandidates(callerProfile, callerAnswers, null, candidates);
   return ranked.length > 0 ? ranked[0] : null;
 }

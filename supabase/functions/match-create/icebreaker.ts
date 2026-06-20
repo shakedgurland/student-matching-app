@@ -1,0 +1,203 @@
+// supabase/functions/match-create/icebreaker.ts
+//
+// Deterministic, server-side icebreaker generator. No LLM in the
+// match-create hot path — sub-millisecond, free, deterministic, easy to
+// QA copy. A future PR can swap the inner generator for an LLM-backed
+// implementation without changing the call site or the persistence target
+// (matches.icebreaker_hint).
+//
+// Priority ladder (top wins; first non-empty result is cleaned + returned):
+//   1. peer's conversation_starter (explicitly a conversation-opening
+//      field; safe to quote with bounded truncation)
+//   2. shared hobby (prefer shared_hobbies_priority intersection;
+//      fall back to plain hobbies intersection)
+//   3. same preferred_first_date (excluding 'connection_matters')
+//   4. shared relationship_top_values (excluding 'attraction' / 'other')
+//   5. same university + same faculty
+//   6. same university (different faculty)
+//   7. same intent_type
+//   8. generic warm fallback
+//
+// Privacy rules enforced here (mirror the PR contract):
+//   • partner_should_know_text is NEVER echoed.
+//   • green_flag is NEVER echoed in v1.
+//   • dealbreakers are NEVER referenced.
+//   • height / age / religion / region / location / body / appearance
+//     are NEVER mentioned.
+//   • No emojis. cleanIcebreaker strips control chars and collapses
+//     whitespace; the final string always ends in '?'.
+
+import {
+  HOBBY_LABELS_HE,
+  DATE_LABELS_HE,
+  VALUE_LABELS_HE,
+  INTENT_LABELS_HE,
+} from "./labels.ts";
+
+const ICEBREAKER_MAX_LEN = 120;
+const QUOTE_MAX_LEN = 60;
+const FALLBACK = "אז... איזו שאלה היית רוצה שאני אענה עליה עכשיו?";
+
+type Profile = Record<string, unknown>;
+type Answers = Record<string, unknown>;
+
+export interface IcebreakerParty {
+  profile: Profile;
+  answers: Answers;
+}
+
+function asString(v: unknown): string {
+  return typeof v === 'string' ? v : '';
+}
+
+function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+function peerFirstName(profile: Profile): string {
+  const full = asString(profile.full_name).trim();
+  if (!full) return '';
+  return full.split(/\s+/)[0];
+}
+
+function quoteSnippet(text: string): string {
+  const s = text.replace(/\s+/g, ' ').trim();
+  if (s.length === 0) return '';
+  if (s.length <= QUOTE_MAX_LEN) return s;
+  return s.slice(0, QUOTE_MAX_LEN - 1).trimEnd() + '…';
+}
+
+// First intersection between two arrays that has a non-empty label in the
+// provided dictionary. Returns the canonical code (caller maps to label).
+function firstSharedCode(
+  a: unknown,
+  b: unknown,
+  dict: Record<string, string>,
+): string | null {
+  const aArr = asStringArray(a);
+  const bSet = new Set(asStringArray(b));
+  for (const code of aArr) {
+    if (bSet.has(code) && dict[code]) return code;
+  }
+  return null;
+}
+
+// Tier 1 — peer's conversation_starter, quoted (the field is explicitly
+// for opening conversation, so a bounded direct echo is intended).
+function tierConversationStarter(peer: IcebreakerParty): string {
+  const raw = asString(peer.answers.conversation_starter);
+  if (raw.trim().length < 6) return '';
+  const quote = quoteSnippet(raw);
+  if (!quote) return '';
+  const name = peerFirstName(peer.profile);
+  return name
+    ? `${name} השאיר/ה לך פרט קטן: "${quote}". מה הסיפור?`
+    : `השאירו לך פרט קטן: "${quote}". מה הסיפור?`;
+}
+
+// Tier 2 — shared hobby. Prefer the intersection of shared_hobbies_priority
+// (both users said this hobby matters), fall back to plain hobbies overlap.
+function tierSharedHobby(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const callerPriority = caller.answers.shared_hobbies_priority;
+  const peerPriority = peer.answers.shared_hobbies_priority;
+  let code = firstSharedCode(callerPriority, peerPriority, HOBBY_LABELS_HE);
+  if (!code) {
+    const callerHobbies = caller.profile.hobbies ?? caller.answers.hobbies;
+    const peerHobbies = peer.profile.hobbies ?? peer.answers.hobbies;
+    code = firstSharedCode(callerHobbies, peerHobbies, HOBBY_LABELS_HE);
+  }
+  if (!code) return '';
+  return `שניכם סימנתם ${HOBBY_LABELS_HE[code]}. מה הכי תופס אותך בזה?`;
+}
+
+// Tier 3 — same preferred_first_date.
+function tierSharedFirstDate(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const a = asString(caller.answers.preferred_first_date);
+  const b = asString(peer.answers.preferred_first_date);
+  if (!a || a !== b) return '';
+  const label = DATE_LABELS_HE[a];
+  if (!label) return '';
+  return `שניכם רוצים ${label} בדייט הראשון. מי שולח/ת הצעת מקום?`;
+}
+
+// Tier 4 — shared relationship_top_values overlap.
+function tierSharedTopValue(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const code = firstSharedCode(
+    caller.answers.relationship_top_values,
+    peer.answers.relationship_top_values,
+    VALUE_LABELS_HE,
+  );
+  if (!code) return '';
+  return `שניכם שמתם ${VALUE_LABELS_HE[code]} בראש הרשימה. תספר/י סיפור קצר על זה?`;
+}
+
+// Tier 5 — same university AND same faculty (no labels needed; phrased to
+// avoid leading-preposition inflection problems with Hebrew university
+// names).
+function tierSameFaculty(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const uniA = asString(caller.profile.university);
+  const uniB = asString(peer.profile.university);
+  const facA = asString(caller.profile.faculty);
+  const facB = asString(peer.profile.faculty);
+  if (uniA && uniB && facA && facB && uniA === uniB && facA === facB) {
+    return 'אותו מוסד, אותה פקולטה. מי תפס/ה איזה מרצה?';
+  }
+  return '';
+}
+
+// Tier 6 — same university, different faculty.
+function tierSameCampus(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const uniA = asString(caller.profile.university);
+  const uniB = asString(peer.profile.university);
+  if (uniA && uniB && uniA === uniB) {
+    return 'אותו קמפוס. איפה הקפה הכי טוב שם?';
+  }
+  return '';
+}
+
+// Tier 7 — same intent_type.
+function tierSameIntent(caller: IcebreakerParty, peer: IcebreakerParty): string {
+  const a = asString(caller.answers.intent_type);
+  const b = asString(peer.answers.intent_type);
+  if (!a || a !== b) return '';
+  const label = INTENT_LABELS_HE[a];
+  if (!label) return '';
+  return `שניכם מחפשים ${label}. מה הכי חשוב שתדע/י עליי בהתחלה?`;
+}
+
+// Final cleanup. Always returns a non-empty Hebrew question terminated
+// with '?'. Strips control chars, collapses whitespace, caps length.
+export function cleanIcebreaker(text: string): string {
+  let s = (text || '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) s = FALLBACK;
+  if (s.length > ICEBREAKER_MAX_LEN) {
+    s = s.slice(0, ICEBREAKER_MAX_LEN - 1).trimEnd();
+    s = s.replace(/[.,…!?\s]+$/u, '');
+  }
+  if (!s.endsWith('?')) s = s + '?';
+  return s;
+}
+
+// Public entry. Walks the priority ladder, takes the first non-empty
+// result, runs it through cleanIcebreaker. Never returns empty.
+export function generateIcebreaker(
+  caller: IcebreakerParty,
+  peer: IcebreakerParty,
+): string {
+  const candidates = [
+    tierConversationStarter(peer),
+    tierSharedHobby(caller, peer),
+    tierSharedFirstDate(caller, peer),
+    tierSharedTopValue(caller, peer),
+    tierSameFaculty(caller, peer),
+    tierSameCampus(caller, peer),
+    tierSameIntent(caller, peer),
+  ];
+  for (const c of candidates) {
+    if (c && c.trim().length > 0) return cleanIcebreaker(c);
+  }
+  return cleanIcebreaker(FALLBACK);
+}
