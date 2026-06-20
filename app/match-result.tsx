@@ -232,7 +232,18 @@ export default function MatchResultScreen() {
 
   const expiresAt = new Date(match.expires_at).getTime();
   const msLeft = Number.isFinite(expiresAt) ? expiresAt - now : 0;
-  const expired = msLeft <= 0;
+  // Status-aware lifecycle flags. After migration 023:
+  //   'active'        — 72h timer is meaningful; expiry blocks chat.
+  //   'chat_started'  — first message landed (DB trigger flipped status);
+  //                     the 72h timer is irrelevant, chat is unlocked,
+  //                     do NOT show a misleading countdown.
+  //   'expired' / 'unmatched' — terminal; no chat action.
+  const isChatStarted = match.status === 'chat_started';
+  const isClosed = match.status === 'expired' || match.status === 'unmatched';
+  const isCountdownExpired = msLeft <= 0;
+  // CTA disabled when the match is terminal OR active-with-elapsed-timer.
+  // chat_started ignores the timer (chat already happening).
+  const ctaDisabled = isClosed || (match.status === 'active' && isCountdownExpired);
 
   const displayName = (peer.full_name || peer.username || 'ההתאמה שלך').trim();
   const age = peer.birth_year ? new Date().getFullYear() - peer.birth_year : null;
@@ -370,28 +381,47 @@ export default function MatchResultScreen() {
               styles.timerCard,
               { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
             ]}>
-            <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-              {expired ? 'ההתאמה הסתיימה' : 'נותר זמן להתחיל שיחה'}
-            </ThemedText>
-            <ThemedText
-              style={[
-                styles.timerValue,
-                { color: expired ? dynamicColors.textLight : UI_COLORS.primary },
-              ]}>
-              {formatCountdown(msLeft)}
-            </ThemedText>
+            {isChatStarted ? (
+              <>
+                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
+                  השיחה כבר התחילה
+                </ThemedText>
+                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight, marginTop: 4 }]}>
+                  אפשר להמשיך לכתוב מתי שמתאים.
+                </ThemedText>
+              </>
+            ) : isClosed ? (
+              <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
+                ההתאמה הסתיימה
+              </ThemedText>
+            ) : (
+              <>
+                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
+                  {isCountdownExpired ? 'ההתאמה הסתיימה' : 'נותר זמן להתחיל שיחה'}
+                </ThemedText>
+                <ThemedText
+                  style={[
+                    styles.timerValue,
+                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
+                  ]}>
+                  {formatCountdown(msLeft)}
+                </ThemedText>
+              </>
+            )}
           </View>
 
           <View style={styles.actions}>
             <TouchableOpacity
               style={[
                 styles.primaryButton,
-                { backgroundColor: expired ? dynamicColors.textLight : UI_COLORS.primary },
+                { backgroundColor: ctaDisabled ? dynamicColors.textLight : UI_COLORS.primary },
               ]}
               onPress={openChat}
-              disabled={expired}
+              disabled={ctaDisabled}
               activeOpacity={0.8}>
-              <ThemedText style={styles.primaryButtonText}>פתח/י צ׳אט</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>
+                {isChatStarted ? 'המשך לצ׳אט' : 'פתח/י צ׳אט'}
+              </ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryButton} onPress={openFeedback}>
