@@ -117,7 +117,7 @@ export default function MatchFeedbackScreen() {
     setSubmitting(false);
 
     if (result.success) {
-      Alert.alert('תודה!', 'המשוב שלך התקבל ועוזר לנו לשפר את ההתאמות הבאות.', [
+      Alert.alert('תודה!', 'המשוב שלך נשמר באופן פרטי. תודה שהקדשת רגע.', [
         { text: 'חזרה', onPress: () => router.back() }
       ]);
     } else {
@@ -161,7 +161,7 @@ export default function MatchFeedbackScreen() {
           <View style={styles.header}>
             <ThemedText style={[styles.title, { color: dynamicColors.text }]}>איך ההתאמה הייתה עד עכשיו</ThemedText>
             <ThemedText style={[styles.subtitle, { color: dynamicColors.textLight }]}>
-              המידע נשמר למערכת בלבד ומשמש לשיפור התאמות עתידיות.
+              המידע נשמר למערכת בלבד, כדי שנוכל לשפר התאמות עתידיות.
             </ThemedText>
           </View>
 
@@ -285,6 +285,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
   ratingContainer: {
     flexDirection: 'row-reverse',
