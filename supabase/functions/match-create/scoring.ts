@@ -1,22 +1,58 @@
 // supabase/functions/match-create/scoring.ts
 //
-// Port of lib/matching.ts scoring helpers for Deno (Supabase Edge Functions).
+// Pure scoring helpers used by the match-create Edge Function. No Supabase
+// calls, no I/O. The public entry points are `rankCandidates` and
+// `pickBestCandidate`. The orchestrator (index.ts) supplies caller +
+// candidate profile/answers; this module applies hard filters and
+// computes the compatibility score.
 //
-// Scope: PURE FUNCTIONS only. No Supabase calls, no I/O. The function
-// exposes a single orchestrator `pickBestCandidate(callerProfile,
-// callerAnswers, candidates)` that:
-//   1. Applies hard filters (gender bi-directional, height must_have).
-//   2. Computes the compatibility score for each passing candidate.
-//   3. Returns the highest-scored candidate, or null if none qualify.
+// Active scoring matrix (after PR-AUDIT-D — V2-aligned)
+// ─────────────────────────────────────────────────────
+// Hard filters in rankCandidates:
+//   • gender (bi-directional)
+//   • height must_have (bi-directional; reads
+//     profile.height_preference_importance + profile.min_preferred_height_cm)
 //
-// What is intentionally NOT ported here:
-//   • findAndCreateBestMatch — orchestration (auth, DB reads, RPC call)
-//     belongs to index.ts.
-//   • The dev-only ScoreBreakdown emission gated by __DEV__ in matching.ts
-//     — debug-only; we don't return it from the Edge Function.
+// Soft scoring in calculateCompatibility (fast contributions, every user):
+//   • intentCompatibility(intent_type)                ±10/±5/0
+//   • paceCompatibility(relationship_pace)            ±10/±5/0
+//   • conflict_style match                            +7
+//   • hobbies overlap (≤15) + shared_hobbies_priority (≤5) + city (+3)
+//   • region (scoreRegionCompatibility)               +0..10
+//   • ageScore (preferred_age_min/max bi-directional) +0/+5/+10
+//   • preferred_first_date match                      +10
+//   • studies: same university +5 (+3 if matchPref); same faculty +5 (+3); same year +3
+//   • religion: same type +5; same level +3 (adjacent +1)
 //
-// Sync source: lib/matching.ts. If the client-side scoring changes,
-// mirror the change here.
+// Soft scoring (deep only, capped at 50 before final blend):
+//   • spontaneity / elevatorScenario / karaokeChance / familiarFace      +2.5 each
+//   • perfect_date / similarity_preference                                +5 each
+//   • derived-trait closeness across 12 traits                            ≤~12
+//   • relationship_top_values overlap                                     ≤6
+//   • relationship_strengths overlap                                      ≤4
+//   • partner_should_feel overlap                                         ≤3
+//   • love_languages array overlap                                        ≤3
+//
+// Soft penalty (always applied, NOT capped against trait penalty pool):
+//   • height 'important' threshold mismatch                               flat −8 total
+//     (cap is deliberate — bi-directional mismatch does NOT stack to −16;
+//      height is framed as optional/respectful, not central to scoring)
+//
+// Trait-based penalties (capped at −25 total, separate from height soft):
+//   • partner_qualities ↔ candidate traits below threshold
+//   • dealbreakers      ↔ candidate traits below threshold
+//   • religion_type     ↔ religion_importance
+//   • religion_level    ↔ religious_level_importance
+//
+// Removed in PR-AUDIT-D (V2 questionnaire dropped these inputs):
+//   • conversation_style, compromise_area  (legacy commScore branches)
+//   • respect_priority, interest_signals   (legacy prefScore branches)
+//   • money_style, love_language singular  (legacy deep branches; replaced
+//                                           by love_languages array)
+//   • about_me / relationship_strengths_text free-text bonus
+//
+// lib/matching.ts is now a thin Edge Function wrapper — no client scoring.
+// This file is the single source of truth.
 
 import {
   deriveTraits,
@@ -92,6 +128,46 @@ function countOverlap(a: unknown, b: unknown): number {
 function normalizeCity(s: unknown): string {
   if (typeof s !== 'string') return '';
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Bi-directional soft penalty for the 'important' height preference tier.
+// 'must_have' is hard-filtered upstream in rankCandidates, so this function
+// only fires when a user picked 'important' AND supplied a min threshold
+// AND the candidate's height is below it.
+//
+// Capped at -8 TOTAL — height is deliberately framed as optional and
+// respectful in the product, so a mutual important-mismatch still costs at
+// most -8, not -16. Either side triggering fires the same flat penalty;
+// both sides triggering does not double it. The cap is intentional, not an
+// accident of the math.
+//
+// No compatibility_reasons entry is added here under any branch — we never
+// surface a height-related shame line in the user-facing reasons.
+function heightSoftPenalty(
+  myProfile: Record<string, unknown>,
+  candidateProfile: Record<string, unknown>,
+): number {
+  const myPref = asString(myProfile.height_preference_importance);
+  const myMin = typeof myProfile.min_preferred_height_cm === 'number'
+    ? myProfile.min_preferred_height_cm
+    : 0;
+  const candHeight = typeof candidateProfile.height_cm === 'number'
+    ? candidateProfile.height_cm
+    : 0;
+  const myTriggers =
+    myPref === 'important' && myMin > 0 && candHeight > 0 && candHeight < myMin;
+
+  const candPref = asString(candidateProfile.height_preference_importance);
+  const candMin = typeof candidateProfile.min_preferred_height_cm === 'number'
+    ? candidateProfile.min_preferred_height_cm
+    : 0;
+  const myHeight = typeof myProfile.height_cm === 'number'
+    ? myProfile.height_cm
+    : 0;
+  const candTriggers =
+    candPref === 'important' && candMin > 0 && myHeight > 0 && myHeight < candMin;
+
+  return (myTriggers || candTriggers) ? -8 : 0;
 }
 
 function scoreRegionCompatibility(regionA: string, regionB: string): number {
@@ -342,12 +418,11 @@ function calculateCompatibility(
   if (intentPaceScore >= 10) reasons.push('יש לכם כוונות וקצב היכרות דומים');
   fastScore += intentPaceScore;
 
-  // 2. Communication & Style (20 pts)
+  // 2. Communication & Style (7 pts — conflict_style is the only V2-collected
+  //    input. conversation_style and compromise_area were dropped from V2.)
   let commScore = 0;
   if (bothMeaningfulAndEqual(myAnswers.conflict_style, candidateAnswers.conflict_style)) commScore += 7;
-  if (bothMeaningfulAndEqual(myAnswers.conversation_style, candidateAnswers.conversation_style)) commScore += 7;
-  if (bothMeaningfulAndEqual(myAnswers.compromise_area, candidateAnswers.compromise_area)) commScore += 6;
-  if (commScore >= 13) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
+  if (commScore >= 7) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
   fastScore += commScore;
 
   // 3. Interests & Region/City
@@ -383,11 +458,10 @@ function calculateCompatibility(
   if (ageScore >= 10) reasons.push('שניכם בטווח הגילאים המועדף');
   fastScore += ageScore;
 
-  // 5. Preferences (20 pts)
+  // 5. Preferences (10 pts — preferred_first_date is the only V2-collected
+  //    input. respect_priority and interest_signals were dropped from V2.)
   let prefScore = 0;
   if (bothMeaningfulAndEqual(myAnswers.preferred_first_date, candidateAnswers.preferred_first_date)) prefScore += 10;
-  if (bothMeaningfulAndEqual(myAnswers.respect_priority, candidateAnswers.respect_priority)) prefScore += 5;
-  if (bothMeaningfulAndEqual(myAnswers.interest_signals, candidateAnswers.interest_signals)) prefScore += 5;
   if (prefScore >= 10) reasons.push('יש לכם העדפות דומות לחיבור ראשוני');
   fastScore += prefScore;
 
@@ -450,8 +524,8 @@ function calculateCompatibility(
     if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) legacyDeepSum += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) legacyDeepSum += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) legacyDeepSum += 2.5;
-    if (bothMeaningfulAndEqual(myAnswers.money_style, candidateAnswers.money_style)) legacyDeepSum += 5;
-    if (bothMeaningfulAndEqual(myAnswers.love_language, candidateAnswers.love_language)) legacyDeepSum += 5;
+    // money_style and the singular love_language were dropped from V2; the
+    // love_languages array overlap is scored below as loveLangScore.
     if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) legacyDeepSum += 5;
     if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) legacyDeepSum += 5;
 
@@ -489,13 +563,14 @@ function calculateCompatibility(
       reasons.push('יש לכם וייב דומה בספונטניות ובחברתיות');
     }
 
-    let freeTextBonus = 0;
-    if (hasMeaningfulAnswer(myAnswers.about_me) && hasMeaningfulAnswer(candidateAnswers.about_me)) freeTextBonus += 1;
-    if (hasMeaningfulAnswer(myAnswers.relationship_strengths_text) && hasMeaningfulAnswer(candidateAnswers.relationship_strengths_text)) freeTextBonus += 1;
+    // about_me and relationship_strengths_text are not collected in V2 —
+    // both bonuses were always 0 in the new flow. PR 2 will introduce
+    // analyze-user-traits consumption of the real V2 free-text fields
+    // (partner_should_know_text, conversation_starter, green_flag).
 
     const totalDeepBeforeCap =
       legacyDeepSum + traitClosenessScore + topValuesScore +
-      strengthsScore + shouldFeelScore + loveLangScore + freeTextBonus;
+      strengthsScore + shouldFeelScore + loveLangScore;
 
     if (totalDeepBeforeCap >= 25) reasons.push('יש גם התאמה בשאלות העומק');
     deepScore = Math.min(50, totalDeepBeforeCap);
@@ -508,6 +583,14 @@ function calculateCompatibility(
   } else {
     finalScore = fastScore;
   }
+
+  // 8. Height soft preference ('important' tier only). Flat -8 if either
+  //    side's threshold is missed; -8 still if both sides' thresholds are
+  //    missed (cap is deliberate, not additive). must_have is hard-
+  //    filtered in rankCandidates, so candidates that reach here either
+  //    passed the threshold or both sides lack must_have. Kept separate
+  //    from the trait-penalty -25 pool.
+  finalScore = finalScore + heightSoftPenalty(myProfile, candidateProfile);
 
   // Trait-based penalties (rule-based, closed-answer only)
   const { penalty, caveatReason } = calculatePenalties(myAnswers, candidateAnswers);

@@ -44,6 +44,9 @@ export default function MatchSelectionScreen() {
   // fetchCurrentMatch so a returning user (new month / new session) sees the
   // default empty state again.
   const [capReached, setCapReached] = useState(false);
+  // 'fast' | 'deep' | null. Drives the fast-only tip card at the bottom of
+  // the screen. Fetched once on mount alongside fetchCurrentMatch.
+  const [onboardingMode, setOnboardingMode] = useState<string | null>(null);
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -65,6 +68,19 @@ export default function MatchSelectionScreen() {
       setCapReached(false);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Fetch self's onboarding_mode in parallel with the matches query so
+      // the fast-only tip card can gate without an extra render pass.
+      // Failure is non-fatal: tip card just stays hidden if this errors.
+      supabase
+        .from('profiles')
+        .select('onboarding_mode')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          const mode = typeof data?.onboarding_mode === 'string' ? data.onboarding_mode : null;
+          setOnboardingMode(mode);
+        });
 
       // Fetch the user's currently OPEN match. After migration 023, both
       // 'active' (timer running, no chat yet) and 'chat_started' (first
@@ -365,12 +381,21 @@ export default function MatchSelectionScreen() {
             </View>
           )}
 
-          <View style={styles.tipContainer}>
-             <ThemedText style={[styles.tipTitle, { color: dynamicColors.text }]}>טיפ קטן</ThemedText>
-             <ThemedText style={[styles.tipText, { color: dynamicColors.textLight }]}>
-               פרופיל עם תמונה וביו מעניין מקבל התאמות מדויקות יותר. כדאי לוודא שהפרופיל שלך מעודכן!
-             </ThemedText>
-          </View>
+          {/*
+            Tip card is gated to fast-onboarding users. Deep users have
+            already done the long form; the encouragement isn't actionable
+            for them. Stays hidden until onboardingMode resolves (avoids a
+            flash of the wrong copy on cold start).
+           */}
+          {onboardingMode === 'fast' && (
+            <View style={styles.tipContainer}>
+               <ThemedText style={[styles.tipTitle, { color: dynamicColors.text }]}>טיפ קטן</ThemedText>
+               <ThemedText style={[styles.tipText, { color: dynamicColors.textLight }]}>
+                 ככל שהשאלון מלא יותר, ההתאמה מדויקת יותר.{'\n'}
+                 כן, גם השאלות הקצת מוזרות שם בכוונה 🙂
+               </ThemedText>
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>

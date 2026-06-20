@@ -110,10 +110,20 @@ const INTERESTED_IN_OPTIONS = [
   { label: 'לא משנה לי', value: 'any' }
 ];
 
-const HEIGHT_PREF_OPTIONS = [
+// V2 height-preference options (PR-AUDIT-D). 'important' requires
+// migration 025 to be applied first — until then, CHECK violates with
+// 23514 on submit.
+//
+//   none           → no algorithmic effect, no min asked.
+//   nice_to_have   → stored only, no scoring effect, no min asked.
+//   important      → soft penalty in scoring when candidate < min height.
+//                    Min height required.
+//   must_have      → hard filter in RPC + scoring. Min height required.
+const HEIGHT_PREF_OPTIONS_V2 = [
   { label: 'לא חשוב לי', value: 'none' },
-  { label: 'נחמד אם כן, אבל לא חובה', value: 'nice_to_have' },
-  { label: 'חשוב לי מאוד', value: 'must_have' }
+  { label: 'נחמד אם מתאים, אבל לא קריטי', value: 'nice_to_have' },
+  { label: 'חשוב לי', value: 'important' },
+  { label: 'חשוב לי מאוד', value: 'must_have' },
 ];
 
 const REGION_OPTIONS = [
@@ -642,7 +652,9 @@ export default function QuestionnaireScreen() {
     conversation_style: '',
     compromise_area: '',
     interestedInGenders: [] as string[],
-    heightPreferenceImportance: 'none',
+    // Initial blank so onboarding validation forces a real answer instead
+    // of silently treating "no answer" as "no preference".
+    heightPreferenceImportance: '',
     minPreferredHeightCm: '',
     preferred_age_min: '18',
     preferred_age_max: '45',
@@ -982,7 +994,19 @@ export default function QuestionnaireScreen() {
           logEvent('photo_upload_succeeded', { screen: 'Questionnaire', metadata: { index: i } });
         }
 
-        // 3. Update profile
+        // 3. Update profile.
+        //    min_preferred_height_cm is nulled out when the user picked
+        //    none/nice_to_have (no threshold) — keeps the DB column from
+        //    holding a stale threshold from a prior answer the user
+        //    bounced away from. Migration 025 must already be applied for
+        //    'important' to satisfy the CHECK constraint.
+        const heightPrefForDb = formData.heightPreferenceImportance || null;
+        const minHeightForDb =
+          (formData.heightPreferenceImportance === 'important' ||
+            formData.heightPreferenceImportance === 'must_have') &&
+          formData.minPreferredHeightCm
+            ? parseInt(formData.minPreferredHeightCm)
+            : null;
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -992,6 +1016,8 @@ export default function QuestionnaireScreen() {
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
+            height_preference_importance: heightPrefForDb,
+            min_preferred_height_cm: minHeightForDb,
             interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
@@ -1014,12 +1040,24 @@ export default function QuestionnaireScreen() {
         logFormSubmit('Questionnaire', 'onboarding_submitted', { mode: finalMode });
         router.replace('/(tabs)/my-profile');
       } else {
-        // Edit mode
+        // Edit mode. Same null-discipline for min_preferred_height_cm as
+        // the new-user branch above — a returning user who switches from
+        // 'important' back to 'nice_to_have' should clear their old
+        // threshold, not silently keep it.
+        const heightPrefForDb = formData.heightPreferenceImportance || null;
+        const minHeightForDb =
+          (formData.heightPreferenceImportance === 'important' ||
+            formData.heightPreferenceImportance === 'must_have') &&
+          formData.minPreferredHeightCm
+            ? parseInt(formData.minPreferredHeightCm)
+            : null;
         const updateData: any = {
             full_name: formData.firstName.trim(),
             birth_year: formData.age ? new Date().getFullYear() - parseInt(formData.age) : null,
             gender: formData.gender,
             height_cm: formData.heightCm ? parseInt(formData.heightCm) : null,
+            height_preference_importance: heightPrefForDb,
+            min_preferred_height_cm: minHeightForDb,
             interested_in_genders: formData.interestedInGenders,
             university: formData.university,
             faculty: formData.faculty,
@@ -1201,7 +1239,9 @@ export default function QuestionnaireScreen() {
         !formData.gender ||
         !formData.age ||
         !formData.heightCm ||
+        !formData.heightPreferenceImportance ||
         !formData.city.trim() ||
+        !formData.region ||
         !formData.religion ||
         !formData.religion_type ||
         !formData.religion_importance ||
@@ -1211,6 +1251,20 @@ export default function QuestionnaireScreen() {
         logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'step1_basics' } });
         Alert.alert('שדות חובה', 'יש למלא את כל השדות בשלב זה');
         return;
+      }
+      // Min height is required only when the user expressed a real
+      // threshold-bearing preference. Bounds match the DB CHECK from
+      // migration 005 (120-230).
+      if (
+        formData.heightPreferenceImportance === 'important' ||
+        formData.heightPreferenceImportance === 'must_have'
+      ) {
+        const minH = parseInt(formData.minPreferredHeightCm);
+        if (isNaN(minH) || minH < 120 || minH > 230) {
+          logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'min_preferred_height_cm' } });
+          Alert.alert('גובה מינימלי', 'יש להזין גובה מינימלי תקין (בין 120 ל-230 ס״מ)');
+          return;
+        }
       }
     }
 
@@ -1426,6 +1480,22 @@ export default function QuestionnaireScreen() {
       </View>
 
       <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>האם גובה הוא משהו שחשוב לך בהתאמה?</ThemedText>
+        {renderEnumSelect('heightPreferenceImportance', HEIGHT_PREF_OPTIONS_V2)}
+        {(formData.heightPreferenceImportance === 'important' ||
+          formData.heightPreferenceImportance === 'must_have') && (
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="גובה מינימלי מועדף (בס״מ) — למשל 170"
+            placeholderTextColor={dynamicColors.textLight}
+            keyboardType="number-pad"
+            value={formData.minPreferredHeightCm}
+            onChangeText={(v) => setFormData({ ...formData, minPreferredHeightCm: v })}
+          />
+        )}
+      </View>
+
+      <View style={styles.formGroup}>
         <ThemedText style={styles.label}>עיר מגורים</ThemedText>
         <TextInput
           style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
@@ -1433,6 +1503,11 @@ export default function QuestionnaireScreen() {
           value={formData.city}
           onChangeText={(v) => setFormData({ ...formData, city: v })}
         />
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>אזור מגורים בארץ</ThemedText>
+        {renderEnumSelect('region', REGION_OPTIONS)}
       </View>
 
       <View style={styles.formGroup}>
