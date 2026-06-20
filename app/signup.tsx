@@ -95,16 +95,24 @@ const BrandMark = ({ size = 60, showSpark = true }: { size?: number; showSpark?:
 };
 
 export default function SignupScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
   const handleSignup = async () => {
+    const trimmedName = name.trim();
     const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
+      Alert.alert('שגיאה', 'יש להזין שם');
+      return;
+    }
 
     if (!trimmedEmail) {
       Alert.alert('שגיאה', 'יש להזין אימייל');
@@ -134,9 +142,13 @@ export default function SignupScreen() {
     setLoading(true);
 
     try {
+      // Pass full_name into auth.users.raw_user_meta_data so it survives
+      // the email-confirm round-trip. The login flow backfills profiles
+      // .full_name from this metadata if needed.
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
+        options: { data: { full_name: trimmedName } },
       });
 
       if (error) {
@@ -145,8 +157,23 @@ export default function SignupScreen() {
       }
 
       if (data.session) {
+        // Session immediately available — UPDATE profiles.full_name now.
+        // The handle_new_user trigger has already created the profiles row.
+        // RLS allows this because auth.uid() == new user id. We don't fail
+        // signup if this UPDATE errors — the login backfill will retry.
+        const userId = data.session.user.id;
+        const { error: nameError } = await supabase
+          .from('profiles')
+          .update({ full_name: trimmedName })
+          .eq('id', userId);
+        if (nameError) {
+          console.log('Failed to set full_name on signup; login backfill will retry:', nameError);
+        }
         router.replace('/questionnaire');
       } else {
+        // Email confirmation required; no session yet so we cannot UPDATE
+        // profiles directly. full_name lives in user_metadata and is
+        // backfilled by login.tsx on first successful sign-in.
         Alert.alert(
           'אימות אימייל נדרש',
           'נשלח אליך מייל אימות. אשרי אותו ואז התחברי.',
@@ -184,6 +211,20 @@ export default function SignupScreen() {
 
             <View style={styles.formSection}>
               <TextInput
+                style={styles.input}
+                placeholder="שם"
+                placeholderTextColor={UI_COLORS.placeholder}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                textAlign="right"
+                returnKeyType="next"
+                onSubmitEditing={() => emailRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+
+              <TextInput
+                ref={emailRef}
                 style={styles.input}
                 placeholder="אימייל אקדמי (סיומת ‎.ac.il‎)"
                 placeholderTextColor={UI_COLORS.placeholder}

@@ -139,7 +139,7 @@ export default function MyProfileScreen() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, bio, faculty, university, avatar_url, avatar_storage_path')
+        .select('id, username, full_name, bio, faculty, university, avatar_url, avatar_storage_path')
         .eq('id', user.id)
         .single();
 
@@ -531,7 +531,7 @@ export default function MyProfileScreen() {
                   </View>
                 ) : (
                   <View style={styles.displayInfo}>
-                    <ThemedText style={[styles.displayName, { color: dynamicColors.text }]}>{profile?.username}</ThemedText>
+                    <ThemedText style={[styles.displayName, { color: dynamicColors.text }]}>{profile?.full_name || profile?.username}</ThemedText>
                     <ThemedText style={[styles.displayFaculty, { color: dynamicColors.textLight }]}>
                        {profile?.faculty} • {profile?.university}
                     </ThemedText>

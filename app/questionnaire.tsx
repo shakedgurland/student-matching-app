@@ -593,6 +593,12 @@ export default function QuestionnaireScreen() {
   const [currentStep, setCurrentStep] = useState<Step>(isEditMode ? 1 : 0);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  // True when profiles.full_name was set at signup (or backfilled at
+  // login) and pre-populated into formData.firstName at mount. Drives
+  // the conditional hide of the "איך קוראים לך?" step so the user is not
+  // asked the same name twice. Stays false for legacy users / mid-flow
+  // users whose profile has no full_name — they still see the field.
+  const [hideNameField, setHideNameField] = useState(false);
   // Photos already saved to profile_photos carry `id` and `storage_path`.
   // Newly picked photos have only `uri`; the edit-mode save uses this distinction
   // to decide what to upload vs. keep vs. delete.
@@ -710,8 +716,32 @@ export default function QuestionnaireScreen() {
     
     if (isEditMode && !dataLoaded) {
       loadAnswers();
-    } else if (!isEditMode) {
-      setDataLoaded(true);
+    } else if (!isEditMode && !dataLoaded) {
+      // For new-user flow, pre-fill firstName from profiles.full_name
+      // (set during signup or backfilled at first login). When found, the
+      // "איך קוראים לך?" field is hidden via hideNameField so the user
+      // isn't asked the same question twice. Falls through gracefully if
+      // full_name is missing — the field stays visible.
+      supabase.auth.getUser().then(({ data: userRes }) => {
+        const user = userRes?.user;
+        if (!user) {
+          setDataLoaded(true);
+          return;
+        }
+        supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            const fn = typeof data?.full_name === 'string' ? data.full_name.trim() : '';
+            if (fn) {
+              setFormData((prev) => ({ ...prev, firstName: fn }));
+              setHideNameField(true);
+            }
+            setDataLoaded(true);
+          });
+      });
     }
   }, [isEditMode, currentStep]);
 
@@ -798,6 +828,15 @@ export default function QuestionnaireScreen() {
         if (profileRes.data.full_name && !answersRes.data?.answers?.firstName) {
           setFormData(prev => ({ ...prev, firstName: profileRes.data.full_name }));
         }
+      }
+      // After both pre-fills above settle, hide the "איך קוראים לך?" step
+      // if firstName ended up non-empty (from answers OR profile.full_name).
+      const resolvedName =
+        (answersRes.data?.answers?.firstName as string | undefined)?.trim() ||
+        profileRes.data?.full_name?.trim() ||
+        '';
+      if (resolvedName) {
+        setHideNameField(true);
       }
 
       if (photosRes.data && photosRes.data.length > 0) {
@@ -1323,15 +1362,17 @@ export default function QuestionnaireScreen() {
         <ThemedText style={styles.stepSubtitle}>פרופיל אישי</ThemedText>
       </View>
 
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>איך קוראים לך?</ThemedText>
-        <TextInput
-          style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
-          placeholder="השם שיופיע בפרופיל שלך"
-          value={formData.firstName}
-          onChangeText={(v) => setFormData({ ...formData, firstName: v })}
-        />
-      </View>
+      {!hideNameField && (
+        <View style={styles.formGroup}>
+          <ThemedText style={styles.label}>איך קוראים לך?</ThemedText>
+          <TextInput
+            style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
+            placeholder="השם שיופיע בפרופיל שלך"
+            value={formData.firstName}
+            onChangeText={(v) => setFormData({ ...formData, firstName: v })}
+          />
+        </View>
+      )}
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>תמונות פרופיל</ThemedText>
