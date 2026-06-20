@@ -78,13 +78,16 @@ async function countMatchesThisMonth(admin: SupabaseClient, userId: string): Pro
   return count ?? 0
 }
 
-// Get the user's current active match id if any.
+// Get the user's current open match id if any. "Open" means active OR
+// chat_started — both block receiving a new match (migration 023). expired
+// and unmatched do not block. The defense-in-depth RPC re-checks with the
+// same criteria.
 async function fetchActiveMatchId(admin: SupabaseClient, userId: string): Promise<string | null> {
   const { data, error } = await admin
     .from('matches')
     .select('id')
     .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
-    .eq('status', 'active')
+    .in('status', ['active', 'chat_started'])
     .limit(1)
   if (error) throw error
   return data && data.length > 0 ? data[0].id : null
@@ -134,7 +137,9 @@ async function fetchCappedCandidateIds(
 }
 
 // For a list of candidate user ids, return the subset that currently
-// holds an 'active' match (and therefore cannot accept a new one).
+// holds an open match (active OR chat_started — both block per migration
+// 023) and therefore cannot accept a new one. expired and unmatched do
+// not block.
 async function fetchCandidateIdsWithActive(
   admin: SupabaseClient,
   candidateIds: string[],
@@ -146,7 +151,7 @@ async function fetchCandidateIdsWithActive(
   const { data, error } = await admin
     .from('matches')
     .select('user_a_id, user_b_id')
-    .eq('status', 'active')
+    .in('status', ['active', 'chat_started'])
     .or(orFilter)
   if (error) throw error
   const candidateSet = new Set(candidateIds)
