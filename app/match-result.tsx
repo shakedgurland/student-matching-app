@@ -123,11 +123,16 @@ export default function MatchResultScreen() {
         }
       }
       if (!matchRow) {
+        // Fallback when no match_id route param was provided (e.g., a deep
+        // link). Widened to include 'chat_started' so a user whose match
+        // has already transitioned (DB trigger fired on their first
+        // message) still resolves to their current open match. Mirrors
+        // the lifecycle widening in app/(tabs)/index.tsx#fetchCurrentMatch.
         const { data, error } = await supabase
           .from('matches')
           .select(matchColumns)
           .or(`user_a_id.eq.${me.id},user_b_id.eq.${me.id}`)
-          .eq('status', 'active')
+          .in('status', ['active', 'chat_started'])
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
