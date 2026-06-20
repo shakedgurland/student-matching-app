@@ -83,6 +83,17 @@ export default function MatchResultScreen() {
   const [peerAvatarUrl, setPeerAvatarUrl] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Mutual-chat-start state from match_message_state RPC (migration 026).
+  // Drives the three 'active' sub-states (waiting-to-start /
+  // waiting-for-reply / they-wrote-back). Null until the RPC returns;
+  // failure leaves it null and the UI degrades to the default
+  // "waiting-to-start" copy.
+  const [messageState, setMessageState] = useState<{
+    i_have_sent: boolean;
+    peer_has_sent: boolean;
+    distinct_sender_count: number;
+    is_mutual_started: boolean;
+  } | null>(null);
 
   useEffect(() => {
     logScreenView('MatchResult');
@@ -173,6 +184,25 @@ export default function MatchResultScreen() {
           setPeerAvatarUrl(signed.signedUrl);
         }
       }
+
+      // Mutual-chat-start state. Non-fatal: a failure leaves messageState
+      // null, and the UI falls back to the default "waiting-to-start"
+      // active copy. Called once on mount; peer activity arriving while
+      // this screen is open is reflected on the next visit.
+      const { data: stateData, error: stateErr } = await supabase.rpc(
+        'match_message_state',
+        { p_match_id: matchRow.id },
+      );
+      if (stateErr) {
+        logError('MatchResult', 'message_state_rpc_failed', stateErr);
+      } else if (stateData && typeof stateData === 'object' && !('error' in stateData)) {
+        setMessageState(stateData as {
+          i_have_sent: boolean;
+          peer_has_sent: boolean;
+          distinct_sender_count: number;
+          is_mutual_started: boolean;
+        });
+      }
     } catch (e) {
       logError('MatchResult', 'load_match_exception', e);
       setErrorMsg('אירעה שגיאה. נסה/י שוב מאוחר יותר.');
@@ -237,18 +267,35 @@ export default function MatchResultScreen() {
 
   const expiresAt = new Date(match.expires_at).getTime();
   const msLeft = Number.isFinite(expiresAt) ? expiresAt - now : 0;
-  // Status-aware lifecycle flags. After migration 023:
-  //   'active'        — 72h timer is meaningful; expiry blocks chat.
-  //   'chat_started'  — first message landed (DB trigger flipped status);
-  //                     the 72h timer is irrelevant, chat is unlocked,
-  //                     do NOT show a misleading countdown.
-  //   'expired' / 'unmatched' — terminal; no chat action.
-  const isChatStarted = match.status === 'chat_started';
+  // Status-aware lifecycle flags. After migration 026:
+  //   'active'        — 72h timer is meaningful. May be sub-divided into
+  //                     three states using messageState:
+  //                       neither sent → "waiting to start"
+  //                       I sent only  → "waiting for reply"
+  //                       peer sent only → "they wrote back, your turn"
+  //                     Mutual-sent should NOT occur for status='active'
+  //                     (the trigger transitions to chat_started), but
+  //                     we defensively treat is_mutual_started as
+  //                     chat_started in case a refresh races the trigger.
+  //   'chat_started'  — both participants have sent at least one message;
+  //                     timer is irrelevant; chat is durable; no countdown.
+  //   'expired' / 'unmatched' — terminal; chat is read-only on the next
+  //                     screen; no CTA here.
+  const isChatStarted = match.status === 'chat_started'
+    || (messageState?.is_mutual_started ?? false);
   const isClosed = match.status === 'expired' || match.status === 'unmatched';
   const isCountdownExpired = msLeft <= 0;
   // CTA disabled when the match is terminal OR active-with-elapsed-timer.
   // chat_started ignores the timer (chat already happening).
   const ctaDisabled = isClosed || (match.status === 'active' && isCountdownExpired);
+
+  // 'active' sub-states (only meaningful when !isChatStarted && !isClosed).
+  // Both default to false when messageState hasn't loaded yet, which makes
+  // the UI show the safe default "waiting to start" copy.
+  const iSent = messageState?.i_have_sent ?? false;
+  const peerSent = messageState?.peer_has_sent ?? false;
+  const isWaitingForMyReply = !isChatStarted && !isClosed && !iSent && peerSent;
+  const isWaitingForPeerReply = !isChatStarted && !isClosed && iSent && !peerSent;
 
   const displayName = (peer.full_name || peer.username || 'ההתאמה שלך').trim();
   const age = peer.birth_year ? new Date().getFullYear() - peer.birth_year : null;
@@ -399,6 +446,36 @@ export default function MatchResultScreen() {
               <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
                 ההתאמה הסתיימה
               </ThemedText>
+            ) : isWaitingForMyReply ? (
+              <>
+                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
+                  {isCountdownExpired
+                    ? 'ההתאמה הסתיימה'
+                    : `${displayName} כתב/ה לך — ענה/י כדי שהשיחה תתקבע`}
+                </ThemedText>
+                <ThemedText
+                  style={[
+                    styles.timerValue,
+                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
+                  ]}>
+                  {formatCountdown(msLeft)}
+                </ThemedText>
+              </>
+            ) : isWaitingForPeerReply ? (
+              <>
+                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
+                  {isCountdownExpired
+                    ? 'ההתאמה הסתיימה'
+                    : 'שלחת הודעה — מחכים לתגובה. ההתאמה תפוג אם לא תהיה תגובה בזמן.'}
+                </ThemedText>
+                <ThemedText
+                  style={[
+                    styles.timerValue,
+                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
+                  ]}>
+                  {formatCountdown(msLeft)}
+                </ThemedText>
+              </>
             ) : (
               <>
                 <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>

@@ -46,6 +46,9 @@ interface MatchLite {
   user_b_id: string;
   compatibility_score: number | null;
   status: string;
+  // Needed to compute the locked-composer state for active-but-past-
+  // expiry matches (the cron may not have flipped the status yet).
+  expires_at: string | null;
 }
 
 interface PeerLite {
@@ -142,7 +145,7 @@ export default function ChatScreen() {
       }
       setMeId(myId);
 
-      const matchColumns = 'id, user_a_id, user_b_id, compatibility_score, status';
+      const matchColumns = 'id, user_a_id, user_b_id, compatibility_score, status, expires_at';
 
       let matchRow: MatchLite | null = null;
       if (params.match_id) {
@@ -182,17 +185,32 @@ export default function ChatScreen() {
         .eq('id', peerId)
         .maybeSingle();
       if (peerErr || !peerData) {
-        logError('Chat', 'load_peer_failed', peerErr ?? new Error('peer not found'));
-        setErrorMsg('לא ניתן לטעון את פרטי ההתאמה');
-        return;
-      }
-      setPeer(peerData as PeerLite);
-
-      if (peerData.avatar_storage_path) {
-        const { data: signed } = await supabase.storage
-          .from('profile-photos')
-          .createSignedUrl(peerData.avatar_storage_path, 3600);
-        if (signed?.signedUrl) setPeerAvatarUrl(signed.signedUrl);
+        // For terminal matches the peer-profile RLS from migration 023
+        // intentionally hides the peer (visibility limited to
+        // active/chat_started). That is NOT an error here — we still
+        // want the user to view their existing chat history (messages
+        // RLS is participant-keyed, so messages remain readable). Fall
+        // through with peer=null; the header renders with the generic
+        // fallback name "ההתאמה שלך" and the composer is locked below
+        // by the isLocked guard.
+        const matchIsTerminal =
+          matchRow.status === 'expired' || matchRow.status === 'unmatched';
+        if (matchIsTerminal) {
+          logError('Chat', 'load_peer_terminal_match', peerErr ?? new Error('peer hidden by RLS'));
+          setPeer(null);
+        } else {
+          logError('Chat', 'load_peer_failed', peerErr ?? new Error('peer not found'));
+          setErrorMsg('לא ניתן לטעון את פרטי ההתאמה');
+          return;
+        }
+      } else {
+        setPeer(peerData as PeerLite);
+        if (peerData.avatar_storage_path) {
+          const { data: signed } = await supabase.storage
+            .from('profile-photos')
+            .createSignedUrl(peerData.avatar_storage_path, 3600);
+          if (signed?.signedUrl) setPeerAvatarUrl(signed.signedUrl);
+        }
       }
 
       // Find or create the conversation for this match.
@@ -253,6 +271,10 @@ export default function ChatScreen() {
   async function send() {
     const text = draft.trim();
     if (!text || sending || !conversationId || !meId) return;
+    // Safety belt — the UI disables the send button when isLocked, but
+    // a stale render or a programmatic click could still call send().
+    // Refuse if the match is terminal or active-but-past-expiry.
+    if (isLocked) return;
     setSending(true);
     try {
       const { data, error } = await supabase
@@ -283,6 +305,22 @@ export default function ChatScreen() {
   const peerInitial = (peerName.trim()[0] || '?').toUpperCase();
   const headerSubtitle =
     match?.compatibility_score != null ? `${match.compatibility_score}% התאמה` : null;
+
+  // Composer lock. The match is read-only when:
+  //   - status is terminal ('expired' or 'unmatched'), OR
+  //   - status='active' but expires_at is already in the past
+  //     (cron may not have flipped to 'expired' yet).
+  // chat_started never auto-locks (it stops auto-expiring; only manual
+  // end-match — a future PR — can flip it to 'unmatched').
+  const matchExpiresAtMs = match?.expires_at ? new Date(match.expires_at).getTime() : NaN;
+  const activeButPastExpiry =
+    match?.status === 'active'
+    && Number.isFinite(matchExpiresAtMs)
+    && matchExpiresAtMs < Date.now();
+  const isLocked = !match
+    || match.status === 'expired'
+    || match.status === 'unmatched'
+    || activeButPastExpiry;
 
   if (loading) {
     return (
@@ -436,6 +474,17 @@ export default function ChatScreen() {
             )}
           </ScrollView>
 
+          {isLocked && (
+            <View
+              style={[
+                styles.lockedBanner,
+                { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.lockedBannerText, { color: dynamicColors.textLight }]}>
+                ההתאמה הסתיימה. ניתן עדיין לקרוא את ההיסטוריה כאן.
+              </ThemedText>
+            </View>
+          )}
           <View
             style={[
               styles.inputArea,
@@ -453,24 +502,24 @@ export default function ChatScreen() {
                   writingDirection: 'rtl',
                 },
               ]}
-              placeholder="כתבו הודעה..."
+              placeholder={isLocked ? 'השליחה ננעלה' : 'כתבו הודעה...'}
               placeholderTextColor={dynamicColors.textLight}
               textAlign="right"
               multiline
-              editable={!sending}
+              editable={!sending && !isLocked}
             />
             <TouchableOpacity
               style={[
                 styles.sendButton,
                 {
                   backgroundColor:
-                    draft.trim().length === 0 || sending
+                    draft.trim().length === 0 || sending || isLocked
                       ? dynamicColors.textLight
                       : UI_COLORS.branding,
                 },
               ]}
               onPress={send}
-              disabled={draft.trim().length === 0 || sending}
+              disabled={draft.trim().length === 0 || sending || isLocked}
               accessibilityLabel="שלח הודעה">
               <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
             </TouchableOpacity>
@@ -557,6 +606,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     paddingHorizontal: 6,
+  },
+  lockedBanner: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
+  lockedBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
   inputArea: {
     flexDirection: 'row',
