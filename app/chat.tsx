@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -322,6 +323,59 @@ export default function ChatScreen() {
     || match.status === 'unmatched'
     || activeButPastExpiry;
 
+  // Manual end-match affordance (PR-END-MATCH). Visible only when the
+  // match is durable (chat_started — both sides have already messaged)
+  // AND the original 72h window has fully elapsed. Before 72h, ending
+  // is not allowed — see the product rule documented in migration 027.
+  // Computed inline rather than via a `now` timer state: the 72h cliff
+  // crosses once, and a next interaction (message, navigation) will
+  // pick up the boundary cheaply.
+  const canEnd =
+    !!match
+    && match.status === 'chat_started'
+    && Number.isFinite(matchExpiresAtMs)
+    && matchExpiresAtMs <= Date.now();
+
+  const confirmEndMatch = () => {
+    if (!canEnd) return;
+    Alert.alert(
+      'לסיים את ההתאמה?',
+      'לפעמים שיחה טובה צריכה עוד רגע להתחמם. אם מסיימים, הצ׳אט יישאר לקריאה בלבד ותוכלו לקבל התאמה חדשה.',
+      [
+        { text: 'לתת לזה עוד צ׳אנס', style: 'cancel' },
+        { text: 'כן, לסיים', style: 'destructive', onPress: () => { doEndMatch(); } },
+      ],
+    );
+  };
+
+  async function doEndMatch() {
+    if (!match) return;
+    try {
+      const { data, error } = await supabase.rpc('end_match', { p_match_id: match.id });
+      if (error) {
+        logError('Chat', 'end_match_rpc_failed', error);
+        Alert.alert('שגיאה', 'לא הצלחנו לסיים את ההתאמה. נסה/י שוב מאוחר יותר.');
+        return;
+      }
+      const payload = (data ?? null) as Record<string, unknown> | null;
+      const statusField = payload && typeof payload.status === 'string' ? payload.status : null;
+      if (statusField === 'ended') {
+        // Reflect the new status locally. isLocked already covers
+        // status==='unmatched' so the composer locks automatically on
+        // the next render; the lock banner takes over.
+        setMatch({ ...match, status: 'unmatched' });
+      } else {
+        // RPC returned a non-fatal refusal (race, not_allowed_yet,
+        // etc.). Log the discriminator without surfacing internals.
+        logError('Chat', 'end_match_rpc_rejected', new Error(JSON.stringify(payload)));
+        Alert.alert('לא הסתיים', 'לא ניתן לסיים את ההתאמה כרגע.');
+      }
+    } catch (e) {
+      logError('Chat', 'end_match_exception', e);
+      Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+    }
+  }
+
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
@@ -398,6 +452,18 @@ export default function ChatScreen() {
                 </ThemedText>
               )}
             </View>
+
+            {canEnd && (
+              <TouchableOpacity
+                onPress={confirmEndMatch}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel="לסיים התאמה"
+                style={styles.endMatchButton}>
+                <ThemedText style={[styles.endMatchText, { color: dynamicColors.textLight }]}>
+                  לסיים התאמה
+                </ThemedText>
+              </TouchableOpacity>
+            )}
 
             <View
               style={[
@@ -555,6 +621,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   headerSpacer: { width: 24 },
+  endMatchButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  endMatchText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
   headerAvatar: {
     width: 40,
     height: 40,
