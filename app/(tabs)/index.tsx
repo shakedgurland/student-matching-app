@@ -66,25 +66,118 @@ export default function MatchSelectionScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch active match
+      // Fetch the user's currently OPEN match. After migration 023, both
+      // 'active' (timer running, no chat yet) and 'chat_started' (first
+      // message sent — trigger flipped status) count as open and block
+      // receiving a new match.
       const { data: matches, error } = await supabase
         .from('matches')
         .select('*')
         .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .eq('status', 'active')
+        .in('status', ['active', 'chat_started'])
         .order('created_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
       if (matches && matches.length > 0) {
-        const match = matches[0];
-        setCurrentMatch(match);
+        let openMatch = matches[0];
+
+        // Client-side passive expiry — defense-in-depth with the pg_cron
+        // job from migration 024 (which runs every 5 minutes globally).
+        // This gives snappy UX inside the cron's tick window for the user's
+        // own match. Hardened: the UPDATE failure path must NEVER fall
+        // through to handleFindMatch (which could create a duplicate
+        // 'active' row if the UPDATE didn't actually expire the match).
+        //
+        // Scoping is strict and RLS-safe:
+        //   - .eq('id', openMatch.id)          — only this user's own match
+        //   - .eq('status', 'active')          — no-op for chat_started/expired
+        //   - .lt('expires_at', now())         — no-op for not-yet-stale
+        //   - migration 002's RLS UPDATE policy further restricts to
+        //     auth.uid() ∈ (user_a_id, user_b_id).
+        const expiresAtMs = openMatch.expires_at ? new Date(openMatch.expires_at).getTime() : NaN;
+        if (
+          openMatch.status === 'active' &&
+          Number.isFinite(expiresAtMs) &&
+          expiresAtMs < Date.now()
+        ) {
+          try {
+            const { data: updated, error: updateError } = await supabase
+              .from('matches')
+              .update({ status: 'expired' })
+              .eq('id', openMatch.id)
+              .eq('status', 'active')
+              .lt('expires_at', new Date().toISOString())
+              .select('id');
+
+            if (updateError) {
+              // Postgrest/SQL error from the UPDATE. Do NOT call
+              // handleFindMatch — the row may still be 'active' on the DB
+              // and a new INSERT would either trigger 'already_has_active'
+              // or, worse, be permitted by some race we haven't anticipated.
+              // Leave currentMatch unset; the existing empty-state UI
+              // shows; on next mount the server cron will have reconciled.
+              console.error('passive expiry update failed; staying in safe empty state:', updateError);
+              return;
+            }
+
+            if (updated && updated.length > 0) {
+              // Confirmed: row was 'active' && expires_at < now() at UPDATE
+              // time and we successfully flipped it to 'expired'. Safe to
+              // fetch the next match.
+              handleFindMatch(user.id, true);
+              return;
+            }
+
+            // Zero rows changed: someone else changed the row between our
+            // SELECT and our UPDATE. Re-fetch authoritatively to decide.
+            const { data: refetched, error: refetchError } = await supabase
+              .from('matches')
+              .select('*')
+              .eq('id', openMatch.id)
+              .maybeSingle();
+
+            if (refetchError) {
+              console.error('passive expiry refetch failed; staying in safe empty state:', refetchError);
+              return;
+            }
+
+            if (!refetched) {
+              // Row not visible (deleted or RLS no longer permits read).
+              // Treat as no open match and look for the next one.
+              handleFindMatch(user.id, true);
+              return;
+            }
+
+            if (refetched.status === 'expired' || refetched.status === 'unmatched') {
+              // Terminal — server cron beat us. Move on.
+              handleFindMatch(user.id, true);
+              return;
+            }
+
+            // status is now 'chat_started' (DB trigger fired between our
+            // SELECT and UPDATE because peer's first message landed) OR
+            // still 'active' (clock skew — the DB sees the row as not yet
+            // expired). In BOTH cases, render the match as the current
+            // open match. Do NOT call handleFindMatch — that would risk a
+            // duplicate open match.
+            openMatch = refetched;
+          } catch (expireErr) {
+            // Network/transport-layer failure. Same safe path as
+            // updateError above: do not trigger a new match.
+            console.error('passive expiry exception; staying in safe empty state:', expireErr);
+            return;
+          }
+        }
+
+        setCurrentMatch(openMatch);
 
         // Fetch other user profile — minimal column set; never select email
         // or other sensitive fields. Matched-peer SELECT access is granted
-        // by the policy from migration 020.
-        const otherUserId = match.user_a_id === user.id ? match.user_b_id : match.user_a_id;
+        // by the policy from migration 020 (widened to chat_started by
+        // migration 023).
+        const otherUserId = openMatch.user_a_id === user.id ? openMatch.user_b_id : openMatch.user_a_id;
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('id, username, full_name, avatar_url, avatar_storage_path')
