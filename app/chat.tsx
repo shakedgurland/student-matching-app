@@ -19,6 +19,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
+import { markConversationRead } from '@/lib/unread';
 
 const UI_COLORS = {
   bg: '#F7F8FA',
@@ -103,6 +104,12 @@ export default function ChatScreen() {
   // Realtime subscription for incoming peer messages.
   // If the table is not part of the supabase_realtime publication, the
   // subscription silently no-ops; sending and initial load still work.
+  //
+  // PR-PUSH-A addition: whenever a NEW peer message arrives while this
+  // screen is mounted, mark the conversation as read (UPSERT
+  // last_read_at=now()). Own-message INSERTs are skipped because their
+  // sender_id matches the caller and would be a no-op anyway, but
+  // filtering here avoids the round-trip.
   useEffect(() => {
     if (!conversationId) return;
     const channel = supabase
@@ -118,13 +125,17 @@ export default function ChatScreen() {
         (payload) => {
           const m = payload.new as MessageRow;
           setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m]));
+          if (meId && m.sender_id !== meId) {
+            // Fire-and-forget; the helper logs failures.
+            markConversationRead(conversationId);
+          }
         },
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId]);
+  }, [conversationId, meId]);
 
   // Auto-scroll on new messages.
   useEffect(() => {
@@ -261,6 +272,11 @@ export default function ChatScreen() {
       } else if (msgs) {
         setMessages(msgs as MessageRow[]);
       }
+
+      // PR-PUSH-A: only mark read on a successful, fully-loaded chat.
+      // A failed load shouldn't clear the user's unread state. Fire-
+      // and-forget; helper logs failures.
+      markConversationRead(convId);
     } catch (e) {
       logError('Chat', 'init_exception', e);
       setErrorMsg('אירעה שגיאה');
