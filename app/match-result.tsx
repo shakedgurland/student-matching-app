@@ -506,6 +506,25 @@ export default function MatchResultScreen() {
               </ThemedText>
             </TouchableOpacity>
 
+            {/*
+              PR-MATCH-PROFILE-V1: secondary CTA opens the rich
+              match-profile screen (photo gallery + safe peer details +
+              reasons + icebreaker). Visible for any status — even
+              expired/unmatched lets the user re-view what they had.
+             */}
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                router.push({
+                  pathname: '/match-profile' as any,
+                  params: { match_id: match.id },
+                });
+              }}>
+              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.branding }]}>
+                צפייה בפרופיל המלא
+              </ThemedText>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.secondaryButton} onPress={openFeedback}>
               <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.branding }]}>
                 משוב על ההתאמה

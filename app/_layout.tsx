@@ -161,7 +161,8 @@ export default function RootLayout() {
         root === 'match-result' ||
         root === 'active-match' ||
         root === 'chat' ||
-        root === 'match-feedback';
+        root === 'match-feedback' ||
+        root === 'match-profile';
 
       if (inMainApp) {
         // Local profile state may be stale (e.g., the questionnaire submit just
@@ -220,6 +221,7 @@ export default function RootLayout() {
         <Stack.Screen name="verification" options={{ headerShown: false }} />
         <Stack.Screen name="questionnaire" options={{ headerShown: false }} />
         <Stack.Screen name="match-result" options={{ headerShown: false }} />
+        <Stack.Screen name="match-profile" options={{ headerShown: false }} />
         <Stack.Screen name="active-match" options={{ headerShown: false }} />
         <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
