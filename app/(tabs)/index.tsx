@@ -40,6 +40,18 @@ const UI_COLORS = {
 // 3600s TTL — owner access does not need bounding.
 const SIGNED_URL_TTL_SECONDS = 300;
 
+// BATCH-B: tracks match IDs we've already auto-redirected to
+// /match-result during this app session. Lives at module scope so it
+// survives the home-tab's mount/unmount cycle as the user navigates
+// in/out of the tab. Prevents an infinite redirect loop: if the user
+// taps the back arrow on /match-result and lands back on the home
+// tab, we should NOT immediately bounce them right back — they
+// explicitly asked to leave. Per-id rather than a single boolean so
+// that if a new match is created later in the session (e.g., the
+// previous one ended and they got a fresh one), the new id is treated
+// as fresh and the redirect fires once for it.
+const redirectedMatchIds = new Set<string>();
+
 export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -70,6 +82,30 @@ export default function MatchSelectionScreen() {
     logScreenView('Home');
     fetchCurrentMatch();
   }, []);
+
+  // BATCH-B: auto-forward to /match-result when a current match exists.
+  // Removes the "צפייה בהתאמה" intermediate step from the primary flow
+  // (fresh-onboarding pair-up AND returning-user app launch with an
+  // open match both land directly on the rich match screen). Uses
+  // router.replace so the home tab is dropped from the stack —
+  // back-from-match-result exits the (tabs) layer entirely rather
+  // than re-entering this screen and re-triggering the redirect.
+  // Loop guard: redirectedMatchIds (module scope) records each id
+  // we've already redirected for this app session. A back navigation
+  // that somehow lands us back here with the same currentMatch will
+  // skip the redirect because the id is already in the set. A NEW
+  // match (different id) re-triggers the redirect once.
+  // Deps are [currentMatch?.id, loading] so the effect only fires once
+  // currentMatch's id stabilizes and loading has settled — prevents
+  // racing the initial render's null currentMatch / loading=true state.
+  useEffect(() => {
+    if (loading) return;
+    const matchId = currentMatch?.id;
+    if (!matchId) return;
+    if (redirectedMatchIds.has(matchId)) return;
+    redirectedMatchIds.add(matchId);
+    router.replace({ pathname: '/match-result' as any, params: { match_id: matchId } });
+  }, [currentMatch?.id, loading, router]);
 
   const fetchCurrentMatch = async () => {
     try {

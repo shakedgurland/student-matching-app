@@ -1096,7 +1096,17 @@ export default function QuestionnaireScreen() {
 
         logEvent(finalMode === 'fast' ? 'short_questionnaire_completed' : 'deep_questionnaire_completed');
         logFormSubmit('Questionnaire', 'onboarding_submitted', { mode: finalMode });
-        router.replace('/(tabs)/my-profile');
+        // BATCH-B: route new-user onboarding submit to the home tab,
+        // not directly to my-profile. The home tab then either finds an
+        // existing open match (rare here — they just onboarded) or
+        // creates a fresh one via match-create, and the redirect effect
+        // in (tabs)/index.tsx forwards them straight to /match-result.
+        // If no match can be created (cap / no candidates), the home
+        // tab's existing empty state copy is shown — exactly the right
+        // surface for "we couldn't pair you yet". Edit-mode flow below
+        // still returns to /my-profile, which is the natural edit
+        // destination.
+        router.replace('/(tabs)');
       } else {
         // Edit mode. Same null-discipline for min_preferred_height_cm as
         // the new-user branch above — a returning user who switches from
