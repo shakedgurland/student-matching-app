@@ -245,41 +245,62 @@ const styles = StyleSheet.create({
     fontSize: 52,
     lineHeight: 60,
   },
+  // BATCH-C REVISION: alignSelf stretch so the small "שלב N" label
+  // centers relative to the full card width, not relative to a
+  // shrink-to-fit text island created by the card's alignItems:
+  // 'center'. Matches the same fix already applied to title/body.
   stepLabel: {
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
     textAlign: 'center',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
+  // BATCH-C: title kept centered (it's a step heading — center reads
+  // as deliberate). alignSelf stretch so it spans the full card width
+  // and the center alignment is relative to the card, not to a
+  // shrink-to-fit text island that the parent's alignItems: 'center'
+  // would otherwise create.
   title: {
     fontSize: 24,
     fontWeight: '900',
     textAlign: 'center',
     writingDirection: 'rtl',
     paddingHorizontal: 8,
+    alignSelf: 'stretch',
   },
+  // BATCH-C: body now stretches full card width. Previously the card's
+  // alignItems: 'center' collapsed the body into a content-width
+  // centered box, so the right-aligned text appeared to "float" in
+  // the middle of the card instead of pinning to its right edge.
   body: {
     fontSize: 16,
     lineHeight: 26,
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   bullets: {
     gap: 12,
     alignSelf: 'stretch',
     marginTop: 4,
   },
+  // BATCH-C: pin row-reverse so the bullet dot sits on the RIGHT and
+  // the text flows leftward from it — natural Hebrew reading order.
+  // Previously relied on auto-flip under forceRTL which is brittle.
+  // alignItems center pairs the dot with the text mid-line — cleaner
+  // than the old flex-start + marginTop 9 hack that had to match a
+  // specific 24-line height.
   bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
     gap: 10,
   },
   bulletDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    marginTop: 9,
   },
   bulletText: {
     flex: 1,

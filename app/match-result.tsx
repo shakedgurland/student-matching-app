@@ -16,6 +16,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
+// BATCH-C: Hebrew display labels for peer profile enum values.
+// Previously the infoRow values rendered raw codes like "huji", "law",
+// "year_3" — visible to users on TestFlight build 12. labelFor() also
+// covers the region row, which Match Result didn't render before this
+// batch but is added here for parity with the match-profile screen.
+import { labelFor } from '@/lib/profile-labels';
 
 const UI_COLORS = {
   bg: '#FFF9F6',
@@ -319,10 +325,24 @@ export default function MatchResultScreen() {
   const icebreaker = match.icebreaker_hint?.trim() || null;
   const initial = (displayName.trim()[0] || '?').toUpperCase();
 
+  // BATCH-C: pass enum codes through labelFor for Hebrew display.
+  // `campus` is a free-text city name (not an enum) so it renders
+  // verbatim. Don't push rows with empty values from labelFor —
+  // 'לא צוין' would be misleading for fields the peer never
+  // answered; treat unmapped/empty as "skip the row entirely".
   const infoRows: { label: string; value: string }[] = [];
-  if (peer.faculty) infoRows.push({ label: 'פקולטה', value: peer.faculty });
-  if (peer.year_of_study) infoRows.push({ label: 'שנה', value: peer.year_of_study });
-  if (peer.university) infoRows.push({ label: 'מוסד', value: peer.university });
+  if (peer.faculty) {
+    const v = labelFor('faculty', peer.faculty);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'פקולטה', value: v });
+  }
+  if (peer.year_of_study) {
+    const v = labelFor('year_of_study', peer.year_of_study);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'שנה', value: v });
+  }
+  if (peer.university) {
+    const v = labelFor('university', peer.university);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'מוסד', value: v });
+  }
   if (peer.campus) infoRows.push({ label: 'עיר', value: peer.campus });
 
   return (
@@ -659,7 +679,14 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     fontStyle: 'italic',
   },
-  infoRow: { flexDirection: 'row', gap: 8 },
+  // BATCH-C: explicit row-reverse so label sits on the RIGHT (Hebrew
+  // reading order) regardless of whether the host shell's RTL auto-
+  // flip is active. RN's `flexDirection: 'row'` is supposed to flip
+  // under I18nManager.forceRTL but on iOS this can be inconsistent
+  // across cold launches / hot-reloads. Pin it explicitly. justify
+  // content keeps label-right + value-left-of-label tight (no extra
+  // spread) so the pair reads as a natural "label: value" unit.
+  infoRow: { flexDirection: 'row-reverse', gap: 8, justifyContent: 'flex-start' },
   infoLabel: { fontSize: 16, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
   infoValue: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
   section: { gap: 12 },

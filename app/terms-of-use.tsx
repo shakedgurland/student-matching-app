@@ -167,11 +167,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
+  // BATCH-C REVISION: same alignSelf stretch + width 100% pattern as
+  // privacy-policy.tsx. Forces right-aligned Hebrew text to actually
+  // pin to the right edge of the document column instead of shrinking
+  // to content width and floating left/center.
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   headerSpacer: {
     width: 24,
@@ -186,21 +191,28 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
     fontStyle: 'italic',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   section: {
     gap: 10,
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   sectionBody: {
     fontSize: 15,
     lineHeight: 24,
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   footerSpacer: {
     height: 20,

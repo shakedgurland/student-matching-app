@@ -163,11 +163,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
+  // BATCH-C REVISION: alignSelf stretch + width 100% on every Hebrew
+  // text block. Without this, RN's default Text width measurement is
+  // content-fit; a right-aligned <Text> inside a flex container can
+  // visually shrink to its content and float left/center even though
+  // its internal textAlign is 'right'. The fix forces the text's
+  // bounding box to span the full parent width so right-align actually
+  // pins to the right edge of the document column.
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   headerSpacer: {
     width: 24,
@@ -182,21 +190,28 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
     fontStyle: 'italic',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   section: {
     gap: 10,
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   sectionBody: {
     fontSize: 15,
     lineHeight: 24,
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
   },
   footerSpacer: {
     height: 20,
