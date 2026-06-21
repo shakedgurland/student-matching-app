@@ -84,28 +84,44 @@ export default function MatchSelectionScreen() {
   }, []);
 
   // BATCH-B: auto-forward to /match-result when a current match exists.
-  // Removes the "צפייה בהתאמה" intermediate step from the primary flow
-  // (fresh-onboarding pair-up AND returning-user app launch with an
-  // open match both land directly on the rich match screen). Uses
-  // router.replace so the home tab is dropped from the stack —
-  // back-from-match-result exits the (tabs) layer entirely rather
-  // than re-entering this screen and re-triggering the redirect.
+  // BATCH-E1: extended to also forward to /chat when the match has
+  // already transitioned to 'chat_started' (i.e., at least one message
+  // has been exchanged — migration 023's trigger flips the status on
+  // first message INSERT). Avoids forcing returning users through the
+  // match-result preview every cold launch when their conversation
+  // is already underway. The match profile remains reachable from the
+  // chat header avatar/title (added in PR-MATCH-PROFILE-V1).
+  //
+  // Status branching:
+  //   - 'active'        → /match-result (no chat yet; preview is right)
+  //   - 'chat_started'  → /chat (conversation is live; skip the preview)
+  //   - terminal (expired/unmatched) → never reaches this point;
+  //     fetchCurrentMatch filters them out via .in('status',
+  //     ['active', 'chat_started']) so currentMatch stays null and
+  //     the home empty state renders — correct UX.
+  //
+  // Uses router.replace so the home tab is dropped from the stack —
+  // back-from-match-result/chat exits the (tabs) layer entirely
+  // rather than re-entering this screen and re-triggering the redirect.
   // Loop guard: redirectedMatchIds (module scope) records each id
   // we've already redirected for this app session. A back navigation
   // that somehow lands us back here with the same currentMatch will
   // skip the redirect because the id is already in the set. A NEW
   // match (different id) re-triggers the redirect once.
-  // Deps are [currentMatch?.id, loading] so the effect only fires once
-  // currentMatch's id stabilizes and loading has settled — prevents
-  // racing the initial render's null currentMatch / loading=true state.
+  // Deps are [currentMatch?.id, currentMatch?.status, loading] so the
+  // effect fires once currentMatch's id stabilizes; including status
+  // also re-fires if the trigger flips active→chat_started mid-session
+  // (e.g., the user just sent the first message and re-enters the home
+  // tab) — though in practice the redirect-once guard handles that too.
   useEffect(() => {
     if (loading) return;
     const matchId = currentMatch?.id;
     if (!matchId) return;
     if (redirectedMatchIds.has(matchId)) return;
     redirectedMatchIds.add(matchId);
-    router.replace({ pathname: '/match-result' as any, params: { match_id: matchId } });
-  }, [currentMatch?.id, loading, router]);
+    const target = currentMatch?.status === 'chat_started' ? '/chat' : '/match-result';
+    router.replace({ pathname: target as any, params: { match_id: matchId } });
+  }, [currentMatch?.id, currentMatch?.status, loading, router]);
 
   const fetchCurrentMatch = async () => {
     try {
