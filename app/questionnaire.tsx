@@ -621,6 +621,18 @@ export default function QuestionnaireScreen() {
   // (X was loaded, then taken out of state) from "photo X failed to load and was
   // never visible" (X is not in this set, so it must NOT be treated as a removal).
   const loadedPhotoIdsRef = React.useRef<Set<string>>(new Set());
+  // HOTFIX P0: track whether this component is still mounted, so the
+  // tail of handleSubmit (analyze-user-traits microtasks, photo upload
+  // awaits, `finally { setLoading(false) }`) doesn't try to push state
+  // into a freed React tree after router.replace has unmounted us. The
+  // Hermes EXC_BAD_ACCESS observed in TestFlight build 12 had a stack
+  // consistent with a post-unmount setState landing in drainJobs.
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
@@ -955,17 +967,28 @@ export default function QuestionnaireScreen() {
       const meaningfulTextLen = psk.length + cs.length + gf.length;
       if (finalMode === 'deep' && meaningfulTextLen >= 30) {
         const TRAITS_TIMEOUT_MS = 9000;
+        // HOTFIX P0: keep a handle on the timeout id so we can clear it
+        // the moment the Edge Function resolves. Previously the setTimeout
+        // fired even when the function won the race, leaving an orphan
+        // callback that resolved a dead promise after navigation/unmount.
+        // The orphan was a plausible contributor to the post-save Hermes
+        // crash and is unsafe regardless.
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
         try {
-          const timeoutSentinel = new Promise<{ error: Error; data?: unknown }>((resolve) =>
-            setTimeout(
+          const timeoutSentinel = new Promise<{ error: Error; data?: unknown }>((resolve) => {
+            timeoutId = setTimeout(
               () => resolve({ error: new Error('ai_traits_timeout') }),
               TRAITS_TIMEOUT_MS,
-            ),
-          );
+            );
+          });
           const result = (await Promise.race([
             supabase.functions.invoke('analyze-user-traits'),
             timeoutSentinel,
           ])) as { error?: unknown; data?: unknown };
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
           if (result.error) {
             // Logged but not surfaced. First match proceeds without AI
             // traits; deterministic + region + intent + values + height
@@ -973,6 +996,10 @@ export default function QuestionnaireScreen() {
             logError('Questionnaire', 'ai_traits_pre_match_wait_failed', result.error);
           }
         } catch (err) {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
           logError('Questionnaire', 'ai_traits_pre_match_wait_exception', err);
         }
       }
@@ -1231,14 +1258,29 @@ export default function QuestionnaireScreen() {
         }
 
         logFormSubmit('Questionnaire', 'edit_onboarding_submitted');
-        Alert.alert('הצלחה', 'השאלון עודכן בהצלחה');
+        // HOTFIX P0: removed `Alert.alert('הצלחה', …)` that previously
+        // fired immediately before router.replace. iOS presents the
+        // alert async via UIKit while router.replace synchronously
+        // unmounts the React subtree — the resulting interleave was a
+        // plausible contributor to the Hermes EXC_BAD_ACCESS observed
+        // in TestFlight build 12. The destination /my-profile screen
+        // is the visible confirmation that the save succeeded.
         router.replace('/(tabs)/my-profile');
       }
     } catch (error: any) {
       console.error('Error saving questionnaire:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
+      // Only surface on the error path — and only if we're still mounted.
+      if (mountedRef.current) {
+        Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
+      }
     } finally {
-      setLoading(false);
+      // HOTFIX P0: guard against setState-after-unmount. On the happy
+      // path router.replace fires above and unmounts this screen before
+      // the await chain returns; without the guard the trailing
+      // setLoading(false) would push state into a freed React tree.
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 

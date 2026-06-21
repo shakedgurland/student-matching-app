@@ -328,7 +328,15 @@ export default function ChatScreen() {
         .select('id, conversation_id, sender_id, content, read_at, created_at')
         .single();
       if (error || !data) {
+        // HOTFIX P0: surface failures to the user. Previously the error
+        // was logged and the function returned silently, so the chat UI
+        // gave zero feedback when a send was rejected (RLS, expired
+        // session, network). TestFlight build 12 reported "send button
+        // does nothing"; this is the missing acknowledgement. Internal
+        // detail still goes to logError for debugging; the user sees
+        // a friendly Hebrew message only.
         logError('Chat', 'send_message_failed', error ?? new Error('send returned no row'));
+        Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
         return;
       }
       setDraft('');
@@ -336,7 +344,11 @@ export default function ChatScreen() {
         prev.some((p) => p.id === data.id) ? prev : [...prev, data as MessageRow],
       );
     } catch (e) {
+      // HOTFIX P0: same surfacing as the error-result branch above.
+      // Catches transport-layer failures (offline, DNS, Supabase
+      // unreachable) that would otherwise be invisible.
       logError('Chat', 'send_message_exception', e);
+      Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
     } finally {
       setSending(false);
     }
@@ -619,6 +631,15 @@ export default function ChatScreen() {
               </ThemedText>
             </View>
           )}
+          {/*
+            HOTFIX P0: derive sendDisabled from EVERY precondition that
+            `send()` early-returns on, not just draft/sending/isLocked.
+            Previously the disabled state and the function's guard list
+            diverged — !conversationId and !meId were unreachable in
+            practice (error screen catches them at line 422), but the
+            divergence is the kind of latent bug that bites later. One
+            source of truth, mirrored in the button and the input.
+           */}
           <View
             style={[
               styles.inputArea,
@@ -640,20 +661,20 @@ export default function ChatScreen() {
               placeholderTextColor={dynamicColors.textLight}
               textAlign="right"
               multiline
-              editable={!sending && !isLocked}
+              editable={!sending && !isLocked && !!conversationId && !!meId}
             />
             <TouchableOpacity
               style={[
                 styles.sendButton,
                 {
                   backgroundColor:
-                    draft.trim().length === 0 || sending || isLocked
+                    draft.trim().length === 0 || sending || isLocked || !conversationId || !meId
                       ? dynamicColors.textLight
                       : UI_COLORS.branding,
                 },
               ]}
               onPress={send}
-              disabled={draft.trim().length === 0 || sending || isLocked}
+              disabled={draft.trim().length === 0 || sending || isLocked || !conversationId || !meId}
               accessibilityLabel="שלח הודעה">
               <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
             </TouchableOpacity>

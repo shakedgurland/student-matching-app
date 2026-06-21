@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { InteractionManager } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -29,8 +30,23 @@ export default function TabLayout() {
   // so calling here guarantees we never prompt on welcome/login/signup
   // or before the questionnaire is done. The helper is idempotent and
   // self-guarded — repeated mounts within a single session no-op.
+  //
+  // HOTFIX P0: defer until interactions/animations settle. When this
+  // layout mounts immediately after the questionnaire's router.replace,
+  // the navigation transition is still in flight. Synchronous calls
+  // into native (OS permission dialog, getExpoPushTokenAsync) racing
+  // the unmount/mount transition were a plausible contributor to the
+  // Hermes EXC_BAD_ACCESS observed in TestFlight build 12.
+  // InteractionManager.runAfterInteractions schedules the call once the
+  // RN frame scheduler is idle — typically tens to a few hundred ms
+  // later — well within the user's attention window for permission ask.
+  // The helper itself is still self-guarded (alreadyAttempted flag),
+  // so deferral cannot cause duplicate prompts.
   useEffect(() => {
-    registerPushTokenIfPermitted();
+    const task = InteractionManager.runAfterInteractions(() => {
+      registerPushTokenIfPermitted();
+    });
+    return () => task.cancel();
   }, []);
 
   useEffect(() => {
