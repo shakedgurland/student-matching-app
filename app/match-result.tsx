@@ -695,7 +695,11 @@ const styles = StyleSheet.create({
   // across cold launches / hot-reloads. Pin it explicitly. justify
   // content keeps label-right + value-left-of-label tight (no extra
   // spread) so the pair reads as a natural "label: value" unit.
-  infoRow: { flexDirection: 'row-reverse', gap: 8, justifyContent: 'flex-start' },
+  // BATCH-G1: JSX is [Label, Value]; under RTL with `row` the label
+  // sits on the RIGHT (leading edge) and the value to its LEFT —
+  // natural "label: value" Hebrew reading order. Earlier row-reverse
+  // pin double-flipped it back to LTR on TestFlight build 14.
+  infoRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-start' },
   infoLabel: { fontSize: 16, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
   infoValue: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
   section: { gap: 12 },
@@ -714,7 +718,10 @@ const styles = StyleSheet.create({
   // bulletDot.marginTop hack that depended on a brittle offset matching
   // a 22pt line height. Match-result and match-profile now render this
   // section identically.
-  bulletItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  // BATCH-G1: JSX is [Dot, Text]; under RTL with `row` the dot sits
+  // on the RIGHT and the text flows leftward — natural Hebrew bullet
+  // order. Earlier row-reverse pin (PR #32 hotfix) double-flipped it.
+  bulletItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bulletDot: { width: 6, height: 6, borderRadius: 3 },
   bulletText: {
     flex: 1,

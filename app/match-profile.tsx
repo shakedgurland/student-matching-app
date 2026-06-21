@@ -853,12 +853,10 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     fontStyle: 'italic',
   },
-  // BATCH-C: explicit row-reverse so label sits on the RIGHT (Hebrew
-  // reading order) regardless of whether RN's RTL auto-flip applies
-  // (auto-flip is inconsistent across iOS cold launches / hot-reloads).
-  // justifyContent flex-start keeps the label-value pair tightly
-  // packed on the right rather than spreading.
-  infoRow: { flexDirection: 'row-reverse', gap: 8, justifyContent: 'flex-start' },
+  // BATCH-G1: same row-reverse → row revert as match-result. JSX is
+  // [Label, Value]; under RTL with `row` label pins to right, value
+  // to its left. Earlier row-reverse double-flipped to LTR.
+  infoRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-start' },
   infoLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
   infoValue: { fontSize: 15, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
   hobbiesBlock: { gap: 8, marginTop: 8 },
@@ -885,14 +883,10 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   bullets: { gap: 10 },
-  // BATCH-C: pin row-reverse so the bullet dot is on the RIGHT (Hebrew
-  // reading order) instead of relying on auto-flip. The bullet then
-  // sits right of the text and reading flows naturally from dot →
-  // right-aligned text. alignItems center pairs the dot's vertical
-  // center with the text's mid-line — visually cleaner than the
-  // previous flex-start + marginTop hack which depended on a brittle
-  // 8pt offset matching a 22pt line height.
-  bulletItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  // BATCH-G1: JSX is [Dot, Text]; under RTL with `row` the dot sits
+  // on the RIGHT and the text flows leftward — natural Hebrew bullet
+  // order. Earlier row-reverse pin double-flipped to LTR layout.
+  bulletItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bulletDot: { width: 6, height: 6, borderRadius: 3 },
   bulletText: {
     flex: 1,
