@@ -31,6 +31,15 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
+// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for the
+// peer/candidate avatar used in the home-tab match card. Matches the
+// value used by match-profile / chat / match-result so every peer-image
+// surface bounds the stale-access window to the same 5 minutes if the
+// match closes after the URL is minted. Own-user images
+// (my-profile, questionnaire onboarding) intentionally keep the longer
+// 3600s TTL — owner access does not need bounding.
+const SIGNED_URL_TTL_SECONDS = 300;
+
 export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -202,12 +211,13 @@ export default function MatchSelectionScreen() {
 
         if (profileError) throw profileError;
 
-        // Generate signed URL for avatar if storage_path exists
+        // Generate signed URL for avatar if storage_path exists.
+        // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer avatar — 300s TTL.
         let avatarUrl = profile.avatar_url;
         if (profile.avatar_storage_path) {
           const { data: signedData, error: signedError } = await supabase.storage
             .from('profile-photos')
-            .createSignedUrl(profile.avatar_storage_path, 3600);
+            .createSignedUrl(profile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
           if (!signedError) {
             avatarUrl = signedData.signedUrl;
           }
@@ -242,9 +252,10 @@ export default function MatchSelectionScreen() {
         let candidateProfile = newMatch.candidateProfile;
 
         if (candidateProfile.avatar_storage_path) {
+          // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer/candidate avatar — 300s TTL.
           const { data: signedData, error: signedError } = await supabase.storage
             .from('profile-photos')
-            .createSignedUrl(candidateProfile.avatar_storage_path, 3600);
+            .createSignedUrl(candidateProfile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
           if (!signedError) {
             candidateProfile = { ...candidateProfile, avatar_url: signedData.signedUrl };
           }
