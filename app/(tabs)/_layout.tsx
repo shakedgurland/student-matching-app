@@ -7,6 +7,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { fetchUnreadSummary } from '@/lib/unread';
+import { registerPushTokenIfPermitted } from '@/lib/push';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -21,6 +22,16 @@ export default function TabLayout() {
   // for conversations the caller participates in, so a recompute on
   // every INSERT is cheap. The unread RPC excludes terminal matches.
   const [unreadTotal, setUnreadTotal] = useState(0);
+
+  // PR-PUSH-B: register the device's Expo push token for the authenticated +
+  // onboarded user. This layout only renders for users who passed the
+  // routing gates in app/_layout.tsx (session + profile.onboarding_completed),
+  // so calling here guarantees we never prompt on welcome/login/signup
+  // or before the questionnaire is done. The helper is idempotent and
+  // self-guarded — repeated mounts within a single session no-op.
+  useEffect(() => {
+    registerPushTokenIfPermitted();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
