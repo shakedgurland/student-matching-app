@@ -706,8 +706,16 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   bullets: { gap: 10 },
-  bulletItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  bulletDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
+  // BATCH-E2 (RTL gap fix): mirrors the Batch C fix in match-profile.tsx
+  // for the same "למה זו התאמה טובה" bullet pattern. Pinned row-reverse
+  // so the bullet dot sits on the RIGHT (Hebrew reading order) and text
+  // flows leftward. alignItems center pairs the dot's vertical center
+  // with the text mid-line — cleaner than the previous flex-start +
+  // bulletDot.marginTop hack that depended on a brittle offset matching
+  // a 22pt line height. Match-result and match-profile now render this
+  // section identically.
+  bulletItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  bulletDot: { width: 6, height: 6, borderRadius: 3 },
   bulletText: {
     flex: 1,
     fontSize: 16,
