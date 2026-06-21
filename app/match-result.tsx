@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -73,6 +74,11 @@ export default function MatchResultScreen() {
   const params = useLocalSearchParams<{ match_id?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  // BATCH-B: sticky-footer safe-area inset for iPhone home indicator.
+  // Footer pads to max(inset, 16) so older devices without an indicator
+  // still get a comfortable bottom gap and modern iPhones don't tuck the
+  // button under the home bar.
+  const insets = useSafeAreaInsets();
 
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -498,25 +504,19 @@ export default function MatchResultScreen() {
             )}
           </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                { backgroundColor: ctaDisabled ? dynamicColors.textLight : UI_COLORS.primary },
-              ]}
-              onPress={openChat}
-              disabled={ctaDisabled}
-              activeOpacity={0.8}>
-              <ThemedText style={styles.primaryButtonText}>
-                {isChatStarted ? 'המשך לצ׳אט' : 'פתח/י צ׳אט'}
-              </ThemedText>
-            </TouchableOpacity>
-
+          {/*
+            BATCH-B: secondary actions stay in the scroll body. The
+            primary CTA was promoted to a sticky footer below so it's
+            always reachable without scrolling — see the View after
+            ScrollView. Secondary buttons being inside the scroll body
+            keeps the footer single-purpose and uncrowded.
+           */}
+          <View style={styles.secondaryActions}>
             {/*
-              PR-MATCH-PROFILE-V1: secondary CTA opens the rich
-              match-profile screen (photo gallery + safe peer details +
-              reasons + icebreaker). Visible for any status — even
-              expired/unmatched lets the user re-view what they had.
+              PR-MATCH-PROFILE-V1: opens the rich match-profile screen
+              (photo gallery + safe peer details + reasons + icebreaker).
+              Visible for any status — even expired/unmatched lets the
+              user re-view what they had.
              */}
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -538,6 +538,39 @@ export default function MatchResultScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/*
+          BATCH-B: sticky primary CTA. Always visible above the home
+          indicator regardless of scroll position. Renders for every
+          status: when isClosed, the button stays present as a disabled
+          control (ctaDisabled is true) so the layout doesn't shift and
+          the user still sees the chat affordance for terminal matches.
+          paddingBottom uses the home-indicator safe-area inset, with a
+          16pt floor for older iPhones without an indicator. Top border
+          gives a visual separator from the scrollable body.
+         */}
+        <View
+          style={[
+            styles.stickyFooter,
+            {
+              backgroundColor: dynamicColors.bg,
+              borderTopColor: dynamicColors.border,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              { backgroundColor: ctaDisabled ? dynamicColors.textLight : UI_COLORS.primary },
+            ]}
+            onPress={openChat}
+            disabled={ctaDisabled}
+            activeOpacity={0.8}>
+            <ThemedText style={styles.primaryButtonText}>
+              {isChatStarted ? 'המשך לצ׳אט' : 'פתח/י צ׳אט'}
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -562,7 +595,12 @@ const styles = StyleSheet.create({
   },
   headerSpacer: { width: 24 },
   errorBody: { flex: 1, padding: 24, gap: 12 },
-  scrollContent: { padding: 24, paddingBottom: 60, gap: 24 },
+  // BATCH-B: bumped paddingBottom from 60 to 120 so the trailing
+  // secondary buttons inside the scroll body clear the new sticky
+  // footer height (button 56 + footer padding ~32 + buffer) and the
+  // user can fully scroll to the last "משוב על ההתאמה" row without it
+  // being visually clipped or tappable under the footer.
+  scrollContent: { padding: 24, paddingBottom: 120, gap: 24 },
   titleBlock: { alignItems: 'center', gap: 8, marginTop: 12 },
   preTitle: {
     fontSize: 13,
@@ -657,7 +695,13 @@ const styles = StyleSheet.create({
   },
   timerCard: {
     borderRadius: 20,
-    padding: 18,
+    // BATCH-B: bumped from padding: 18 to paddingVertical: 22 +
+    // paddingHorizontal: 18. The previous symmetric 18 didn't give
+    // the fontSize-36 + weight-900 + tabular-nums countdown enough
+    // vertical room — descenders/ascenders were getting clipped on
+    // iPhone, especially when wrapped in `<>` with the label above.
+    paddingVertical: 22,
+    paddingHorizontal: 18,
     borderWidth: 1,
     alignItems: 'center',
     gap: 4,
@@ -673,8 +717,26 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
     fontVariant: ['tabular-nums'],
+    // BATCH-B: explicit lineHeight so the large tabular-nums countdown
+    // isn't clipped at top/bottom by RN's default text bounding box on
+    // iOS. 44 gives ~22% leading above the 36pt glyph — comfortable
+    // breathing room for the heaviest weight without affecting layout
+    // outside the timerCard. textAlignVertical doesn't help here
+    // because the issue is the bounding box, not the alignment.
+    lineHeight: 44,
+    textAlign: 'center',
   },
-  actions: { gap: 12, marginTop: 4 },
+  // BATCH-B: secondary actions stay in the scroll body (renamed from
+  // `actions`). Sticky primary CTA lives in stickyFooter below.
+  secondaryActions: { gap: 12, marginTop: 4 },
+  // BATCH-B: sticky footer for the primary chat CTA. Rendered outside
+  // the ScrollView so the button is always reachable. Background match
+  // is opaque so scroll content underneath doesn't bleed through.
+  stickyFooter: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
   primaryButton: {
     height: 56,
     borderRadius: 18,
