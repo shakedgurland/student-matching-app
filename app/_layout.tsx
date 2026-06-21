@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { installNotificationHandlers } from '@/lib/push';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -50,6 +51,22 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { mode } = useGlobalSearchParams<{ mode: string }>();
+
+  // PR-PUSH-D1: install notification handlers once per app session.
+  // Foreground suppression (no double-beep when user is inside the
+  // chat the push refers to) + tap navigation (deep-link to /chat
+  // when the user taps a notification, including cold-launch).
+  // The helper is idempotent — multiple mounts won't stack listeners.
+  // Push permission + token registration still happen post-onboarding
+  // in (tabs)/_layout.tsx; this only wires the receive-side handlers.
+  useEffect(() => {
+    installNotificationHandlers((matchId) => {
+      router.push({ pathname: '/chat', params: { match_id: matchId } });
+    });
+    // The router instance is stable across renders, and the install
+    // function is guarded as a one-shot — empty deps is intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!I18nManager.isRTL) {

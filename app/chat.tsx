@@ -20,6 +20,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
 import { markConversationRead } from '@/lib/unread';
+import { setActiveChatMatchId } from '@/lib/notification-context';
 
 const UI_COLORS = {
   bg: '#F7F8FA',
@@ -143,6 +144,21 @@ export default function ChatScreen() {
     const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     return () => clearTimeout(t);
   }, [messages.length]);
+
+  // PR-PUSH-D1: tell the notification handler that this chat is the
+  // currently-viewed one, so it can suppress foreground pushes whose
+  // match_id matches. Cleanup clears the ref on unmount (back, screen
+  // pop, app background). If the user navigates directly between two
+  // chats, the prior screen's cleanup fires before this screen's
+  // effect, so the ref correctly transitions A → null → B.
+  useEffect(() => {
+    if (match?.id) {
+      setActiveChatMatchId(match.id);
+    }
+    return () => {
+      setActiveChatMatchId(null);
+    };
+  }, [match?.id]);
 
   async function init() {
     try {
