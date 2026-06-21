@@ -2582,28 +2582,59 @@ const styles = StyleSheet.create({
   label: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch', width: '100%' },
   input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
   optionList: { gap: 10, alignSelf: 'stretch' },
-  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1, alignSelf: 'stretch' },
-  optionText: { fontSize: 15, textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
-  // BATCH-C REVISION: chipGrid pinned to row-reverse so the first chip
-  // sits on the RIGHT of the grid and chips flow leftward — natural
-  // Hebrew reading order. Without this, RN's auto-flip under forceRTL
-  // is inconsistent on iOS cold launches; chips would visually
-  // sometimes start from the left edge.
-  chipGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, alignSelf: 'stretch', justifyContent: 'flex-start' },
+  // BATCH-G1 FOLLOW-UP: TestFlight build 14 showed Hebrew option labels
+  // ("אישה", "מרכז", "חילוני/ת" …) rendering on the LEFT side of each
+  // full-width button despite optionText having textAlign: 'right'.
+  // Root cause: when a Text component is wrapped inside a TouchableOpacity
+  // and carries `writingDirection: 'rtl'`, RN's text engine can treat
+  // textAlign 'right' as "trailing edge of writing direction" which under
+  // RTL resolves to physical LEFT. The plain labels above (which work
+  // correctly) are NOT inside a Touchable, so they're unaffected.
+  //
+  // Deterministic fix: convert optionButton from a default-column View
+  // into a row flex container. Under forceRTL(true), `flexDirection: row`
+  // lays children right→left, so `justifyContent: 'flex-start'` packs the
+  // single Text child at the main start = physical RIGHT edge. This
+  // bypasses the textAlign quirk entirely — position is determined by
+  // the flex parent, not by text-internal alignment.
+  //
+  // The button itself stays full-width (alignSelf: 'stretch') so the
+  // entire row remains tappable; only the visible Text shrink-wraps to
+  // its content and pins to the right edge with padding 16 honored.
+  optionButton: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  optionText: { fontSize: 15, writingDirection: 'rtl' },
+  // BATCH-G1 REVISION: TestFlight build 14 showed the row-reverse pin
+  // from Batch C actually flipped chips back to LTR order (first chip
+  // on the LEFT instead of right). Under I18nManager.forceRTL(true),
+  // `flexDirection: 'row'` already lays children right-to-left (first
+  // JSX child on the RIGHT). Pinning row-reverse on top of that double-
+  // flips it. Reverted to `row` so chips flow from the right content
+  // edge as intended. justifyContent flex-start under RTL packs at the
+  // main start = right.
+  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignSelf: 'stretch', justifyContent: 'flex-start' },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '600', textAlign: 'right', writingDirection: 'rtl' },
-  // BATCH-C REVISION: same row-reverse pin for the photo grid so the
-  // "add photo" tile and any uploaded photos read right-to-left.
-  photoGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, alignSelf: 'stretch', justifyContent: 'flex-start' },
+  // BATCH-G1 REVISION: same fix as chipGrid — row-reverse was double-
+  // flipping the photo grid under forceRTL. With `row`, the first
+  // photo sits on the right and the add-photo placeholder follows
+  // leftward, matching natural Hebrew reading order.
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignSelf: 'stretch', justifyContent: 'flex-start' },
   photoWrapper: { width: '30%', aspectRatio: 0.8, borderRadius: 10, overflow: 'hidden' },
   gridPhoto: { width: '100%', height: '100%' },
   deletePhotoBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   addPhotoPlaceholder: { width: '30%', aspectRatio: 0.8, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', borderColor: UI_COLORS.border },
-  // BATCH-C REVISION: choiceCard pinned to row-reverse so the icon
-  // appears on the RIGHT (Hebrew reading order) and the title/desc
-  // text flows leftward from it. alignSelf stretch ensures the card
-  // uses full width of its parent rather than shrinking.
-  choiceCard: { flexDirection: 'row-reverse', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15, alignSelf: 'stretch' },
+  // BATCH-G1 REVISION: same row-reverse → row revert as chipGrid /
+  // photoGrid. JSX is [Icon, TitleBlock]; under RTL with `row`, icon
+  // sits on the RIGHT (Hebrew leading edge) and the title/desc block
+  // flows to its left. alignSelf stretch keeps the card full-width.
+  choiceCard: { flexDirection: 'row', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15, alignSelf: 'stretch' },
   choiceIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: UI_COLORS.surface, justifyContent: 'center', alignItems: 'center' },
   choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 4, alignSelf: 'stretch' },
   choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', writingDirection: 'rtl', lineHeight: 20, alignSelf: 'stretch' },
@@ -2613,8 +2644,12 @@ const styles = StyleSheet.create({
   // animated-feeling fill + a calm section label above it. Same
   // brand-mark anchor on the right (Hebrew leading edge).
   progressHeader: { paddingHorizontal: 24, gap: 10, marginTop: 10 },
+  // BATCH-G1: JSX is [SectionLabel, BrandMark]; under RTL with
+  // `row` + space-between the section label pins to the RIGHT
+  // (Hebrew leading edge) and BrandMark to the LEFT. row-reverse
+  // here flipped them the wrong way on TestFlight build 14.
   progressTopRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
@@ -2646,9 +2681,14 @@ const styles = StyleSheet.create({
   navButton: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryNav: { shadowColor: UI_COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 3 },
   primaryNavText: { color: 'white', fontSize: 18, fontWeight: '800' },
+  // BATCH-G1: TestFlight build 14 showed "שמור וסגור" pinned to the
+  // LEFT edge of the screen. Under RTL the main axis runs right→left,
+  // so justifyContent: 'flex-end' packs at the main END = the LEFT
+  // visual edge. Switched to 'flex-start' to pack at the main START
+  // = the RIGHT visual edge (Hebrew leading edge).
   editModeHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 4,
@@ -2670,8 +2710,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     alignSelf: 'stretch',
   },
+  // BATCH-G1: JSX is [BrandMark, Wordmark "UniMatch"]. Under RTL with
+  // `row` the BrandMark sits on the right (Hebrew leading edge) and
+  // the wordmark follows to its left — matches the BrandMark+text
+  // anchor used by the questionnaire progress header for consistency.
   onboardingBrandRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -2758,10 +2802,15 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     marginTop: 4,
   },
+  // BATCH-G1: card title stays centered (hero pattern), but the body
+  // copy switches to textAlign: 'right' — longer Hebrew explanations
+  // float awkwardly when centered in a card that's already balanced
+  // by the centered icon + pill + title. Right-aligned reads as a
+  // natural Hebrew paragraph.
   onboardingCardBody: {
     fontSize: 15,
     color: UI_COLORS.textLight,
-    textAlign: 'center',
+    textAlign: 'right',
     writingDirection: 'rtl',
     alignSelf: 'stretch',
     lineHeight: 23,

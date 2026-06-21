@@ -221,54 +221,63 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     justifyContent: 'flex-start',
   },
+  // BATCH-G1: restrained polish — padding 28→24, gap 14→12. Card feels
+  // less heavy and more documentary. Shadow already at premium-soft
+  // 0.06 opacity — kept.
   card: {
     borderRadius: 28,
     borderWidth: 1,
-    padding: 28,
+    padding: 24,
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
     elevation: 4,
   },
+  // BATCH-G1: emoji circle 96→80, emoji 52→42. Original size read as
+  // a hero illustration; smaller circle balances the now-right-aligned
+  // title and leaves room for the body without scrolling on small
+  // iPhones. Still a clear visual anchor.
   emojiCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   emoji: {
-    fontSize: 52,
-    lineHeight: 60,
+    fontSize: 42,
+    lineHeight: 50,
   },
   // BATCH-C REVISION: alignSelf stretch so the small "שלב N" label
   // centers relative to the full card width, not relative to a
   // shrink-to-fit text island created by the card's alignItems:
   // 'center'. Matches the same fix already applied to title/body.
+  // BATCH-G1: letterSpacing 1 → 0.5. The wider tracking felt
+  // marketing-poster heavy; 0.5 keeps the all-caps-style rhythm
+  // without shouting.
   stepLabel: {
     fontSize: 13,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textAlign: 'center',
     writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
-  // BATCH-C: title kept centered (it's a step heading — center reads
-  // as deliberate). alignSelf stretch so it spans the full card width
-  // and the center alignment is relative to the card, not to a
-  // shrink-to-fit text island that the parent's alignItems: 'center'
-  // would otherwise create.
-  // BATCH-E1: weight 900 → 800. Consistent with the same step-down
-  // applied to onboarding cards + match-result hero title — premium
-  // hero impact without the heaviest possible weight.
+  // BATCH-G1: title switched from centered to right-aligned.
+  // TestFlight build 14 review found that a centered Hebrew title
+  // above a right-aligned body created visual whiplash — the eye
+  // jumped from a centered headline to a right-anchored paragraph.
+  // Right-aligning both pins them to the same axis and reads as a
+  // cohesive Hebrew block. Small badge ("שלב N") stays centered
+  // as the visual anchor / step indicator.
   title: {
     fontSize: 24,
     fontWeight: '800',
-    textAlign: 'center',
+    textAlign: 'right',
     writingDirection: 'rtl',
     paddingHorizontal: 8,
     alignSelf: 'stretch',
@@ -289,14 +298,13 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: 4,
   },
-  // BATCH-C: pin row-reverse so the bullet dot sits on the RIGHT and
-  // the text flows leftward from it — natural Hebrew reading order.
-  // Previously relied on auto-flip under forceRTL which is brittle.
-  // alignItems center pairs the dot with the text mid-line — cleaner
-  // than the old flex-start + marginTop 9 hack that had to match a
-  // specific 24-line height.
+  // BATCH-G1: TestFlight build 14 showed bullet dots on the LEFT of
+  // each bullet — wrong for Hebrew. JSX is [Dot, Text]; under RTL
+  // with `row` the first JSX child (Dot) sits on the RIGHT and the
+  // text flows leftward from it — natural Hebrew reading order.
+  // The earlier row-reverse pin double-flipped it back to LTR.
   bulletRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
