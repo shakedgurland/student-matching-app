@@ -289,16 +289,20 @@ const styles = StyleSheet.create({
     borderColor: UI_COLORS.border,
     color: UI_COLORS.inputText,
   },
+  // BATCH-E1: premium polish — height 56→52, fontSize 18→17,
+  // fontWeight 800→700, shadow opacity 0.25→0.12. Same step-down
+  // applied across all primary buttons in the app (onboarding /
+  // match-result / login / signup) for a consistent refined look.
   primaryButton: {
     backgroundColor: UI_COLORS.primary,
-    height: 56,
+    height: 52,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
     shadowColor: UI_COLORS.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 4,
   },
@@ -307,8 +311,8 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
   registerSection: {

@@ -262,9 +262,12 @@ const styles = StyleSheet.create({
   // and the center alignment is relative to the card, not to a
   // shrink-to-fit text island that the parent's alignItems: 'center'
   // would otherwise create.
+  // BATCH-E1: weight 900 → 800. Consistent with the same step-down
+  // applied to onboarding cards + match-result hero title — premium
+  // hero impact without the heaviest possible weight.
   title: {
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: '800',
     textAlign: 'center',
     writingDirection: 'rtl',
     paddingHorizontal: 8,

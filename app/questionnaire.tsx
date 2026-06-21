@@ -30,6 +30,20 @@ import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// BATCH-E1: Hebrew section labels for the new continuous progress bar
+// (replaces the 16-segment discrete bar that read as "many empty steps
+// ahead"). Steps 1-5 are the basic section; steps 8-18 fall through to
+// the in-component DEEP_SECTION_TITLES which already exists. Step 7 is
+// the fast/deep choice screen and has no progress bar (see the
+// `currentStep !== 7` guard on the renderer).
+const BASIC_SECTION_TITLES: Record<number, string> = {
+  1: 'פרופיל אישי',
+  2: 'לימודים',
+  3: 'העדפות היכרות',
+  4: 'תחביבים',
+  5: 'סגנון קשר ראשוני',
+};
+
 // 0: Intro, 1-5: Basic (V2 spec), 7: Choice, 8-18: Deep (V2 spec, 11 grouped sections; 18 = שוברי קרח)
 type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
 
@@ -116,16 +130,28 @@ const INTERESTED_IN_OPTIONS = [
 // migration 025 to be applied first — until then, CHECK violates with
 // 23514 on submit.
 //
+// BATCH-E1 retune (UI-only):
+//   - Dropped the 'must_have' UI row. CHECK constraint still allows it
+//     (migration 025), and legacy profiles that already wrote
+//     'must_have' continue to work (their hard-filter behavior in
+//     create_authorized_match keeps applying on their behalf until
+//     they re-edit). New users cannot pick must_have any more — the
+//     copy "חשוב לי מאוד" was reading as overly intense for what is
+//     really just a strong preference.
+//   - Retuned the 'nice_to_have' label to "יש לי העדפה, אבל לא קריטי"
+//     — clearer signal that the user DOES have a preference (just not
+//     a dealbreaker), versus the prior "נחמד אם מתאים" which read as
+//     "I don't really care". DB value unchanged → no migration, no
+//     legacy impact.
+//
 //   none           → no algorithmic effect, no min asked.
 //   nice_to_have   → stored only, no scoring effect, no min asked.
 //   important      → soft penalty in scoring when candidate < min height.
 //                    Min height required.
-//   must_have      → hard filter in RPC + scoring. Min height required.
 const HEIGHT_PREF_OPTIONS_V2 = [
   { label: 'לא חשוב לי', value: 'none' },
-  { label: 'נחמד אם מתאים, אבל לא קריטי', value: 'nice_to_have' },
+  { label: 'יש לי העדפה, אבל לא קריטי', value: 'nice_to_have' },
   { label: 'חשוב לי', value: 'important' },
-  { label: 'חשוב לי מאוד', value: 'must_have' },
 ];
 
 const REGION_OPTIONS = [
@@ -2325,21 +2351,50 @@ export default function QuestionnaireScreen() {
               </TouchableOpacity>
             </View>
           )}
-          {currentStep > 0 && currentStep !== 7 && (
-            <View style={styles.progressHeader}>
-               <View style={styles.progressContainer}>
-                  {(() => {
-                    // 5 basic segments (steps 1-5) + 11 deep segments (steps 8-18, including שוברי קרח).
-                    // For fast-only users segments 6-16 stay inactive.
-                    const filled = currentStep <= 5 ? currentStep : currentStep >= 8 ? 5 + (currentStep - 7) : 5;
-                    return Array.from({ length: 16 }).map((_, i) => (
-                      <View key={i} style={[styles.progressSegment, { backgroundColor: (i + 1) <= filled ? UI_COLORS.primary : UI_COLORS.progressInactive }]} />
-                    ));
-                  })()}
-               </View>
-               <BrandMark size={20} />
-            </View>
-          )}
+          {currentStep > 0 && currentStep !== 7 && (() => {
+            // BATCH-E1: continuous slim progress bar replaces the 16-
+            // segment discrete bar. Reading "you have 15 empty segments
+            // ahead" at step 1 was being received as "this is long" —
+            // a continuous fill with a calm section label communicates
+            // momentum without dwelling on remaining count. Section
+            // labels come from BASIC_SECTION_TITLES (1-5) and the
+            // existing DEEP_SECTION_TITLES (8-18). Microcopy on step 1
+            // only, framed as encouragement rather than instruction.
+            const filled =
+              currentStep <= 5
+                ? currentStep
+                : currentStep >= 8
+                  ? 5 + (currentStep - 7)
+                  : 5;
+            const sectionLabel =
+              currentStep <= 5
+                ? BASIC_SECTION_TITLES[currentStep] ?? ''
+                : DEEP_SECTION_TITLES[currentStep] ?? '';
+            const fillPct = Math.max(2, Math.min(100, Math.round((filled / 16) * 100)));
+            return (
+              <View style={styles.progressHeader}>
+                <View style={styles.progressTopRow}>
+                  <ThemedText style={[styles.progressSectionLabel, { color: dynamicColors.textLight }]}>
+                    {sectionLabel}
+                  </ThemedText>
+                  <BrandMark size={20} />
+                </View>
+                <View style={[styles.progressTrack, { backgroundColor: UI_COLORS.progressInactive }]}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { backgroundColor: UI_COLORS.primary, width: `${fillPct}%` },
+                    ]}
+                  />
+                </View>
+                {currentStep === 1 && (
+                  <ThemedText style={[styles.progressMicrocopy, { color: dynamicColors.textLight }]}>
+                    עוד כמה דקות ויש לנו כיוון טוב
+                  </ThemedText>
+                )}
+              </View>
+            );
+          })()}
 
           <ScrollView 
             contentContainerStyle={styles.scrollContent} 
@@ -2456,9 +2511,41 @@ const styles = StyleSheet.create({
   choiceIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: UI_COLORS.surface, justifyContent: 'center', alignItems: 'center' },
   choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 4, alignSelf: 'stretch' },
   choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', writingDirection: 'rtl', lineHeight: 20, alignSelf: 'stretch' },
-  progressHeader: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 24, gap: 15, marginTop: 10 },
-  progressContainer: { flex: 1, flexDirection: 'row', height: 4, gap: 4 },
-  progressSegment: { flex: 1, height: '100%', borderRadius: 2 },
+  // BATCH-E1: progress bar redesign. Was a 16-segment discrete row
+  // (progressContainer + progressSegment) that visually emphasized the
+  // remaining empty count. Now a single continuous track with an
+  // animated-feeling fill + a calm section label above it. Same
+  // brand-mark anchor on the right (Hebrew leading edge).
+  progressHeader: { paddingHorizontal: 24, gap: 10, marginTop: 10 },
+  progressTopRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  progressSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    flex: 1,
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressMicrocopy: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   navigation: { marginTop: 30, gap: 12 },
   navButton: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   primaryNav: { shadowColor: UI_COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 3 },
@@ -2563,8 +2650,11 @@ const styles = StyleSheet.create({
     // the hero title. lineHeight scales to 32 to preserve breathing
     // room across the larger size; still fits two lines comfortably
     // on iPhone SE (375pt wide minus card padding).
+    // BATCH-E1: weight 900 -> 800. 900 was the heaviest possible;
+    // 800 keeps the hero impact and reads as premium rather than
+    // shouty.
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: '800',
     color: UI_COLORS.text,
     textAlign: 'center',
     writingDirection: 'rtl',
@@ -2602,22 +2692,27 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     gap: 10,
   },
+  // BATCH-E1: premium polish — height 56 → 52, fontSize 18 → 17,
+  // fontWeight 800 → 700, shadow opacity 0.22 → 0.12. The bright red
+  // shadow halo at 0.22 was the most attention-grabbing element on
+  // the onboarding cards; softening it lets the card content lead.
+  // Still well above iOS 44pt min tap target.
   onboardingPrimaryButton: {
     backgroundColor: UI_COLORS.primary,
-    height: 56,
+    height: 52,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: UI_COLORS.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
+    shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 4,
   },
   onboardingPrimaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     letterSpacing: 0.3,
   },
   onboardingPrivacyLine: {

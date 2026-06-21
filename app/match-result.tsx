@@ -622,26 +622,35 @@ const styles = StyleSheet.create({
   // being visually clipped or tappable under the footer.
   scrollContent: { padding: 24, paddingBottom: 120, gap: 24 },
   titleBlock: { alignItems: 'center', gap: 8, marginTop: 12 },
+  // BATCH-E1: premium polish — letterSpacing 1 → 0.5 + weight 800 → 700.
+  // The previous combo read as ALL-CAPS-shouty next to the hero title;
+  // refined letterSpacing + slightly lighter weight reads premium.
   preTitle: {
     fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.5,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+  // BATCH-E1: title weight 900 → 800. 900 was the heaviest possible
+  // weight; 800 keeps the hero impact while feeling less bombastic
+  // alongside the avatar and score badge below.
   title: {
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: '800',
     textAlign: 'center',
     writingDirection: 'rtl',
     lineHeight: 32,
   },
   avatarRow: { alignItems: 'center', marginVertical: 4 },
+  // BATCH-E1: avatar border 3 → 2. A 3pt branding-red border around
+  // the hero avatar competed visually with the title + score badge;
+  // 2pt keeps the brand frame visible but lets the avatar breathe.
   avatarCircle: {
     width: 132,
     height: 132,
     borderRadius: 66,
-    borderWidth: 3,
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -764,13 +773,17 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
   },
+  // BATCH-E1: primary button height 56 → 52 + weight 800 → 700 +
+  // fontSize 18 → 17. Still well above iOS 44pt min tap target;
+  // refined visual weight reads premium. Matches the same step-down
+  // applied to onboarding / login / signup primary buttons.
   primaryButton: {
-    height: 56,
+    height: 52,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  primaryButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
   secondaryButton: {
     height: 48,
     borderRadius: 16,
