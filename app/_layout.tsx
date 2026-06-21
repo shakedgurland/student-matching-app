@@ -109,15 +109,59 @@ export default function RootLayout() {
       if (error) throw error;
 
       if (!data) {
+        // BATCH-C: distinguish a deleted-Supabase-user (stale local
+        // session) from a brand-new-user-without-profile edge case.
+        // Re-verify against the server with auth.getUser(); the local
+        // session token may still pass getSession() (cached) even
+        // though the server no longer recognizes the user. If the
+        // server confirms the user is gone, sign out cleanly so the
+        // onAuthStateChange listener flips us to !session and the
+        // routing effect lands the user on /login — NOT /signup,
+        // which is the broken behavior reported in TestFlight build 12.
+        const ok = await verifyAuthUserOrSignOut();
+        if (!ok) return; // signOut path; onAuthStateChange will refresh state
+        // Auth user exists server-side but profiles row is missing.
+        // Rare edge case (handle_new_user trigger failure, manual row
+        // deletion). Keep the existing /signup redirect for this.
         setProfile({ kind: 'missing' });
       } else {
         setProfile({ kind: 'present', onboardingCompleted: !!data.onboarding_completed });
       }
     } catch (error) {
       console.error('Error loading profile:', error);
+      // BATCH-C: same stale-session detection on error paths. A profile
+      // read that errors with a JWT validation failure (deleted user)
+      // would otherwise also bounce to /signup with the old code.
+      const ok = await verifyAuthUserOrSignOut();
+      if (!ok) return;
       setProfile({ kind: 'missing' });
     } finally {
       setInitialized(true);
+    }
+  };
+
+  // BATCH-C: server-side auth user verification with safe fallback.
+  // Returns true if the auth user is still valid; returns false AFTER
+  // signing out + clearing local state, in which case the caller
+  // should NOT continue setting profile state — the auth-state
+  // listener will trigger a fresh routing pass to /login.
+  const verifyAuthUserOrSignOut = async (): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data?.user) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setProfile({ kind: 'unknown' });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('verifyAuthUserOrSignOut exception:', err);
+      // Network error — be conservative and DO NOT sign out (it would
+      // log out users who lost connectivity briefly). Return true so
+      // the caller falls through to the legitimate "missing profile"
+      // path. The user can retry later.
+      return true;
     }
   };
 

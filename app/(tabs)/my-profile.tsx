@@ -25,6 +25,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logEvent, logFormSubmit, logError, logButtonTap } from '@/lib/analytics';
+// BATCH-C: LABEL_MAPS + labelFor moved to lib/profile-labels.ts so
+// match-result and match-profile use the same Hebrew enum labels.
+// Source of truth for the option codes themselves remains
+// app/questionnaire.tsx — the shared module mirrors them.
+import { labelFor } from '@/lib/profile-labels';
 
 // Design Constants
 const UI_COLORS = {
@@ -42,45 +47,6 @@ const UI_COLORS = {
 // Carousel width = screen width minus the ScrollView contentContainer's
 // horizontal padding (24 each side). pagingEnabled snaps to this width.
 const CAROUSEL_WIDTH = Dimensions.get('window').width - 48;
-
-// V2 questionnaire-answer Hebrew labels for the profile preview rows.
-// Source of truth for the option values lives in app/questionnaire.tsx.
-const LABEL_MAPS: Record<string, Record<string, string>> = {
-  intent_type: {
-    long_term: 'קשר לטווח ארוך',
-    short_term: 'קשר קצר',
-    casual: 'סטוצים / קשר לא מחייב',
-    open_flow: 'ראש פתוח וזורם',
-  },
-  preferred_first_date: {
-    coffee: 'בית קפה',
-    restaurant: 'מסעדה',
-    bar: 'בר / דרינק',
-    picnic: 'פיקניק',
-    nature_walk: 'טיול בטבע',
-    active: 'פעילות אקטיבית',
-    home_evening: 'ערב ביתי',
-    connection_matters: 'לא משנה מה עושים, העיקר החיבור',
-  },
-  conflict_style: {
-    talk_immediately: 'רוצה לדבר מיד',
-    need_cooldown: 'צריך/ה זמן להירגע',
-    avoidant: 'נמנע/ת מעימותים',
-    situational: 'תלוי במצב',
-  },
-  region: {
-    north: 'צפון',
-    south: 'דרום',
-    center: 'מרכז',
-    jerusalem: 'ירושלים והסביבה',
-    haifa: 'חיפה והקריות',
-  },
-};
-
-function labelFor(field: keyof typeof LABEL_MAPS, value: unknown): string {
-  if (typeof value !== 'string' || !value) return 'לא צוין';
-  return LABEL_MAPS[field]?.[value] ?? 'לא צוין';
-}
 
 export default function MyProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';

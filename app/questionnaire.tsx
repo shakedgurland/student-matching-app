@@ -1158,12 +1158,44 @@ export default function QuestionnaireScreen() {
         //   - Photos with `id` already exist in DB → keep, no-op.
         //   - Photos in state without `id` → newly picked → upload + insert.
         //   - Photos in DB whose id is no longer in state → user removed them → delete.
+        //
+        // BATCH-C REVISION: defensive source-level dedup of `photos`
+        // state before reconciliation. Three protections:
+        //   (a) dedupe existing photos by `id` (impossible normally but
+        //       cheap insurance against state-level dups from save-
+        //       interruption + retry sequences).
+        //   (b) dedupe new photos by `uri` (the local file path) so a
+        //       user who somehow added the same image twice via the
+        //       picker doesn't create two storage rows for it.
+        //   (c) treat any photo whose uri looks like an http(s) URL
+        //       (e.g., a Supabase signed URL) as an EXISTING photo —
+        //       must already carry an `id`. If it doesn't (id stripped
+        //       by some upstream bug), skip the upload step entirely
+        //       rather than re-uploading the image as a fresh row.
+        //       This is the protection against the suspected root cause
+        //       of the duplicate-photo report from TestFlight build 12.
+        //
+        // Source-of-truth `photos` state is left unchanged — only the
+        // local `dedupedPhotos` view drives the rest of this block.
+        const _seenIds = new Set<string>();
+        const _seenUris = new Set<string>();
+        const dedupedPhotos = photos.filter((p) => {
+          if (p.id) {
+            if (_seenIds.has(p.id)) return false;
+            _seenIds.add(p.id);
+            return true;
+          }
+          if (_seenUris.has(p.uri)) return false;
+          _seenUris.add(p.uri);
+          return true;
+        });
+
         const { data: currentDbPhotos } = await supabase
           .from('profile_photos')
           .select('id, storage_path, display_order')
           .eq('user_id', user.id);
 
-        const stateIds = new Set(photos.filter(p => p.id).map(p => p.id!));
+        const stateIds = new Set(dedupedPhotos.filter(p => p.id).map(p => p.id!));
         // Only photos we actually loaded into the UI are eligible for deletion;
         // a DB row that failed to sign at load time was never shown to the user
         // and must not be deleted just because it's absent from state.
@@ -1182,12 +1214,26 @@ export default function QuestionnaireScreen() {
         // Upload new photos (those in state without `id`). Track the storage path
         // assigned to each state slot so we can compute the new "first photo" for
         // the avatar cascade below.
-        const pathByIndex: (string | null)[] = photos.map(p => p.storage_path ?? null);
+        const pathByIndex: (string | null)[] = dedupedPhotos.map(p => p.storage_path ?? null);
         const survivingExistingCount = (currentDbPhotos ?? []).length - removedFromState.length;
         let nextOrder = survivingExistingCount;
-        for (let i = 0; i < photos.length; i++) {
-          const p = photos[i];
+        for (let i = 0; i < dedupedPhotos.length; i++) {
+          const p = dedupedPhotos[i];
           if (p.id) continue;
+          // BATCH-C REVISION: defensive guard — never re-upload a photo
+          // whose uri is already a remote URL. Such photos came from
+          // Supabase Storage and should already be backed by a
+          // profile_photos row; if their `id` was somehow stripped,
+          // skipping the upload is safer than creating a duplicate
+          // row pointing at the same image bytes with a fresh
+          // ${Date.now()} path.
+          if (/^https?:\/\//i.test(p.uri)) {
+            // Reuse the existing 'photo_upload_failed' EventType; the
+            // action discriminator records that this skip is the
+            // remote-uri-without-id guard, not a real upload failure.
+            logEvent('photo_upload_failed', { screen: 'Questionnaire', action: 'edit_remote_uri_no_id_skipped', metadata: { index: i } });
+            continue;
+          }
 
           const manipResult = await ImageManipulator.manipulateAsync(
             p.uri,
@@ -2238,30 +2284,51 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1 },
   scrollContent: { padding: 24, paddingBottom: 60 },
-  stepContent: { gap: 24, paddingTop: 10 },
-  introHeader: { alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 40 },
-  introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding, lineHeight: 40, paddingHorizontal: 16 },
-  introText: { fontSize: 18, lineHeight: 28, textAlign: 'center', color: UI_COLORS.text, paddingHorizontal: 10 },
-  stepTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
-  stepSubtitle: { fontSize: 24, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 10 },
-  formGroup: { gap: 12 },
-  label: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
-  input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right', writingDirection: 'rtl' },
-  optionList: { gap: 10 },
-  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1 },
-  optionText: { fontSize: 15, textAlign: 'right', writingDirection: 'rtl' },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // BATCH-C REVISION: formGroup is now `alignSelf: 'stretch'` so every
+  // form section pins to the full ScrollView content width — its child
+  // text/inputs can then right-align against the actual right edge of
+  // the card area instead of shrinking to content width and floating.
+  // stepContent same — its gap 24 children should span full width.
+  stepContent: { gap: 24, paddingTop: 10, alignSelf: 'stretch' },
+  introHeader: { alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 40, alignSelf: 'stretch' },
+  introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding, lineHeight: 40, paddingHorizontal: 16, alignSelf: 'stretch' },
+  introText: { fontSize: 18, lineHeight: 28, textAlign: 'center', color: UI_COLORS.text, paddingHorizontal: 10, alignSelf: 'stretch' },
+  // BATCH-C REVISION: explicit alignSelf stretch + width 100% so the
+  // text bounding box spans the full parent width and the right-align
+  // pins to the parent's right edge on iOS (RN's default Text width
+  // measurement is content-fit, which makes textAlign right look like
+  // "centered" if the parent has any centering above it).
+  stepTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch', width: '100%' },
+  stepSubtitle: { fontSize: 24, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 10, alignSelf: 'stretch', width: '100%' },
+  formGroup: { gap: 12, alignSelf: 'stretch' },
+  label: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch', width: '100%' },
+  input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
+  optionList: { gap: 10, alignSelf: 'stretch' },
+  optionButton: { padding: 16, borderRadius: 12, borderWidth: 1, alignSelf: 'stretch' },
+  optionText: { fontSize: 15, textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
+  // BATCH-C REVISION: chipGrid pinned to row-reverse so the first chip
+  // sits on the RIGHT of the grid and chips flow leftward — natural
+  // Hebrew reading order. Without this, RN's auto-flip under forceRTL
+  // is inconsistent on iOS cold launches; chips would visually
+  // sometimes start from the left edge.
+  chipGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, alignSelf: 'stretch', justifyContent: 'flex-start' },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '600', textAlign: 'right', writingDirection: 'rtl' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // BATCH-C REVISION: same row-reverse pin for the photo grid so the
+  // "add photo" tile and any uploaded photos read right-to-left.
+  photoGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, alignSelf: 'stretch', justifyContent: 'flex-start' },
   photoWrapper: { width: '30%', aspectRatio: 0.8, borderRadius: 10, overflow: 'hidden' },
   gridPhoto: { width: '100%', height: '100%' },
   deletePhotoBadge: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   addPhotoPlaceholder: { width: '30%', aspectRatio: 0.8, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', borderColor: UI_COLORS.border },
-  choiceCard: { flexDirection: 'row', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15 },
+  // BATCH-C REVISION: choiceCard pinned to row-reverse so the icon
+  // appears on the RIGHT (Hebrew reading order) and the title/desc
+  // text flows leftward from it. alignSelf stretch ensures the card
+  // uses full width of its parent rather than shrinking.
+  choiceCard: { flexDirection: 'row-reverse', padding: 20, borderRadius: 20, backgroundColor: 'white', borderWidth: 1, borderColor: UI_COLORS.border, gap: 15, marginBottom: 15, alignSelf: 'stretch' },
   choiceIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: UI_COLORS.surface, justifyContent: 'center', alignItems: 'center' },
-  choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 4 },
-  choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', writingDirection: 'rtl', lineHeight: 20 },
+  choiceTitle: { fontSize: 18, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 4, alignSelf: 'stretch' },
+  choiceDescription: { fontSize: 14, color: UI_COLORS.textLight, textAlign: 'right', writingDirection: 'rtl', lineHeight: 20, alignSelf: 'stretch' },
   progressHeader: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 24, gap: 15, marginTop: 10 },
   progressContainer: { flex: 1, flexDirection: 'row', height: 4, gap: 4 },
   progressSegment: { flex: 1, height: '100%', borderRadius: 2 },

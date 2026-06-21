@@ -49,6 +49,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
+// BATCH-C: shared Hebrew enum-to-label helper. Replaces the local
+// REGION_LABELS_HE map and the previous raw-value rendering for
+// university / faculty / year_of_study.
+import { labelFor } from '@/lib/profile-labels';
 
 const UI_COLORS = {
   bg: '#FFF9F6',
@@ -85,16 +89,11 @@ const SIGNED_URL_TTL_SECONDS = 300;
 // to absorb UI thrash.
 const REFRESH_THROTTLE_MS = 30_000;
 
-// Hebrew labels for the small profile-card region row. Kept inline because
-// the match-profile screen is the only consumer; if a third screen ever
-// needs them, hoist to a shared module.
-const REGION_LABELS_HE: Record<string, string> = {
-  north: 'צפון',
-  south: 'דרום',
-  center: 'מרכז',
-  jerusalem: 'ירושלים והסביבה',
-  haifa: 'חיפה והקריות',
-};
+// BATCH-C: REGION_LABELS_HE local copy removed — region is now mapped
+// via labelFor('region', value) using the shared map in
+// lib/profile-labels.ts. Same Hebrew strings as before; just unified
+// with my-profile and match-result so the four screens that render
+// peer info share a single source of label truth.
 
 interface MatchRow {
   id: string;
@@ -340,19 +339,80 @@ export default function MatchProfileScreen() {
         // Don't bail — render carousel as empty.
       }
 
+      // BATCH-C FINAL REVISION: layered display-level dedup. TestFlight
+      // build 12 reported the same uploaded photo appearing twice in
+      // the carousel. There are two plausible duplication patterns —
+      // both possible from the same suspected questionnaire edit-mode
+      // reconciliation bug — and we now defend against both:
+      //
+      //   1. Same `storage_path` twice. Defensive baseline; in theory
+      //      should not happen because storage paths are unique
+      //      timestamp-suffixed names, but we still guard.
+      //
+      //   2. Same `display_order` with DIFFERENT `storage_path`. This
+      //      is the practical bug pattern: a fresh upload assigned the
+      //      same logical "photo slot" as an existing kept row,
+      //      producing two DB rows the user sees as duplicates even
+      //      though their paths differ. Without this guard, the
+      //      storage_path-only dedup would let both through.
+      //
+      // The .order('display_order', { ascending: true }) on the query
+      // means the FIRST row at any given display_order wins — which is
+      // also the row with the lower DB-side `id` ordering for ties.
+      // That is stable behavior across loads.
+      //
+      // What this preserves:
+      //   - A normal user with 3 photos at display_order 0, 1, 2 all
+      //     get rendered.
+      //   - Different photos at different display_orders are never
+      //     collapsed.
+      //   - Existing on-DB dup rows for affected users (the in-the-
+      //     wild reason this fix exists) render only once.
+      //
+      // No DB rows are deleted. No storage objects are removed. This
+      // is a render-time filter only; the underlying DB is left for a
+      // separate one-shot cleanup if and when product decides.
+      const seenPaths = new Set<string>();
+      const seenOrders = new Set<number>();
       const collected: PhotoEntry[] = [];
       for (const row of photoRows ?? []) {
         if (!row.storage_path) continue;
+        if (seenPaths.has(row.storage_path)) continue;
+        // Treat display_order as a logical slot identity ONLY when
+        // it's a real integer. Defensive against any legacy row that
+        // somehow has a null/undefined value (migration 002 sets
+        // DEFAULT 0 so this shouldn't normally happen).
+        if (
+          typeof row.display_order === 'number' &&
+          seenOrders.has(row.display_order)
+        ) {
+          continue;
+        }
         const url = await signOne(row.storage_path);
-        if (url) collected.push({ key: row.id, signedUrl: url });
+        if (!url) continue;
+        seenPaths.add(row.storage_path);
+        if (typeof row.display_order === 'number') {
+          seenOrders.add(row.display_order);
+        }
+        collected.push({ key: row.id, signedUrl: url });
       }
 
-      // If no profile_photos returned a signable URL, fall back to the
-      // avatar (often the same first photo, but sometimes the only one
-      // for users who never uploaded a gallery).
-      if (collected.length === 0 && peerData?.avatar_storage_path) {
+      // Avatar fallback. Previously fired only when collected was
+      // empty; now also skips if the avatar's storage_path is already
+      // represented (closes the "avatar == first photo" duplication
+      // path). Keep firing only when there are zero collected photos
+      // to avoid stacking the avatar on top of an already-populated
+      // carousel.
+      if (
+        peerData?.avatar_storage_path &&
+        !seenPaths.has(peerData.avatar_storage_path) &&
+        collected.length === 0
+      ) {
         const url = await signOne(peerData.avatar_storage_path);
-        if (url) collected.push({ key: 'avatar', signedUrl: url });
+        if (url) {
+          seenPaths.add(peerData.avatar_storage_path);
+          collected.push({ key: 'avatar', signedUrl: url });
+        }
       }
 
       setPhotos(collected);
@@ -442,13 +502,27 @@ export default function MatchProfileScreen() {
     : [];
   const icebreaker = match.icebreaker_hint?.trim() || null;
 
+  // BATCH-C: same pattern as match-result — pass each enum code through
+  // labelFor and skip the row if it would render the "לא צוין" fallback
+  // (the peer simply didn't answer this question; don't fill the card
+  // with empty rows). `campus` is free-text, no labelFor needed.
   const infoRows: { label: string; value: string }[] = [];
-  if (peer?.faculty) infoRows.push({ label: 'פקולטה', value: peer.faculty });
-  if (peer?.year_of_study) infoRows.push({ label: 'שנה', value: peer.year_of_study });
-  if (peer?.university) infoRows.push({ label: 'מוסד', value: peer.university });
+  if (peer?.faculty) {
+    const v = labelFor('faculty', peer.faculty);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'פקולטה', value: v });
+  }
+  if (peer?.year_of_study) {
+    const v = labelFor('year_of_study', peer.year_of_study);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'שנה', value: v });
+  }
+  if (peer?.university) {
+    const v = labelFor('university', peer.university);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'מוסד', value: v });
+  }
   if (peer?.campus) infoRows.push({ label: 'עיר', value: peer.campus });
-  if (peer?.region && REGION_LABELS_HE[peer.region]) {
-    infoRows.push({ label: 'אזור', value: REGION_LABELS_HE[peer.region] });
+  if (peer?.region) {
+    const v = labelFor('region', peer.region);
+    if (v && v !== 'לא צוין') infoRows.push({ label: 'אזור', value: v });
   }
 
   const hobbies = Array.isArray(peer?.hobbies)
@@ -779,7 +853,12 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     fontStyle: 'italic',
   },
-  infoRow: { flexDirection: 'row', gap: 8 },
+  // BATCH-C: explicit row-reverse so label sits on the RIGHT (Hebrew
+  // reading order) regardless of whether RN's RTL auto-flip applies
+  // (auto-flip is inconsistent across iOS cold launches / hot-reloads).
+  // justifyContent flex-start keeps the label-value pair tightly
+  // packed on the right rather than spreading.
+  infoRow: { flexDirection: 'row-reverse', gap: 8, justifyContent: 'flex-start' },
   infoLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
   infoValue: { fontSize: 15, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
   hobbiesBlock: { gap: 8, marginTop: 8 },
@@ -806,8 +885,15 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   bullets: { gap: 10 },
-  bulletItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  bulletDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
+  // BATCH-C: pin row-reverse so the bullet dot is on the RIGHT (Hebrew
+  // reading order) instead of relying on auto-flip. The bullet then
+  // sits right of the text and reading flows naturally from dot →
+  // right-aligned text. alignItems center pairs the dot's vertical
+  // center with the text's mid-line — visually cleaner than the
+  // previous flex-start + marginTop hack which depended on a brittle
+  // 8pt offset matching a 22pt line height.
+  bulletItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  bulletDot: { width: 6, height: 6, borderRadius: 3 },
   bulletText: {
     flex: 1,
     fontSize: 16,
