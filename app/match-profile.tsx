@@ -27,8 +27,9 @@
 //     deterministic template output, not message text).
 //   • Renders only what's in the safe SELECT list below.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -41,6 +42,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -64,6 +66,24 @@ const UI_COLORS = {
 // pattern from app/(tabs)/my-profile.tsx — kept inline because the
 // match-profile carousel is view-only (no delete/upload overlays).
 const CAROUSEL_WIDTH = Dimensions.get('window').width - 48;
+
+// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for peer
+// photos. Bounds the stale-access window if the match closes after
+// URLs are minted (signed URLs are HMAC tokens; the storage layer
+// doesn't re-check policy on each fetch, only on issuance). 5 min is
+// comfortably longer than a typical view-and-swipe session, and the
+// focus refresh below re-mints URLs every time the user returns to
+// the screen — so even a long session won't show 404 holes.
+const SIGNED_URL_TTL_SECONDS = 300;
+
+// PR-PREBUILD-MATCH-PRIVACY-POLISH: minimum spacing between silent
+// background refreshes. Prevents AppState transitions and focus events
+// from hammering the matches/profiles/storage APIs when the user
+// rapidly switches contexts (e.g., iOS notification-center peek which
+// emits inactive→active twice within a second). 30s is short enough
+// to catch a real status change soon after foregrounding, long enough
+// to absorb UI thrash.
+const REFRESH_THROTTLE_MS = 30_000;
 
 // Hebrew labels for the small profile-card region row. Kept inline because
 // the match-profile screen is the only consumer; if a third screen ever
@@ -109,7 +129,7 @@ interface PhotoEntry {
 async function signOne(storagePath: string): Promise<string | null> {
   const { data, error } = await supabase.storage
     .from('profile-photos')
-    .createSignedUrl(storagePath, 3600);
+    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }
@@ -136,16 +156,72 @@ export default function MatchProfileScreen() {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const carouselRef = useRef<ScrollView>(null);
+  // PR-PREBUILD-MATCH-PRIVACY-POLISH: distinguishes first focus (full
+  // spinner load) from later refocuses (silent background refresh). Lets
+  // useFocusEffect serve as the single source of truth for data fetching
+  // without flickering the spinner every time the user pops back from
+  // chat or match-result.
+  const hasLoadedRef = useRef(false);
+  // PR-PREBUILD-MATCH-PRIVACY-POLISH: tracks whether this screen is the
+  // currently-focused route. Used by the AppState listener to skip
+  // refresh when the user is on a different screen but this component
+  // is still mounted underneath in the navigator stack.
+  const isFocusedRef = useRef(false);
+  // PR-PREBUILD-MATCH-PRIVACY-POLISH: timestamp of the last load() call.
+  // Throttles focus+AppState refreshes so they don't double-fire (e.g.,
+  // navigating back to the screen and then an iOS notification-center
+  // peek both within a second).
+  const lastRefreshAtRef = useRef(0);
 
   // Whether the user got here from the chat screen — drives CTA wording
   // (return vs forward) so we don't push redundant /chat onto the stack.
   const fromChat = params.from === 'chat';
 
+  // PR-PREBUILD-MATCH-PRIVACY-POLISH: refresh on every focus, not just
+  // first mount. Covers the realistic stale-state race where the user
+  // pops back from chat (which may have transitioned 'active' →
+  // 'chat_started' via the message-insert trigger from migration 023,
+  // or where the cron job from migration 024 flipped 'active' →
+  // 'expired' while the user was on chat). useFocusEffect fires on
+  // initial focus AND every refocus; the hasLoadedRef gate makes the
+  // initial focus show the spinner while subsequent focuses are silent.
+  // The cleanup clears isFocusedRef so the AppState listener below
+  // knows not to refresh when the screen is no longer the active route.
+  useFocusEffect(
+    useCallback(() => {
+      isFocusedRef.current = true;
+      logScreenView('MatchProfile');
+      load({ silent: hasLoadedRef.current });
+      hasLoadedRef.current = true;
+      return () => {
+        isFocusedRef.current = false;
+      };
+      // load() captures its own state via setters; no cleanup needed
+      // because in-flight requests complete to setters that are no-ops
+      // on unmount (React handles unmounted-setState warnings as no-ops).
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
+
+  // PR-PREBUILD-MATCH-PRIVACY-POLISH: AppState foreground refresh.
+  // Closes the gap that useFocusEffect alone can't see: user is on
+  // match-profile, backgrounds the app for hours, foregrounds without
+  // any navigation. Without this listener the cached state would
+  // persist; the 300s URL TTL would have expired (images would 404)
+  // but the peer name/age/hobbies/score badge would all still be
+  // visible. Now: state becomes 'active' → if we're the focused
+  // screen AND we've already done an initial load AND the throttle
+  // window has elapsed → silent refresh. Subscription is mounted once
+  // for the screen's lifetime and removed on unmount.
   useEffect(() => {
-    logScreenView('MatchProfile');
-    load();
-    // load() does its own auth + match-id resolution; effect runs once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (!isFocusedRef.current) return;
+      if (!hasLoadedRef.current) return;
+      if (Date.now() - lastRefreshAtRef.current <= REFRESH_THROTTLE_MS) return;
+      load({ silent: true });
+    });
+    return () => sub.remove();
   }, []);
 
   const handleCarouselScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -153,10 +229,15 @@ export default function MatchProfileScreen() {
     setCurrentPhotoIndex(idx);
   };
 
-  async function load(): Promise<void> {
+  async function load(opts: { silent?: boolean } = {}): Promise<void> {
     try {
-      setLoading(true);
+      if (!opts.silent) setLoading(true);
       setErrorMsg(null);
+      // PR-PREBUILD-MATCH-PRIVACY-POLISH: stamp before the async work
+      // so the throttle window starts from the call moment, not the
+      // completion moment — prevents a slow load + a quick foreground
+      // event from double-firing.
+      lastRefreshAtRef.current = Date.now();
 
       const { data: userRes } = await supabase.auth.getUser();
       const me = userRes.user;
@@ -224,7 +305,13 @@ export default function MatchProfileScreen() {
             'load_peer_terminal_match',
             peerErr ?? new Error('peer hidden by RLS'),
           );
-          // peer stays null; render proceeds in closed state
+          // PR-PREBUILD-MATCH-PRIVACY-POLISH: explicit clear so a
+          // refresh that discovers terminal status drops any peer data
+          // cached from a previous focus (when the match was still
+          // active). Without this, the closed-state render below would
+          // show the previously-cached name/age/hobbies even though
+          // RLS now hides those columns.
+          setPeer(null);
         } else {
           logError(
             'MatchProfile',
@@ -273,7 +360,7 @@ export default function MatchProfileScreen() {
       logError('MatchProfile', 'load_exception', e);
       setErrorMsg('אירעה שגיאה. נסה/י שוב מאוחר יותר.');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }
 

@@ -34,6 +34,14 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
+// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for peer
+// images. Bounds the stale-access window if the match closes after the
+// URL is minted (signed URLs are HMAC tokens; the storage layer doesn't
+// re-check policy on each fetch, only on issuance). 5 min easily covers
+// a typical chat session; if the user lingers past expiry the avatar
+// falls back to the initial.
+const SIGNED_URL_TTL_SECONDS = 300;
+
 interface MessageRow {
   id: string;
   conversation_id: string;
@@ -236,7 +244,7 @@ export default function ChatScreen() {
         if (peerData.avatar_storage_path) {
           const { data: signed } = await supabase.storage
             .from('profile-photos')
-            .createSignedUrl(peerData.avatar_storage_path, 3600);
+            .createSignedUrl(peerData.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
           if (signed?.signedUrl) setPeerAvatarUrl(signed.signedUrl);
         }
       }

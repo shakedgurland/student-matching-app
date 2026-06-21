@@ -28,6 +28,12 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
+// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for the
+// peer avatar. Bounds the stale-access window if the match closes
+// after the URL is minted. Match-result is a short-lived view; 5 min
+// is comfortably long enough for the user to read and act.
+const SIGNED_URL_TTL_SECONDS = 300;
+
 interface MatchRow {
   id: string;
   user_a_id: string;
@@ -179,7 +185,7 @@ export default function MatchResultScreen() {
       if (peerData.avatar_storage_path) {
         const { data: signed, error: signErr } = await supabase.storage
           .from('profile-photos')
-          .createSignedUrl(peerData.avatar_storage_path, 3600);
+          .createSignedUrl(peerData.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
         if (!signErr && signed?.signedUrl) {
           setPeerAvatarUrl(signed.signedUrl);
         }
