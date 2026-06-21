@@ -14,6 +14,8 @@ import {
   Keyboard,
   ActivityIndicator,
   Image,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -1531,22 +1533,147 @@ export default function QuestionnaireScreen() {
     </View>
   );
 
-  const renderIntro = () => (
-    <View style={styles.stepContent}>
-      <View style={styles.introHeader}>
-         <BrandMark size={60} />
-         <ThemedText style={styles.introTitle}>ברוכים הבאים ל-UniMatch</ThemedText>
+  // BATCH-D: post-signup onboarding intro. Replaces the previous
+  // single-screen welcome with a 4-card paged carousel that explains
+  // the product before the user starts the questionnaire. Visible
+  // ONLY for new users (isEditMode === false AND currentStep === 0).
+  // Existing users who already completed onboarding are routed away
+  // from /questionnaire entirely by the rule at app/_layout.tsx:198,
+  // so they never reach this screen — no extra gate needed.
+  //
+  // Design references how-it-works.tsx's pager pattern (horizontal
+  // pagingEnabled ScrollView + dot indicators + safe-area aware footer)
+  // for visual consistency. RTL-correct: card text uses textAlign
+  // right + alignSelf stretch + writingDirection rtl, matching the
+  // Batch C right-edge alignment standard.
+  //
+  // No DB state tracks "saw onboarding" — the existing
+  // profile.onboarding_completed flag handles re-entry naturally:
+  // once the user finishes the questionnaire, they can never come
+  // back to step 0 unless they sign up again.
+  // BATCH-D REVISION: copy retuned for more emotional / premium tone.
+  // Highlights moved to the top of the spec (read first, frames the
+  // card), body kept short and scannable. Icon choices stay subtle —
+  // one per card, mirrors the "deep but not childish" goal.
+  //   Card 1: positioning vs the swipe-app market.
+  //   Card 2: scarcity-as-quality framing (less noise, more depth).
+  //   Card 3: the questionnaire is the differentiator, not friction.
+  //   Card 4: the match itself comes with conversation scaffolding.
+  const onboardingCards: { title: string; body: string; highlight: string; icon: string }[] = [
+    {
+      highlight: 'התאמה אחת בכל פעם',
+      title: 'לא עוד אפליקציית החלקות אינסופית',
+      body: 'במקום לדפדף בלי סוף, UniMatch נותנת לך התאמה אחת שנבחרה לפי השאלון — כדי שיהיה קל להתמקד באמת.',
+      icon: '✨',
+    },
+    {
+      highlight: 'פחות רעש, יותר עומק',
+      title: 'עד 5 התאמות בחודש',
+      body: 'עונים על שאלון מדויק, ומקבלים עד 5 התאמות בחודש. אם אין התחלה של שיחה תוך 72 שעות — ההתאמה נסגרת וממשיכים להתאמה הבאה.',
+      icon: '🎯',
+    },
+    {
+      highlight: 'שאלון שבונה התאמה',
+      title: 'עונים על מה שבאמת חשוב',
+      body: 'השאלון עוזר להבין סגנון קשר, קצב, תקשורת, ערכים ומה גורם לכם להרגיש שזה יכול לעבוד.',
+      icon: '💡',
+    },
+    {
+      highlight: 'מתחילים להכיר',
+      title: 'מקבלים התאמה איכותית',
+      body: 'במקום לנחש איך להתחיל, מקבלים התאמה עם סיבות ברורות ופתיח לשיחה — כדי שהצעד הראשון יהיה פשוט יותר.',
+      icon: '💬',
+    },
+  ];
+
+  const [onboardingIndex, setOnboardingIndex] = React.useState(0);
+  const onboardingScrollRef = React.useRef<ScrollView>(null);
+  const onboardingCardWidth = SCREEN_WIDTH - 48; // 24pt scrollContent padding × 2
+
+  const handleOnboardingScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / onboardingCardWidth);
+    setOnboardingIndex(Math.max(0, Math.min(onboardingCards.length - 1, idx)));
+  };
+
+  const advanceOnboarding = () => {
+    if (onboardingIndex < onboardingCards.length - 1) {
+      const next = onboardingIndex + 1;
+      onboardingScrollRef.current?.scrollTo({ x: next * onboardingCardWidth, animated: true });
+      setOnboardingIndex(next);
+      return;
+    }
+    // Last card → start the questionnaire.
+    logButtonTap('Questionnaire', 'onboarding_intro_finished');
+    setCurrentStep(1);
+  };
+
+  const renderIntro = () => {
+    const isLastCard = onboardingIndex === onboardingCards.length - 1;
+    return (
+      <View style={styles.onboardingContainer}>
+        <View style={styles.onboardingBrandRow}>
+          <BrandMark size={40} />
+          <ThemedText style={styles.onboardingBrandName}>UniMatch</ThemedText>
+        </View>
+
+        <ScrollView
+          ref={onboardingScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleOnboardingScrollEnd}
+          scrollEventThrottle={16}
+          style={styles.onboardingPager}
+          contentContainerStyle={styles.onboardingPagerContent}
+        >
+          {onboardingCards.map((card, i) => (
+            <View key={i} style={[styles.onboardingCardCell, { width: onboardingCardWidth }]}>
+              <View style={styles.onboardingCard}>
+                <View style={styles.onboardingIconCircle}>
+                  <ThemedText style={styles.onboardingIcon}>{card.icon}</ThemedText>
+                </View>
+                <View style={styles.onboardingHighlightPill}>
+                  <ThemedText style={styles.onboardingHighlightText}>{card.highlight}</ThemedText>
+                </View>
+                <ThemedText style={styles.onboardingCardTitle}>{card.title}</ThemedText>
+                <ThemedText style={styles.onboardingCardBody}>{card.body}</ThemedText>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <View style={styles.onboardingDotsRow}>
+          {onboardingCards.map((_, i) => {
+            const active = i === onboardingIndex;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.onboardingDot,
+                  active && styles.onboardingDotActive,
+                ]}
+              />
+            );
+          })}
+        </View>
+
+        <View style={styles.onboardingFooter}>
+          <TouchableOpacity
+            style={styles.onboardingPrimaryButton}
+            onPress={advanceOnboarding}
+            activeOpacity={0.85}
+          >
+            <ThemedText style={styles.onboardingPrimaryButtonText}>
+              {isLastCard ? 'מתחילים את השאלון' : 'הבא'}
+            </ThemedText>
+          </TouchableOpacity>
+          <ThemedText style={styles.onboardingPrivacyLine}>
+            הטלפון והמייל שלך לא נחשפים אוטומטית.
+          </ThemedText>
+        </View>
       </View>
-      <ThemedText style={styles.introText}>
-        השאלות הבאות נבנו כדי לזהות דפוסי התאמה משמעותיים — כמו כוונות, ערכים, סגנון תקשורת וקצב קשר — שעוזרים לנו להציע התאמה מדויקת ומוצלחת יותר.
-      </ThemedText>
-      <TouchableOpacity 
-        style={[styles.primaryNav, { backgroundColor: UI_COLORS.primary, padding: 18, borderRadius: 16, marginTop: 40 }]}
-        onPress={() => setCurrentStep(1)}>
-        <ThemedText style={[styles.primaryNavText, { textAlign: 'center' }]}>בואו נתחיל</ThemedText>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const renderStep1 = () => (
     <View style={styles.stepContent}>
@@ -2349,6 +2476,154 @@ const styles = StyleSheet.create({
     color: UI_COLORS.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    writingDirection: 'rtl',
+  },
+  // BATCH-D: onboarding intro carousel styles. Self-contained so the
+  // intro layout doesn't have to fit the questionnaire's per-step
+  // stepContent + formGroup structure. Bright + light, RTL-aware.
+  onboardingContainer: {
+    flex: 1,
+    paddingTop: 8,
+    paddingBottom: 16,
+    alignSelf: 'stretch',
+  },
+  onboardingBrandRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 18,
+  },
+  onboardingBrandName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: UI_COLORS.branding,
+    letterSpacing: -0.3,
+  },
+  onboardingPager: {
+    flexGrow: 0,
+  },
+  onboardingPagerContent: {
+    alignItems: 'stretch',
+  },
+  onboardingCardCell: {
+    paddingVertical: 8,
+    justifyContent: 'flex-start',
+  },
+  onboardingCard: {
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    padding: 28,
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 380,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  onboardingIconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: UI_COLORS.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  onboardingIcon: {
+    fontSize: 44,
+    lineHeight: 52,
+    textAlign: 'center',
+  },
+  onboardingHighlightPill: {
+    // BATCH-D REVISION: horizontal padding nudged 14 -> 16 so the
+    // longer highlight strings (e.g., "פחות רעש, יותר עומק") have
+    // comfortable breathing room without wrapping on small iPhones.
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#FFF0EA',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 61, 87, 0.18)',
+  },
+  onboardingHighlightText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: UI_COLORS.branding,
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  onboardingCardTitle: {
+    // BATCH-D REVISION: bumped 22 -> 24 for more emotional weight on
+    // the hero title. lineHeight scales to 32 to preserve breathing
+    // room across the larger size; still fits two lines comfortably
+    // on iPhone SE (375pt wide minus card padding).
+    fontSize: 24,
+    fontWeight: '900',
+    color: UI_COLORS.text,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    lineHeight: 32,
+    marginTop: 4,
+  },
+  onboardingCardBody: {
+    fontSize: 15,
+    color: UI_COLORS.textLight,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    lineHeight: 23,
+    paddingHorizontal: 4,
+  },
+  onboardingDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 18,
+  },
+  onboardingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: UI_COLORS.border,
+  },
+  onboardingDotActive: {
+    width: 22,
+    backgroundColor: UI_COLORS.branding,
+  },
+  onboardingFooter: {
+    alignSelf: 'stretch',
+    gap: 10,
+  },
+  onboardingPrimaryButton: {
+    backgroundColor: UI_COLORS.primary,
+    height: 56,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: UI_COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  onboardingPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  onboardingPrivacyLine: {
+    fontSize: 12,
+    color: UI_COLORS.textLight,
+    textAlign: 'center',
     writingDirection: 'rtl',
   },
 });
