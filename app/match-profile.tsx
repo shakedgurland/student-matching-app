@@ -339,33 +339,70 @@ export default function MatchProfileScreen() {
         // Don't bail — render carousel as empty.
       }
 
-      // BATCH-C: defensive display-level dedup. TestFlight build 12
-      // reported the same uploaded photo appearing twice in the
-      // carousel. Suspected root cause is the questionnaire's edit-mode
-      // photo reconciliation re-uploading existing photos as new rows
-      // with fresh ${Date.now()}_${i}.jpg paths (separate follow-up
-      // task — fixing the source requires storage delete + DB cleanup,
-      // out of scope here). Until that's addressed, we dedup at the
-      // display layer by `storage_path` so AT LEAST rows pointing at
-      // the same storage object only render once. The avatar fallback
-      // is also widened to skip if the avatar's path is already in the
-      // collected set, so "avatar = first photo" never duplicates.
+      // BATCH-C FINAL REVISION: layered display-level dedup. TestFlight
+      // build 12 reported the same uploaded photo appearing twice in
+      // the carousel. There are two plausible duplication patterns —
+      // both possible from the same suspected questionnaire edit-mode
+      // reconciliation bug — and we now defend against both:
+      //
+      //   1. Same `storage_path` twice. Defensive baseline; in theory
+      //      should not happen because storage paths are unique
+      //      timestamp-suffixed names, but we still guard.
+      //
+      //   2. Same `display_order` with DIFFERENT `storage_path`. This
+      //      is the practical bug pattern: a fresh upload assigned the
+      //      same logical "photo slot" as an existing kept row,
+      //      producing two DB rows the user sees as duplicates even
+      //      though their paths differ. Without this guard, the
+      //      storage_path-only dedup would let both through.
+      //
+      // The .order('display_order', { ascending: true }) on the query
+      // means the FIRST row at any given display_order wins — which is
+      // also the row with the lower DB-side `id` ordering for ties.
+      // That is stable behavior across loads.
+      //
+      // What this preserves:
+      //   - A normal user with 3 photos at display_order 0, 1, 2 all
+      //     get rendered.
+      //   - Different photos at different display_orders are never
+      //     collapsed.
+      //   - Existing on-DB dup rows for affected users (the in-the-
+      //     wild reason this fix exists) render only once.
+      //
+      // No DB rows are deleted. No storage objects are removed. This
+      // is a render-time filter only; the underlying DB is left for a
+      // separate one-shot cleanup if and when product decides.
       const seenPaths = new Set<string>();
+      const seenOrders = new Set<number>();
       const collected: PhotoEntry[] = [];
       for (const row of photoRows ?? []) {
         if (!row.storage_path) continue;
         if (seenPaths.has(row.storage_path)) continue;
+        // Treat display_order as a logical slot identity ONLY when
+        // it's a real integer. Defensive against any legacy row that
+        // somehow has a null/undefined value (migration 002 sets
+        // DEFAULT 0 so this shouldn't normally happen).
+        if (
+          typeof row.display_order === 'number' &&
+          seenOrders.has(row.display_order)
+        ) {
+          continue;
+        }
         const url = await signOne(row.storage_path);
         if (!url) continue;
         seenPaths.add(row.storage_path);
+        if (typeof row.display_order === 'number') {
+          seenOrders.add(row.display_order);
+        }
         collected.push({ key: row.id, signedUrl: url });
       }
 
       // Avatar fallback. Previously fired only when collected was
-      // empty; now also fires when collected has items but none of
-      // them is the avatar — which can happen if profile_photos
-      // returned only non-avatar rows. Skip if the avatar path is
-      // already represented in the collected set.
+      // empty; now also skips if the avatar's storage_path is already
+      // represented (closes the "avatar == first photo" duplication
+      // path). Keep firing only when there are zero collected photos
+      // to avoid stacking the avatar on top of an already-populated
+      // carousel.
       if (
         peerData?.avatar_storage_path &&
         !seenPaths.has(peerData.avatar_storage_path) &&
