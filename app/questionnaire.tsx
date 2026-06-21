@@ -1368,6 +1368,16 @@ export default function QuestionnaireScreen() {
   };
 
   const prevStep = () => {
+    // PR-QUESTIONNAIRE-EDIT-POLISH: in edit mode, the questionnaire
+    // starts at step 1 — there is no welcome/intro for returning users.
+    // Tapping "חזרה" at step 1 must exit the questionnaire rather than
+    // step into step 0 (which would render the new-user "בואו נתחיל"
+    // intro screen). Bail to the previous route directly.
+    if (isEditMode && currentStep <= 1) {
+      logButtonTap('Questionnaire', 'previous_step', { from: currentStep, to: 'back_to_profile' });
+      router.back();
+      return;
+    }
     if (currentStep > 0) {
       const prev = (currentStep === 8 || currentStep === 7 ? 5 : currentStep - 1) as Step;
       logButtonTap('Questionnaire', 'previous_step', { from: currentStep, to: prev });
@@ -1858,7 +1868,7 @@ export default function QuestionnaireScreen() {
   const renderDeepSteps = () => (
     <View style={styles.stepContent}>
       <View>
-        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שאלון מעמיק — שלב {currentStep - 7} מתוך 10</ThemedText>
+        <ThemedText style={[styles.stepTitle, { color: dynamicColors.textLight }]}>שאלון מעמיק — שלב {currentStep - 7} מתוך {Object.keys(DEEP_SECTION_TITLES).length}</ThemedText>
         <ThemedText style={styles.stepSubtitle}>{DEEP_SECTION_TITLES[currentStep] || ''}</ThemedText>
       </View>
 
@@ -2038,7 +2048,7 @@ export default function QuestionnaireScreen() {
             />
           </View>
           <View style={styles.formGroup}>
-            <ThemedText style={styles.label}>מה ה־green flag הכי מוזר שלך?</ThemedText>
+            <ThemedText style={styles.label}>מה מבחינתך סימן שזה מתחיל טוב?</ThemedText>
             <TextInput
               style={[styles.input, { color: dynamicColors.text, backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}
               placeholder="משהו קטן ולא צפוי שגורם לך לחשוב: אוקיי, זה בן אדם טוב…"
@@ -2137,6 +2147,15 @@ export default function QuestionnaireScreen() {
                       <ThemedText style={[styles.primaryNavText, { color: UI_COLORS.primary }]}>להמשיך לשאלון המעמיק</ThemedText>
                     </TouchableOpacity>
                   </>
+                ) : isEditMode && currentStep === 18 ? (
+                  // PR-QUESTIONNAIRE-EDIT-POLISH: in edit mode at the
+                  // final deep step ("שוברי קרח"), don't render a bottom
+                  // "סיום" button. The top "שמור וסגור" action is the
+                  // canonical save path in edit mode; a duplicate bottom
+                  // submit reads as an onboarding-only finish flow.
+                  // The "חזרה" back button below still renders so the
+                  // user can navigate to other steps if they want.
+                  null
                 ) : (
                   <TouchableOpacity
                     style={[styles.navButton, { backgroundColor: UI_COLORS.primary }]}
