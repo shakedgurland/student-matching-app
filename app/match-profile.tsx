@@ -1,0 +1,764 @@
+// app/match-profile.tsx
+//
+// PR-MATCH-PROFILE-V1 — full-screen rich profile of the user's current
+// matched peer. Entered from two places:
+//   • tap on the chat header (title or avatar) — appends ?from=chat so we
+//     know to phrase the CTA as a return rather than a forward navigation
+//   • secondary "צפייה בפרופיל המלא" button on match-result
+//
+// Read-only screen. No mutations. No new RPCs. All required data is
+// already permitted by existing RLS:
+//   • matches SELECT — participant policy from migration 002
+//   • profiles SELECT (peer) — peer-visibility policy from migration 023
+//     (status IN ('active','chat_started'))
+//   • profile_photos SELECT (peer) — participant policy from migration 002
+//   • storage 'profile-photos' SELECT (peer) — match-status-gated policy
+//     from migration 007 (active/chat_started)
+//
+// Terminal matches: peer profile/photo storage SELECTs return null/error
+// for expired/unmatched. The screen gracefully shows a closed state with
+// only the cached compatibility reasons / icebreaker from the matches
+// row (which is still readable for any status).
+//
+// Safety:
+//   • Never selects email, profile_ai_traits, raw questionnaire_answers,
+//     dealbreakers, scoring internals, or any other sensitive field.
+//   • Never displays message content (matches.icebreaker_hint is the
+//     deterministic template output, not message text).
+//   • Renders only what's in the safe SELECT list below.
+
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  ScrollView,
+  SafeAreaView,
+  ActivityIndicator,
+  Image,
+  Dimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { supabase } from '@/lib/supabase';
+import { logScreenView, logError } from '@/lib/analytics';
+
+const UI_COLORS = {
+  bg: '#FFF9F6',
+  primary: '#FF4D3D',
+  branding: '#FF3D57',
+  surface: '#FFF0EA',
+  text: '#172033',
+  textLight: '#667085',
+  border: '#E9E4E0',
+  card: '#FFFFFF',
+};
+
+// Carousel cell width = screen width minus the scroll content's horizontal
+// padding (24 each side). pagingEnabled snaps to this width. Mirrors the
+// pattern from app/(tabs)/my-profile.tsx — kept inline because the
+// match-profile carousel is view-only (no delete/upload overlays).
+const CAROUSEL_WIDTH = Dimensions.get('window').width - 48;
+
+// Hebrew labels for the small profile-card region row. Kept inline because
+// the match-profile screen is the only consumer; if a third screen ever
+// needs them, hoist to a shared module.
+const REGION_LABELS_HE: Record<string, string> = {
+  north: 'צפון',
+  south: 'דרום',
+  center: 'מרכז',
+  jerusalem: 'ירושלים והסביבה',
+  haifa: 'חיפה והקריות',
+};
+
+interface MatchRow {
+  id: string;
+  user_a_id: string;
+  user_b_id: string;
+  compatibility_score: number | null;
+  compatibility_reasons: string[] | null;
+  icebreaker_hint: string | null;
+  status: string;
+}
+
+interface PeerProfile {
+  id: string;
+  full_name: string | null;
+  username: string | null;
+  birth_year: number | null;
+  university: string | null;
+  faculty: string | null;
+  year_of_study: string | null;
+  campus: string | null;
+  region: string | null;
+  hobbies: string[] | null;
+  bio: string | null;
+  avatar_storage_path: string | null;
+}
+
+interface PhotoEntry {
+  key: string;
+  signedUrl: string;
+}
+
+async function signOne(storagePath: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from('profile-photos')
+    .createSignedUrl(storagePath, 3600);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+}
+
+export default function MatchProfileScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ match_id?: string; from?: string }>();
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
+
+  const dynamicColors = {
+    bg: isDark ? '#101828' : UI_COLORS.bg,
+    card: isDark ? '#1D2939' : UI_COLORS.card,
+    text: isDark ? '#FFFFFF' : UI_COLORS.text,
+    textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
+    border: isDark ? 'rgba(255,255,255,0.1)' : UI_COLORS.border,
+    surface: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface,
+  };
+
+  const [loading, setLoading] = useState(true);
+  const [match, setMatch] = useState<MatchRow | null>(null);
+  const [peer, setPeer] = useState<PeerProfile | null>(null);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const carouselRef = useRef<ScrollView>(null);
+
+  // Whether the user got here from the chat screen — drives CTA wording
+  // (return vs forward) so we don't push redundant /chat onto the stack.
+  const fromChat = params.from === 'chat';
+
+  useEffect(() => {
+    logScreenView('MatchProfile');
+    load();
+    // load() does its own auth + match-id resolution; effect runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCarouselScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / CAROUSEL_WIDTH);
+    setCurrentPhotoIndex(idx);
+  };
+
+  async function load(): Promise<void> {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+
+      const { data: userRes } = await supabase.auth.getUser();
+      const me = userRes.user;
+      if (!me) {
+        setErrorMsg('יש להתחבר מחדש');
+        return;
+      }
+
+      if (!params.match_id) {
+        setErrorMsg('לא נמצאה התאמה');
+        return;
+      }
+
+      const matchColumns =
+        'id, user_a_id, user_b_id, compatibility_score, compatibility_reasons, icebreaker_hint, status';
+
+      const { data: matchData, error: matchErr } = await supabase
+        .from('matches')
+        .select(matchColumns)
+        .eq('id', params.match_id)
+        .maybeSingle();
+
+      if (matchErr) {
+        logError('MatchProfile', 'load_match_failed', matchErr);
+        setErrorMsg('לא ניתן לטעון את ההתאמה');
+        return;
+      }
+      if (!matchData) {
+        setErrorMsg('ההתאמה לא נמצאה');
+        return;
+      }
+      const matchRow = matchData as MatchRow;
+
+      // Participant gate. Defense-in-depth — RLS already restricts SELECT
+      // on matches to participants, but if we somehow saw the row, refuse
+      // to derive a peer from a non-participant caller.
+      if (matchRow.user_a_id !== me.id && matchRow.user_b_id !== me.id) {
+        setErrorMsg('אין הרשאה לצפות בהתאמה הזו');
+        return;
+      }
+      setMatch(matchRow);
+
+      const peerId =
+        matchRow.user_a_id === me.id ? matchRow.user_b_id : matchRow.user_a_id;
+
+      // Safe peer columns only — no email, no AI traits, no raw answers.
+      const { data: peerData, error: peerErr } = await supabase
+        .from('profiles')
+        .select(
+          'id, full_name, username, birth_year, university, faculty, year_of_study, campus, region, hobbies, bio, avatar_storage_path',
+        )
+        .eq('id', peerId)
+        .maybeSingle();
+
+      // peerErr / null peerData happens for terminal matches (peer-RLS
+      // restricts to active/chat_started after migration 023). NOT an
+      // error here — the closed-state UI renders below with the cached
+      // match-row reasons/icebreaker. Log so ops can see the rate.
+      if (peerErr || !peerData) {
+        const matchIsTerminal =
+          matchRow.status === 'expired' || matchRow.status === 'unmatched';
+        if (matchIsTerminal) {
+          logError(
+            'MatchProfile',
+            'load_peer_terminal_match',
+            peerErr ?? new Error('peer hidden by RLS'),
+          );
+          // peer stays null; render proceeds in closed state
+        } else {
+          logError(
+            'MatchProfile',
+            'load_peer_failed',
+            peerErr ?? new Error('peer not found'),
+          );
+          setErrorMsg('לא ניתן לטעון את פרטי ההתאמה');
+          return;
+        }
+      } else {
+        setPeer(peerData as PeerProfile);
+      }
+
+      // Photos. Storage RLS (migration 007) is match-status-gated, so
+      // terminal matches will produce no signed URLs even though the
+      // profile_photos rows may still be SELECTable. The carousel falls
+      // through to the empty-photos state automatically.
+      const { data: photoRows, error: photosErr } = await supabase
+        .from('profile_photos')
+        .select('id, storage_path, display_order')
+        .eq('user_id', peerId)
+        .order('display_order', { ascending: true });
+
+      if (photosErr) {
+        logError('MatchProfile', 'load_photos_failed', photosErr);
+        // Don't bail — render carousel as empty.
+      }
+
+      const collected: PhotoEntry[] = [];
+      for (const row of photoRows ?? []) {
+        if (!row.storage_path) continue;
+        const url = await signOne(row.storage_path);
+        if (url) collected.push({ key: row.id, signedUrl: url });
+      }
+
+      // If no profile_photos returned a signable URL, fall back to the
+      // avatar (often the same first photo, but sometimes the only one
+      // for users who never uploaded a gallery).
+      if (collected.length === 0 && peerData?.avatar_storage_path) {
+        const url = await signOne(peerData.avatar_storage_path);
+        if (url) collected.push({ key: 'avatar', signedUrl: url });
+      }
+
+      setPhotos(collected);
+    } catch (e) {
+      logError('MatchProfile', 'load_exception', e);
+      setErrorMsg('אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function goBack(): void {
+    router.back();
+  }
+
+  function goToChat(): void {
+    if (!match) return;
+    // When opened from chat, the chat screen is already in the stack —
+    // popping back is cheaper and avoids stack growth.
+    if (fromChat) {
+      router.back();
+      return;
+    }
+    router.push({ pathname: '/chat' as any, params: { match_id: match.id } });
+  }
+
+  if (loading) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={[styles.center, { flex: 1 }]}>
+          <ActivityIndicator size="large" color={UI_COLORS.primary} />
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
+  if (errorMsg || !match) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+            <TouchableOpacity
+              onPress={goBack}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityLabel="חזרה">
+              <IconSymbol name="chevron.right" size={24} color={UI_COLORS.branding} />
+            </TouchableOpacity>
+            <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
+              פרופיל ההתאמה
+            </ThemedText>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={[styles.center, styles.errorBody]}>
+            <ThemedText style={[styles.errorTitle, { color: dynamicColors.text }]}>
+              {errorMsg ?? 'לא ניתן לטעון את פרופיל ההתאמה'}
+            </ThemedText>
+          </View>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
+  const isClosed = match.status === 'expired' || match.status === 'unmatched';
+  const isChatStarted = match.status === 'chat_started';
+  const ctaLabel = fromChat
+    ? 'חזרה לשיחה'
+    : isChatStarted
+      ? 'להמשיך לשיחה'
+      : 'פתח/י צ׳אט';
+  const backLabel = fromChat ? 'חזרה לשיחה' : 'חזרה';
+
+  // Display name + initial fallback (peer may be null on terminal match).
+  const displayName = (peer?.full_name || peer?.username || 'ההתאמה שלך').trim();
+  const initial = (displayName.trim()[0] || '?').toUpperCase();
+  const age = peer?.birth_year ? new Date().getFullYear() - peer.birth_year : null;
+  const nameWithAge = age ? `${displayName}, ${age}` : displayName;
+  const score = match.compatibility_score ?? null;
+
+  // Reasons are persisted on the match row — readable for any status
+  // including terminal — so we render them even when peer fetch failed.
+  const reasons = Array.isArray(match.compatibility_reasons)
+    ? match.compatibility_reasons.filter(
+        (r) => typeof r === 'string' && r.trim().length > 0,
+      )
+    : [];
+  const icebreaker = match.icebreaker_hint?.trim() || null;
+
+  const infoRows: { label: string; value: string }[] = [];
+  if (peer?.faculty) infoRows.push({ label: 'פקולטה', value: peer.faculty });
+  if (peer?.year_of_study) infoRows.push({ label: 'שנה', value: peer.year_of_study });
+  if (peer?.university) infoRows.push({ label: 'מוסד', value: peer.university });
+  if (peer?.campus) infoRows.push({ label: 'עיר', value: peer.campus });
+  if (peer?.region && REGION_LABELS_HE[peer.region]) {
+    infoRows.push({ label: 'אזור', value: REGION_LABELS_HE[peer.region] });
+  }
+
+  const hobbies = Array.isArray(peer?.hobbies)
+    ? (peer?.hobbies ?? []).filter((h) => typeof h === 'string' && h.trim().length > 0)
+    : [];
+  const bio = peer?.bio?.trim() || null;
+
+  return (
+    <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+          <TouchableOpacity
+            onPress={goBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityLabel={backLabel}>
+            <IconSymbol name="chevron.right" size={24} color={UI_COLORS.branding} />
+          </TouchableOpacity>
+          <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
+            פרופיל ההתאמה
+          </ThemedText>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* Hero — carousel or fallback initial */}
+          {photos.length > 0 ? (
+            <View style={styles.carouselSection}>
+              <ScrollView
+                ref={carouselRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleCarouselScrollEnd}
+                scrollEventThrottle={16}>
+                {photos.map((p) => (
+                  <View
+                    key={p.key}
+                    style={[styles.carouselCell, { width: CAROUSEL_WIDTH }]}>
+                    <View
+                      style={[
+                        styles.carouselImageWrapper,
+                        { borderColor: UI_COLORS.branding },
+                      ]}>
+                      <Image source={{ uri: p.signedUrl }} style={styles.carouselImage} />
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+              {photos.length > 1 && (
+                <View style={styles.dotsRow}>
+                  {photos.map((_, idx) => {
+                    const activeIndex = Math.min(currentPhotoIndex, photos.length - 1);
+                    const isActive = idx === activeIndex;
+                    return (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.dot,
+                          { backgroundColor: dynamicColors.border },
+                          isActive && { backgroundColor: UI_COLORS.branding, width: 20 },
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.carouselSection}>
+              <View
+                style={[
+                  styles.carouselCell,
+                  { width: CAROUSEL_WIDTH },
+                ]}>
+                <View
+                  style={[
+                    styles.fallbackHero,
+                    {
+                      backgroundColor: dynamicColors.surface,
+                      borderColor: UI_COLORS.branding,
+                    },
+                  ]}>
+                  <ThemedText style={[styles.fallbackInitial, { color: UI_COLORS.branding }]}>
+                    {initial}
+                  </ThemedText>
+                  <ThemedText style={[styles.fallbackHint, { color: dynamicColors.textLight }]}>
+                    {isClosed ? 'התמונות אינן זמינות עוד' : 'אין תמונות עדיין'}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Profile card */}
+          <View
+            style={[
+              styles.profileCard,
+              { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+            ]}>
+            <View style={styles.profileHeader}>
+              <ThemedText style={[styles.profileName, { color: dynamicColors.text }]}>
+                {nameWithAge}
+              </ThemedText>
+              {score !== null && (
+                <View style={[styles.scoreBadge, { backgroundColor: dynamicColors.surface }]}>
+                  <ThemedText style={[styles.scoreText, { color: UI_COLORS.branding }]}>
+                    {score}% התאמה
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+
+            {infoRows.length === 0 ? (
+              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
+                {isClosed
+                  ? 'פרטי הפרופיל אינם זמינים עוד.'
+                  : 'פרטים נוספים יופיעו כשההתאמה תשלים את הפרופיל.'}
+              </ThemedText>
+            ) : (
+              infoRows.map((row) => (
+                <View key={row.label} style={styles.infoRow}>
+                  <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
+                    {row.label}:
+                  </ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: dynamicColors.text }]}>
+                    {row.value}
+                  </ThemedText>
+                </View>
+              ))
+            )}
+
+            {hobbies.length > 0 && (
+              <View style={styles.hobbiesBlock}>
+                <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
+                  תחביבים
+                </ThemedText>
+                <View style={styles.hobbyChips}>
+                  {hobbies.map((h) => (
+                    <View
+                      key={h}
+                      style={[
+                        styles.hobbyChip,
+                        {
+                          backgroundColor: dynamicColors.surface,
+                          borderColor: UI_COLORS.branding + '30',
+                        },
+                      ]}>
+                      <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
+                        {h}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {bio && (
+              <View style={styles.bioBlock}>
+                <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
+                  קצת עליה/עליו
+                </ThemedText>
+                <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                  {bio}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+
+          {/* Why this is a good match */}
+          <View style={styles.section}>
+            <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+              למה זו התאמה טובה?
+            </ThemedText>
+            {reasons.length > 0 ? (
+              <View style={styles.bullets}>
+                {reasons.map((reason, i) => (
+                  <View key={i} style={styles.bulletItem}>
+                    <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.branding }]} />
+                    <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>
+                      {reason}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
+                הסיבות יופיעו ברגע שהן יחושבו.
+              </ThemedText>
+            )}
+          </View>
+
+          {icebreaker && (
+            <View
+              style={[
+                styles.icebreakerCard,
+                {
+                  backgroundColor: dynamicColors.surface,
+                  borderColor: UI_COLORS.branding + '20',
+                },
+              ]}>
+              <ThemedText style={[styles.icebreakerTitle, { color: UI_COLORS.branding }]}>
+                שאלה לפתוח איתה שיחה
+              </ThemedText>
+              <ThemedText style={[styles.icebreakerText, { color: dynamicColors.text }]}>
+                {icebreaker}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* CTA */}
+          {isClosed ? (
+            <View
+              style={[
+                styles.closedCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.closedText, { color: dynamicColors.textLight }]}>
+                ההתאמה הסתיימה. ההיסטוריה נשארת לקריאה בצ׳אט.
+              </ThemedText>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
+              onPress={goToChat}
+              activeOpacity={0.8}>
+              <ThemedText style={styles.primaryButtonText}>{ctaLabel}</ThemedText>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  headerSpacer: { width: 24 },
+  errorBody: { flex: 1, padding: 24, gap: 12 },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  scrollContent: { padding: 24, paddingBottom: 60, gap: 24 },
+  carouselSection: { gap: 12, marginTop: 4 },
+  carouselCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carouselImageWrapper: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#FFF0EA',
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  carouselImage: { width: '100%', height: '100%' },
+  fallbackHero: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  fallbackInitial: { fontSize: 84, fontWeight: '800' },
+  fallbackHint: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  profileCard: {
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  profileName: { fontSize: 22, fontWeight: '800' },
+  scoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  scoreText: { fontSize: 14, fontWeight: '700' },
+  noInfoNote: {
+    fontSize: 14,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    fontStyle: 'italic',
+  },
+  infoRow: { flexDirection: 'row', gap: 8 },
+  infoLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
+  infoValue: { fontSize: 15, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  hobbiesBlock: { gap: 8, marginTop: 8 },
+  hobbyChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  hobbyChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  hobbyChipText: { fontSize: 13, fontWeight: '700' },
+  bioBlock: { gap: 6, marginTop: 8 },
+  bioText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  section: { gap: 12 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  bullets: { gap: 10 },
+  bulletItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  bulletDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
+  bulletText: {
+    flex: 1,
+    fontSize: 16,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    lineHeight: 22,
+  },
+  icebreakerCard: { padding: 20, borderRadius: 20, borderWidth: 1, gap: 8 },
+  icebreakerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  icebreakerText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  closedCard: {
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  closedText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  primaryButton: {
+    height: 56,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+});

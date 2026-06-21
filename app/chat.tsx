@@ -472,7 +472,25 @@ export default function ChatScreen() {
               <IconSymbol name="chevron.right" size={24} color={UI_COLORS.branding} />
             </TouchableOpacity>
 
-            <View style={styles.headerTitleBlock}>
+            {/*
+              PR-MATCH-PROFILE-V1: title block + avatar both open the
+              rich match-profile screen. Wrapped in separate
+              TouchableOpacities so the back arrow + end-match button
+              remain independent tap targets and don't swallow events.
+              `from=chat` so match-profile knows the back/CTA wording.
+             */}
+            <TouchableOpacity
+              style={styles.headerTitleBlock}
+              onPress={() => {
+                if (match?.id) {
+                  router.push({
+                    pathname: '/match-profile' as any,
+                    params: { match_id: match.id, from: 'chat' },
+                  });
+                }
+              }}
+              accessibilityLabel="פרופיל ההתאמה"
+              activeOpacity={0.7}>
               <ThemedText
                 numberOfLines={1}
                 style={[styles.headerTitle, { color: dynamicColors.text }]}>
@@ -483,7 +501,7 @@ export default function ChatScreen() {
                   {headerSubtitle}
                 </ThemedText>
               )}
-            </View>
+            </TouchableOpacity>
 
             {canEnd && (
               <TouchableOpacity
@@ -497,11 +515,21 @@ export default function ChatScreen() {
               </TouchableOpacity>
             )}
 
-            <View
+            <TouchableOpacity
               style={[
                 styles.headerAvatar,
                 { backgroundColor: dynamicColors.surface, borderColor: UI_COLORS.branding },
-              ]}>
+              ]}
+              onPress={() => {
+                if (match?.id) {
+                  router.push({
+                    pathname: '/match-profile' as any,
+                    params: { match_id: match.id, from: 'chat' },
+                  });
+                }
+              }}
+              accessibilityLabel="פרופיל ההתאמה"
+              activeOpacity={0.7}>
               {peerAvatarUrl ? (
                 <Image source={{ uri: peerAvatarUrl }} style={styles.headerAvatarImage} />
               ) : (
@@ -509,7 +537,7 @@ export default function ChatScreen() {
                   {peerInitial}
                 </ThemedText>
               )}
-            </View>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
