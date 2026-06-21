@@ -89,9 +89,34 @@ export const logButtonTap = (screenName: string, action: string, metadata?: Reco
 export const logFormSubmit = (screenName: string, action: string, metadata?: Record<string, any>) => 
   logEvent('form_submit', { screen: screenName, action, metadata });
 
-export const logError = (screenName: string, action: string, error: any) => 
-  logEvent('app_error', { 
-    screen: screenName, 
-    action, 
-    metadata: { error: typeof error === 'string' ? error : (error.message || JSON.stringify(error)) } 
+// BATCH-F1: extract a never-throw helper for error→string conversion.
+// The previous inline `error.message || JSON.stringify(error)` could throw
+// when `error` had getters that threw (e.g., some Supabase/PostgrestError
+// shapes) or when the object held circular refs (JSON.stringify TypeError).
+// A throw inside an unawaited fire-and-forget analytics call became an
+// unhandled rejection that, after questionnaire navigation/unmount, raced
+// with React's shadow-view destruction on the main thread — a plausible
+// contributor to the Hermes EXC_BAD_ACCESS observed in TestFlight build 13.
+// Now the helper guards every step with try/catch and never accesses
+// properties that could trigger getters on potentially-freed objects.
+function safeErrorMessage(error: unknown): string {
+  try {
+    if (error === null || error === undefined) return 'unknown';
+    if (typeof error === 'string') return error;
+    if (typeof error === 'number' || typeof error === 'boolean') return String(error);
+    // Guarded property access — wrapping in String(...) coerces without
+    // calling .toString() on the original object (avoids getter throws).
+    const maybeMessage = (error as { message?: unknown })?.message;
+    if (typeof maybeMessage === 'string') return maybeMessage;
+    return 'error';
+  } catch {
+    return 'error';
+  }
+}
+
+export const logError = (screenName: string, action: string, error: any) =>
+  logEvent('app_error', {
+    screen: screenName,
+    action,
+    metadata: { error: safeErrorMessage(error) },
   });

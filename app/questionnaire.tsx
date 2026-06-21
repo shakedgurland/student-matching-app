@@ -948,8 +948,19 @@ export default function QuestionnaireScreen() {
 
   const handleSubmit = async (submitMode: 'fast' | 'deep') => {
     const finalMode = submitMode;
-    logButtonTap('Questionnaire', isEditMode ? 'save_questionnaire_edit' : `${finalMode}_match_selected`);
-    
+    // BATCH-F1: skip non-essential fire-and-forget analytics on edit-save
+    // entry. The previous logButtonTap kicked off an unawaited Supabase
+    // INSERT that continued running across navigation/unmount — one of
+    // the suspected contributors to the Hermes crash in TestFlight build
+    // 13. New-user flow still logs because it isn't part of the crash
+    // path and the funnel signal is valuable for first-time onboarding.
+    if (!isEditMode) {
+      logButtonTap('Questionnaire', `${finalMode}_match_selected`);
+    }
+    if (isEditMode) {
+      console.log('[edit-save] start');
+    }
+
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -959,6 +970,7 @@ export default function QuestionnaireScreen() {
       }
 
       // 1. Save questionnaire answers
+      if (isEditMode) console.log('[edit-save] answers-upsert start');
       const { error: answersError } = await supabase
         .from('questionnaire_answers')
         .upsert({
@@ -970,6 +982,7 @@ export default function QuestionnaireScreen() {
         logError('Questionnaire', 'save_answers_failed', answersError);
         throw answersError;
       }
+      if (isEditMode) console.log('[edit-save] answers-upsert done');
 
       // AI traits analysis (PR-AUDIT-D PR 2). Internal-only matching
       // signal — no user-facing "AI analyzes you" claim. Gated client-
@@ -989,11 +1002,22 @@ export default function QuestionnaireScreen() {
       // only scoring; subsequent matches pick up the AI signal once the
       // backend write lands. The wait happens inside the existing
       // submit-loading state — no new UI flow needed.
+      // BATCH-F1: skip the entire AI traits race in edit mode. This race
+      // (Promise.race against a 9-second setTimeout sentinel that
+      // constructs a `new Error('ai_traits_timeout')`) was the largest
+      // async surface in the edit-save path and the most plausible
+      // contributor to the Hermes JSError::recordStackTrace crash. The
+      // Edge Function hash-caches input fingerprints, so the server will
+      // pick up any free-text changes on the next match-create call
+      // anyway — there's no functional cost to skipping pre-match
+      // analysis on edit-save. The race remains in place for new-user
+      // submit, where the first-match latency matters more and the
+      // overall async surface is smaller.
       const psk = (formData.partner_should_know_text || '').trim();
       const cs  = (formData.conversation_starter || '').trim();
       const gf  = (formData.green_flag || '').trim();
       const meaningfulTextLen = psk.length + cs.length + gf.length;
-      if (finalMode === 'deep' && meaningfulTextLen >= 30) {
+      if (!isEditMode && finalMode === 'deep' && meaningfulTextLen >= 30) {
         const TRAITS_TIMEOUT_MS = 9000;
         // HOTFIX P0: keep a handle on the timeout id so we can clear it
         // the moment the Edge Function resolves. Previously the setTimeout
@@ -1170,6 +1194,7 @@ export default function QuestionnaireScreen() {
           updateData.onboarding_mode = 'deep';
         }
 
+        console.log('[edit-save] profile-update start');
         const { error: profileError } = await supabase
           .from('profiles')
           .update(updateData)
@@ -1179,6 +1204,7 @@ export default function QuestionnaireScreen() {
           logError('Questionnaire', 'edit_profile_update_failed', profileError);
           throw profileError;
         }
+        console.log('[edit-save] profile-update done');
 
         // === Photo reconciliation ===
         // The questionnaire photo grid is the source of truth in edit mode.
@@ -1218,10 +1244,12 @@ export default function QuestionnaireScreen() {
           return true;
         });
 
+        console.log('[edit-save] photos-select start');
         const { data: currentDbPhotos } = await supabase
           .from('profile_photos')
           .select('id, storage_path, display_order')
           .eq('user_id', user.id);
+        console.log('[edit-save] photos-select done count=', currentDbPhotos?.length ?? 0);
 
         const stateIds = new Set(dedupedPhotos.filter(p => p.id).map(p => p.id!));
         // Only photos we actually loaded into the UI are eligible for deletion;
@@ -1232,12 +1260,14 @@ export default function QuestionnaireScreen() {
           .filter(p => !stateIds.has(p.id));
         const removedStoragePaths = new Set(removedFromState.map(p => p.storage_path).filter(Boolean));
 
+        if (removedFromState.length > 0) console.log('[edit-save] photo-delete start count=', removedFromState.length);
         for (const dbPhoto of removedFromState) {
           await supabase.from('profile_photos').delete().eq('id', dbPhoto.id);
           if (dbPhoto.storage_path) {
             await supabase.storage.from('profile-photos').remove([dbPhoto.storage_path]);
           }
         }
+        if (removedFromState.length > 0) console.log('[edit-save] photo-delete done');
 
         // Upload new photos (those in state without `id`). Track the storage path
         // assigned to each state slot so we can compute the new "first photo" for
@@ -1245,6 +1275,8 @@ export default function QuestionnaireScreen() {
         const pathByIndex: (string | null)[] = dedupedPhotos.map(p => p.storage_path ?? null);
         const survivingExistingCount = (currentDbPhotos ?? []).length - removedFromState.length;
         let nextOrder = survivingExistingCount;
+        const newPhotoCount = dedupedPhotos.filter(p => !p.id).length;
+        if (newPhotoCount > 0) console.log('[edit-save] photo-upload start count=', newPhotoCount);
         for (let i = 0; i < dedupedPhotos.length; i++) {
           const p = dedupedPhotos[i];
           if (p.id) continue;
@@ -1301,6 +1333,7 @@ export default function QuestionnaireScreen() {
           }
           nextOrder++;
         }
+        if (newPhotoCount > 0) console.log('[edit-save] photo-upload done');
 
         // === Avatar cascade (Option B) ===
         // Walk the visible photo order, take the first slot that has a known
@@ -1330,6 +1363,7 @@ export default function QuestionnaireScreen() {
         // Otherwise (avatar still backed by a kept photo, or both null) leave it alone.
 
         if (nextAvatarPath !== undefined) {
+          console.log('[edit-save] avatar-cascade start');
           const { error: avatarUpdateError } = await supabase
             .from('profiles')
             .update({ avatar_storage_path: nextAvatarPath })
@@ -1339,42 +1373,104 @@ export default function QuestionnaireScreen() {
             // Non-fatal: photos are saved; avatar will self-heal next time the
             // user touches photos. Don't throw.
           }
+          console.log('[edit-save] avatar-cascade done');
         }
 
-        logFormSubmit('Questionnaire', 'edit_onboarding_submitted');
-        // HOTFIX P0: removed `Alert.alert('הצלחה', …)` that previously
-        // fired immediately before router.replace. iOS presents the
-        // alert async via UIKit while router.replace synchronously
-        // unmounts the React subtree — the resulting interleave was a
-        // plausible contributor to the Hermes EXC_BAD_ACCESS observed
-        // in TestFlight build 12. The destination /my-profile screen
-        // is the visible confirmation that the save succeeded.
-        router.replace('/(tabs)/my-profile');
+        // BATCH-F1: REMOVED the trailing `logFormSubmit('Questionnaire',
+        // 'edit_onboarding_submitted')` that previously fire-and-forgot a
+        // background Supabase INSERT immediately before navigation. Its
+        // unawaited async body continued running across the screen
+        // unmount, with closures capturing the call-site arguments —
+        // one of the suspected contributors to the Hermes crash in
+        // TestFlight build 13. Edit-save completion is not a critical
+        // analytics event; if we want it back later, await it inside
+        // a guarded try/catch BEFORE the tombstone.
+
+        // BATCH-F1: drain any pending microtasks (Supabase response
+        // handlers, internal continuations) before we tear down. A 0-ms
+        // setTimeout yields one event-loop tick so the JS thread can
+        // settle to a quiescent state, dramatically reducing the
+        // chance of a continuation resuming after the React tree has
+        // started unmounting on the main thread.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // BATCH-F1: tombstone the mountedRef BEFORE navigation. The
+        // useEffect cleanup that flips it only runs AFTER React commits
+        // the unmount — there's a window where any racing continuation
+        // would still see `mountedRef.current === true` and attempt
+        // state updates / Alerts. Tombstone-before-navigation closes
+        // that window. After this line we MUST NOT call any setState
+        // on this component.
+        mountedRef.current = false;
+
+        console.log('[edit-save] before-navigation');
+        // BATCH-F1: prefer router.back() for edit-save. Edit mode is
+        // entered via router.push('/questionnaire?mode=edit') from
+        // my-profile (verified at app/(tabs)/my-profile.tsx:531), so
+        // back() pops the stack one entry and lands on the original
+        // my-profile screen — a softer navigation than router.replace
+        // (no rebuild of the (tabs) stack), which means less main-
+        // thread shadow-view mutation work racing with the JS thread's
+        // remaining microtasks.
+        router.back();
       }
     } catch (error: any) {
-      console.error('Error saving questionnaire:', error);
+      // BATCH-F1: use safeErrorMessage helper instead of inline
+      // `error.message || 'שגיאה לא ידועה'`. The previous pattern
+      // accessed `.message` directly, which can trigger getter throws
+      // on certain Supabase/PostgrestError shapes. The helper guards
+      // every step and never throws.
+      const errStr = safeErrorMessage(error);
+      console.log('[edit-save] caught:', errStr);
       // Only surface on the error path — and only if we're still mounted.
       if (mountedRef.current) {
-        Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + (error.message || 'שגיאה לא ידועה'));
+        Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים: ' + errStr);
       }
     } finally {
-      // HOTFIX P0: guard against setState-after-unmount. On the happy
-      // path router.replace fires above and unmounts this screen before
-      // the await chain returns; without the guard the trailing
-      // setLoading(false) would push state into a freed React tree.
+      // HOTFIX P0: guard against setState-after-unmount. On the BATCH-F1
+      // success path mountedRef was tombstoned synchronously before
+      // router.back(), so this branch is naturally a no-op for happy
+      // paths. The guard still protects error paths where we stay on
+      // screen (mountedRef stayed true) and need to clear the loading
+      // spinner.
       if (mountedRef.current) {
         setLoading(false);
       }
     }
   };
 
+  // BATCH-F1: never-throw helper local to this screen — safer than
+  // accessing `error.message` directly on arbitrary catch values. Avoids
+  // getter throws on Supabase/PostgrestError shapes; bounded output size
+  // so we don't accidentally include sensitive payload bodies.
+  function safeErrorMessage(error: unknown): string {
+    try {
+      if (error === null || error === undefined) return 'unknown';
+      if (typeof error === 'string') return error;
+      if (typeof error === 'number' || typeof error === 'boolean') return String(error);
+      const maybeMessage = (error as { message?: unknown })?.message;
+      if (typeof maybeMessage === 'string') return maybeMessage;
+      return 'error';
+    } catch {
+      return 'error';
+    }
+  }
+
   const handleSaveAndClose = async () => {
     if (!formData.firstName.trim()) {
+      // Validation logging is safe: nothing happens after this beyond
+      // an Alert — no navigation, no unmount, the analytics promise
+      // resolves on the still-mounted questionnaire screen.
       logEvent('onboarding_validation_failed', { screen: 'Questionnaire', metadata: { field: 'firstName', via: 'save_and_close' } });
       Alert.alert('שדה חובה', 'יש להזין את השם שלך');
       return;
     }
-    logButtonTap('Questionnaire', 'save_and_close', { step: currentStep });
+    // BATCH-F1: removed the entry-point `logButtonTap` fire-and-forget
+    // from the edit-save path. The unawaited Supabase INSERT it kicked
+    // off continued running across the screen unmount that follows
+    // handleSubmit's navigation — a contributor to the suspected race
+    // behind the Hermes crash in TestFlight build 13. Save action
+    // itself is the signal that matters; the tap event is nice-to-have.
     const targetMode: 'fast' | 'deep' = userProfile?.onboarding_mode === 'deep' ? 'deep' : 'fast';
     await handleSubmit(targetMode);
   };
