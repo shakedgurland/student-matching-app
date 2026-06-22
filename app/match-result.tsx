@@ -362,10 +362,10 @@ export default function MatchResultScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.push('/(tabs)/my-profile' as any)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityLabel="חזרה">
-            <IconSymbol name="chevron.right" size={24} color={UI_COLORS.branding} />
+            accessibilityLabel="מעבר לפרופיל שלי">
+            <IconSymbol name="person.crop.circle" size={26} color={UI_COLORS.branding} />
           </TouchableOpacity>
           <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
             ההתאמה שלך
