@@ -849,16 +849,16 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 14, fontWeight: '700' },
   noInfoNote: {
     fontSize: 14,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
     fontStyle: 'italic',
   },
   // BATCH-G1: same row-reverse → row revert as match-result. JSX is
   // [Label, Value]; under RTL with `row` label pins to right, value
   // to its left. Earlier row-reverse double-flipped to LTR.
   infoRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-start' },
-  infoLabel: { fontSize: 15, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
-  infoValue: { fontSize: 15, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  infoLabel: { fontSize: 15, fontWeight: '500', writingDirection: 'rtl' },
+  infoValue: { fontSize: 15, fontWeight: '700', writingDirection: 'rtl' },
   hobbiesBlock: { gap: 8, marginTop: 8 },
   hobbyChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   hobbyChip: {
@@ -872,15 +872,15 @@ const styles = StyleSheet.create({
   bioText: {
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   section: { gap: 12 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   bullets: { gap: 10 },
   // BATCH-G1: JSX is [Dot, Text]; under RTL with `row` the dot sits
@@ -891,7 +891,6 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     fontSize: 16,
-    textAlign: 'right',
     writingDirection: 'rtl',
     lineHeight: 22,
   },
@@ -900,14 +899,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   icebreakerText: {
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   closedCard: {
     borderRadius: 20,
