@@ -550,7 +550,7 @@ export default function MatchResultScreen() {
               user re-view what they had.
              */}
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={[styles.secondaryButton, styles.secondaryButtonRow]}
               onPress={() => {
                 router.push({
                   pathname: '/match-profile' as any,
@@ -560,6 +560,7 @@ export default function MatchResultScreen() {
               <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.branding }]}>
                 צפייה בפרופיל המלא
               </ThemedText>
+              <IconSymbol name="chevron.left" size={18} color={UI_COLORS.branding} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.secondaryButton} onPress={openFeedback}>
@@ -721,17 +722,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   bullets: { gap: 10 },
-  // BATCH-E2 (RTL gap fix): mirrors the Batch C fix in match-profile.tsx
-  // for the same "למה זו התאמה טובה" bullet pattern. Pinned row-reverse
-  // so the bullet dot sits on the RIGHT (Hebrew reading order) and text
-  // flows leftward. alignItems center pairs the dot's vertical center
-  // with the text mid-line — cleaner than the previous flex-start +
-  // bulletDot.marginTop hack that depended on a brittle offset matching
-  // a 22pt line height. Match-result and match-profile now render this
-  // section identically.
-  // BATCH-G1: JSX is [Dot, Text]; under RTL with `row` the dot sits
-  // on the RIGHT and the text flows leftward — natural Hebrew bullet
-  // order. Earlier row-reverse pin (PR #32 hotfix) double-flipped it.
+  // JSX is [Dot, Text]; under forceRTL with `row` the dot sits on the
+  // physical right and the text flows leftward — natural Hebrew bullet.
   bulletItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bulletDot: { width: 6, height: 6, borderRadius: 3 },
   bulletText: {
@@ -814,6 +806,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  secondaryButtonRow: {
+    flexDirection: 'row',
+    gap: 6,
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '700' },
   emptyTitle: {
