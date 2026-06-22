@@ -318,8 +318,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   // BATCH-H2: ratingContainer gap 12 → 8. Combined with starText 48 → 36
   // the 5-star row now measures ~5×(36+8) + 4×8 = 252pt, comfortably

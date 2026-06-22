@@ -695,8 +695,8 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 14, fontWeight: '700' },
   noInfoNote: {
     fontSize: 14,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
     fontStyle: 'italic',
   },
   // BATCH-C: explicit row-reverse so label sits on the RIGHT (Hebrew
@@ -711,14 +711,14 @@ const styles = StyleSheet.create({
   // natural "label: value" Hebrew reading order. Earlier row-reverse
   // pin double-flipped it back to LTR on TestFlight build 14.
   infoRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-start' },
-  infoLabel: { fontSize: 16, fontWeight: '500', textAlign: 'right', writingDirection: 'rtl' },
-  infoValue: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  infoLabel: { fontSize: 16, fontWeight: '500', writingDirection: 'rtl' },
+  infoValue: { fontSize: 16, fontWeight: '700', writingDirection: 'rtl' },
   section: { gap: 12 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   bullets: { gap: 10 },
   // BATCH-E2 (RTL gap fix): mirrors the Batch C fix in match-profile.tsx
@@ -737,7 +737,6 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     fontSize: 16,
-    textAlign: 'right',
     writingDirection: 'rtl',
     lineHeight: 22,
   },
@@ -746,14 +745,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   icebreakerText: {
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   timerCard: {
     borderRadius: 20,

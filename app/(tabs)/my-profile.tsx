@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   // Photo carousel (replaces the legacy small avatar + tile grid).
   carouselSection: {
@@ -687,7 +687,8 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: '700',
-    textAlign: 'right',
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
     marginBottom: -4,
   },
   input: {
@@ -744,6 +745,7 @@ const styles = StyleSheet.create({
   displayBio: {
     fontSize: 16,
     textAlign: 'center',
+    writingDirection: 'rtl',
     lineHeight: 24,
     marginTop: 8,
     paddingHorizontal: 10,
@@ -770,6 +772,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
+    writingDirection: 'rtl',
   },
   questionnaireSection: {
     gap: 16,
@@ -783,7 +786,8 @@ const styles = StyleSheet.create({
   },
   answerItem: {
     fontSize: 15,
-    textAlign: 'right',
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   onboardingNote: {
     fontSize: 13,
@@ -810,7 +814,7 @@ const styles = StyleSheet.create({
   settingsRowText: {
     fontSize: 15,
     fontWeight: '600',
-    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   settingsDivider: {
     height: StyleSheet.hairlineWidth,
