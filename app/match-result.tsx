@@ -259,11 +259,22 @@ export default function MatchResultScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={{ flex: 1 }}>
           <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+            {/*
+              BATCH-H3: replaced the misleading back chevron with a
+              profile-access affordance. Match-result is reached via
+              router.replace() from the home tab, so router.back() had
+              nothing meaningful to pop to (it would exit the app on
+              cold launch). The profile icon takes the user to
+              /(tabs)/my-profile where they can edit their profile and
+              reach Privacy Policy / Terms. iOS swipe-from-edge still
+              works for users who happened to push match-result on top
+              of another route.
+             */}
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => router.push('/(tabs)/my-profile' as any)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityLabel="חזרה">
-              <IconSymbol name="chevron.right" size={24} color={UI_COLORS.branding} />
+              accessibilityLabel="מעבר לפרופיל שלי">
+              <IconSymbol name="person.crop.circle" size={26} color={UI_COLORS.branding} />
             </TouchableOpacity>
             <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
               ההתאמה שלך
