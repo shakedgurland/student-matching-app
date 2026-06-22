@@ -103,6 +103,7 @@ export default function MatchFeedbackScreen() {
 
   const handleSubmit = async () => {
     if (!matchId) return;
+    if (!rating && !outcome) return; // safety belt — button is also disabled
 
     setSubmitting(true);
     const result = await submitMatchFeedback({
@@ -117,11 +118,28 @@ export default function MatchFeedbackScreen() {
     setSubmitting(false);
 
     if (result.success) {
-      Alert.alert('תודה!', 'המשוב שלך נשמר באופן פרטי. תודה שהקדשת רגע.', [
+      // BATCH-H2: shorter, friendlier success copy. Same Alert pattern
+      // (router.back fires after user taps "חזרה") so navigation stays
+      // user-driven and never races a render — match-feedback is
+      // pushed from match-result, so back() pops cleanly to it.
+      Alert.alert('תודה!', 'תודה, המשוב נשמר.', [
         { text: 'חזרה', onPress: () => router.back() }
       ]);
     } else {
-      Alert.alert('שגיאה', 'לא הצלחנו לשמור את המשוב. נסה שוב מאוחר יותר.');
+      // BATCH-H2: diagnostic console log for the next TestFlight build
+      // so we can localize feedback insert failures. Non-sensitive only:
+      // excludes the user's free-text reasons / chip selections / names
+      // / tokens. match_id is an internal UUID; stage is an enum.
+      const supaErr = (result.error ?? null) as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown } | null;
+      console.log('[match-feedback] submit failed', {
+        message: typeof supaErr?.message === 'string' ? supaErr.message : null,
+        code: typeof supaErr?.code === 'string' ? supaErr.code : null,
+        details: typeof supaErr?.details === 'string' ? supaErr.details : null,
+        hint: typeof supaErr?.hint === 'string' ? supaErr.hint : null,
+        match_id: matchId,
+        stage: (stage as FeedbackStage) || 'ended',
+      });
+      Alert.alert('שגיאה', 'לא הצלחנו לשמור את המשוב. נסו שוב בעוד רגע.');
     }
   };
 
@@ -234,11 +252,27 @@ export default function MatchFeedbackScreen() {
               disabled={submitting || (!rating && !outcome)}
             >
               {submitting ? (
-                <ActivityIndicator color="#FFF" />
+                <View style={styles.primaryButtonLoading}>
+                  <ActivityIndicator color="#FFF" />
+                  <ThemedText style={styles.primaryButtonText}>שומר…</ThemedText>
+                </View>
               ) : (
-                <ThemedText style={styles.primaryButtonText}>שליחה</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>שליחת משוב</ThemedText>
               )}
             </TouchableOpacity>
+
+            {/*
+              BATCH-H2: inline helper when the primary button is disabled
+              because no rating and no outcome are picked. Previously
+              the button just sat half-opaque with no explanation, which
+              made taps feel like "nothing happens". Hidden once the
+              user picks either field so it doesn't nag.
+             */}
+            {(!rating && !outcome) && !submitting && (
+              <ThemedText style={[styles.helperText, { color: dynamicColors.textLight }]}>
+                בחר/י דירוג או סטטוס כדי לשלוח
+              </ThemedText>
+            )}
 
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -287,16 +321,22 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+  // BATCH-H2: ratingContainer gap 12 → 8. Combined with starText 48 → 36
+  // the 5-star row now measures ~5×(36+8) + 4×8 = 252pt, comfortably
+  // fitting inside the 272pt content column on iPhone SE (320pt wide
+  // − 24pt scroll padding × 2). Previous 5×56 + 4×12 = 328pt clipped
+  // the leftmost star on small devices. starButton padding kept at 4
+  // → tap target stays ≥ 44pt (36 + 4*2 = 44).
   ratingContainer: {
     flexDirection: 'row-reverse',
     justifyContent: 'center',
-    gap: 12,
+    gap: 8,
   },
   starButton: {
     padding: 4,
   },
   starText: {
-    fontSize: 48,
+    fontSize: 36,
   },
   chipContainer: {
     flexDirection: 'row',
@@ -332,6 +372,26 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '800',
+  },
+  // BATCH-H2: inline row for ActivityIndicator + "שומר…" label while
+  // the submit is in flight. Replaces the bare spinner that gave no
+  // verbal cue the save was actually happening.
+  primaryButtonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  // BATCH-H2: helper line shown under the disabled submit button to
+  // explain WHY it's disabled (the previous half-opaque button alone
+  // looked unresponsive). Hidden once the user picks rating or
+  // outcome, so it doesn't nag.
+  helperText: {
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: -4,
   },
   secondaryButton: {
     height: 52,
