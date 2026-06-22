@@ -2132,7 +2132,7 @@ export default function QuestionnaireScreen() {
       <View style={{ alignItems: 'center', marginBottom: 20 }}>
         <BrandMark size={50} />
       </View>
-      <ThemedText style={[styles.stepSubtitle, { textAlign: 'center' }]}>איזו התאמה מתאימה לך?</ThemedText>
+      <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', alignSelf: 'center' }]}>איזו התאמה מתאימה לך?</ThemedText>
       
       <TouchableOpacity 
         style={styles.choiceCard} 
@@ -2571,15 +2571,25 @@ const styles = StyleSheet.create({
   introHeader: { alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 40, alignSelf: 'stretch' },
   introTitle: { fontSize: 28, fontWeight: '900', textAlign: 'center', color: UI_COLORS.branding, lineHeight: 40, paddingHorizontal: 16, alignSelf: 'stretch' },
   introText: { fontSize: 18, lineHeight: 28, textAlign: 'center', color: UI_COLORS.text, paddingHorizontal: 10, alignSelf: 'stretch' },
-  // BATCH-C REVISION: explicit alignSelf stretch + width 100% so the
-  // text bounding box spans the full parent width and the right-align
-  // pins to the parent's right edge on iOS (RN's default Text width
-  // measurement is content-fit, which makes textAlign right look like
-  // "centered" if the parent has any centering above it).
-  stepTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch', width: '100%' },
-  stepSubtitle: { fontSize: 24, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl', marginBottom: 10, alignSelf: 'stretch', width: '100%' },
+  // BATCH-G2 REVISION: TestFlight after PR #34 (G1) showed question
+  // titles, step headings, and labels still rendering on the physical
+  // LEFT despite textAlign right + width 100% + alignSelf stretch.
+  // Same root cause as the optionButton bug fixed in G1: under
+  // I18nManager.forceRTL(true) + writingDirection rtl, RN's text engine
+  // mis-resolves `textAlign: 'right'` as "trailing edge of writing
+  // direction" = physical LEFT.
+  //
+  // Deterministic fix: drop textAlign + alignSelf stretch + width 100%.
+  // Use `alignSelf: 'flex-start'` instead — under RTL the cross-axis
+  // START maps to the physical RIGHT, so the Text pins to the right
+  // edge of its column-direction parent without touching textAlign.
+  // Short labels shrink-wrap to their content (e.g. "מגדר"); long ones
+  // ("עד כמה חשוב לך שבן/בת הזוג יהיו מאותה דת?") wrap at the parent-
+  // available width with each line right-anchored via writingDirection.
+  stepTitle: { fontSize: 14, fontWeight: '700', writingDirection: 'rtl', alignSelf: 'flex-start' },
+  stepSubtitle: { fontSize: 24, fontWeight: '800', marginBottom: 10, writingDirection: 'rtl', alignSelf: 'flex-start' },
   formGroup: { gap: 12, alignSelf: 'stretch' },
-  label: { fontSize: 16, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch', width: '100%' },
+  label: { fontSize: 16, fontWeight: '700', writingDirection: 'rtl', alignSelf: 'flex-start' },
   input: { height: 50, borderWidth: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
   optionList: { gap: 10, alignSelf: 'stretch' },
   // BATCH-G1 FOLLOW-UP: TestFlight build 14 showed Hebrew option labels
@@ -2654,12 +2664,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  // BATCH-G2: same fix as stepTitle/label — drop textAlign + flex:1.
+  // Parent (progressTopRow) is row + space-between; the first JSX child
+  // is positioned at main-axis start = physical RIGHT under forceRTL.
+  // Letting the label shrink to content means the row layout positions
+  // it correctly without depending on the flipped textAlign behavior.
   progressSectionLabel: {
     fontSize: 13,
     fontWeight: '600',
-    textAlign: 'right',
     writingDirection: 'rtl',
-    flex: 1,
   },
   progressTrack: {
     height: 4,
@@ -2671,11 +2684,14 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
+  // BATCH-G2: same fix as label — drop textAlign right, add alignSelf
+  // flex-start. Parent is column (progressHeader) so under RTL this
+  // pins the microcopy text to the physical RIGHT.
   progressMicrocopy: {
     fontSize: 12,
     fontWeight: '500',
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
   navigation: { marginTop: 30, gap: 12 },
   navButton: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
