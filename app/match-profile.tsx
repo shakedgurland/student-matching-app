@@ -16,16 +16,14 @@
 //     from migration 007 (active/chat_started)
 //
 // Terminal matches: peer profile/photo storage SELECTs return null/error
-// for expired/unmatched. The screen gracefully shows a closed state with
-// only the cached compatibility reasons / icebreaker from the matches
-// row (which is still readable for any status).
+// for expired/unmatched. The screen gracefully shows a closed state.
 //
 // Safety:
 //   • Never selects email, profile_ai_traits, raw questionnaire_answers,
 //     dealbreakers, scoring internals, or any other sensitive field.
-//   • Never displays message content (matches.icebreaker_hint is the
-//     deterministic template output, not message text).
-//   • Renders only what's in the safe SELECT list below.
+//   • Never displays compatibility scores, reasons, or icebreakers —
+//     those are match-explanation context and live on match-result.
+//   • Renders only what's in the safe peer SELECT list below.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -99,9 +97,6 @@ interface MatchRow {
   id: string;
   user_a_id: string;
   user_b_id: string;
-  compatibility_score: number | null;
-  compatibility_reasons: string[] | null;
-  icebreaker_hint: string | null;
   status: string;
 }
 
@@ -110,6 +105,7 @@ interface PeerProfile {
   full_name: string | null;
   username: string | null;
   birth_year: number | null;
+  height_cm: number | null;
   university: string | null;
   faculty: string | null;
   year_of_study: string | null;
@@ -250,8 +246,14 @@ export default function MatchProfileScreen() {
         return;
       }
 
-      const matchColumns =
-        'id, user_a_id, user_b_id, compatibility_score, compatibility_reasons, icebreaker_hint, status';
+      // BATCH-H5: narrowed from the legacy SELECT that also pulled
+      // compatibility_score / compatibility_reasons / icebreaker_hint.
+      // Match-profile is now the "who is this person" screen — it
+      // doesn't render any match-explanation fields. Match-result owns
+      // them. We still need id (CTA navigation), user_a/b_id (participant
+      // gate + peer derivation), and status (isClosed / isChatStarted /
+      // CTA label).
+      const matchColumns = 'id, user_a_id, user_b_id, status';
 
       const { data: matchData, error: matchErr } = await supabase
         .from('matches')
@@ -286,7 +288,7 @@ export default function MatchProfileScreen() {
       const { data: peerData, error: peerErr } = await supabase
         .from('profiles')
         .select(
-          'id, full_name, username, birth_year, university, faculty, year_of_study, campus, region, hobbies, bio, avatar_storage_path',
+          'id, full_name, username, birth_year, height_cm, university, faculty, year_of_study, campus, region, hobbies, bio, avatar_storage_path',
         )
         .eq('id', peerId)
         .maybeSingle();
@@ -491,16 +493,6 @@ export default function MatchProfileScreen() {
   const initial = (displayName.trim()[0] || '?').toUpperCase();
   const age = peer?.birth_year ? new Date().getFullYear() - peer.birth_year : null;
   const nameWithAge = age ? `${displayName}, ${age}` : displayName;
-  const score = match.compatibility_score ?? null;
-
-  // Reasons are persisted on the match row — readable for any status
-  // including terminal — so we render them even when peer fetch failed.
-  const reasons = Array.isArray(match.compatibility_reasons)
-    ? match.compatibility_reasons.filter(
-        (r) => typeof r === 'string' && r.trim().length > 0,
-      )
-    : [];
-  const icebreaker = match.icebreaker_hint?.trim() || null;
 
   // BATCH-C: same pattern as match-result — pass each enum code through
   // labelFor and skip the row if it would render the "לא צוין" fallback
@@ -523,6 +515,9 @@ export default function MatchProfileScreen() {
   if (peer?.region) {
     const v = labelFor('region', peer.region);
     if (v && v !== 'לא צוין') infoRows.push({ label: 'אזור', value: v });
+  }
+  if (typeof peer?.height_cm === 'number' && peer.height_cm > 0) {
+    infoRows.push({ label: 'גובה', value: `${peer.height_cm} ס״מ` });
   }
 
   const hobbies = Array.isArray(peer?.hobbies)
@@ -617,33 +612,31 @@ export default function MatchProfileScreen() {
             </View>
           )}
 
-          {/* Profile card */}
+          {/* Identity card: name + age. Score badge intentionally
+              removed — match-result is the match-explanation screen,
+              full profile is the "who is this person" screen. */}
           <View
             style={[
               styles.profileCard,
               { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
             ]}>
-            <View style={styles.profileHeader}>
-              <ThemedText style={[styles.profileName, { color: dynamicColors.text }]}>
-                {nameWithAge}
-              </ThemedText>
-              {score !== null && (
-                <View style={[styles.scoreBadge, { backgroundColor: dynamicColors.surface }]}>
-                  <ThemedText style={[styles.scoreText, { color: UI_COLORS.branding }]}>
-                    {score}% התאמה
-                  </ThemedText>
-                </View>
-              )}
-            </View>
+            <ThemedText style={[styles.profileName, { color: dynamicColors.text }]}>
+              {nameWithAge}
+            </ThemedText>
+          </View>
 
-            {infoRows.length === 0 ? (
-              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
-                {isClosed
-                  ? 'פרטי הפרופיל אינם זמינים עוד.'
-                  : 'פרטים נוספים יופיעו כשההתאמה תשלים את הפרופיל.'}
+          {/* "בקצרה" — faculty / year / university / city / region.
+              Rendered only if we have at least one row. */}
+          {infoRows.length > 0 && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                בקצרה
               </ThemedText>
-            ) : (
-              infoRows.map((row) => (
+              {infoRows.map((row) => (
                 <View key={row.label} style={styles.infoRow}>
                   <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
                     {row.label}:
@@ -652,83 +645,68 @@ export default function MatchProfileScreen() {
                     {row.value}
                   </ThemedText>
                 </View>
-              ))
-            )}
+              ))}
+            </View>
+          )}
 
-            {hobbies.length > 0 && (
-              <View style={styles.hobbiesBlock}>
-                <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
-                  תחביבים
-                </ThemedText>
-                <View style={styles.hobbyChips}>
-                  {hobbies.map((h) => (
-                    <View
-                      key={h}
-                      style={[
-                        styles.hobbyChip,
-                        {
-                          backgroundColor: dynamicColors.surface,
-                          borderColor: UI_COLORS.branding + '30',
-                        },
-                      ]}>
-                      <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
-                        {h}
-                      </ThemedText>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {bio && (
-              <View style={styles.bioBlock}>
-                <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
-                  קצת עליה/עליו
-                </ThemedText>
-                <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
-                  {bio}
-                </ThemedText>
-              </View>
-            )}
-          </View>
-
-          {/* Why this is a good match */}
-          <View style={styles.section}>
-            <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
-              למה זו התאמה טובה?
-            </ThemedText>
-            {reasons.length > 0 ? (
-              <View style={styles.bullets}>
-                {reasons.map((reason, i) => (
-                  <View key={i} style={styles.bulletItem}>
-                    <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.branding }]} />
-                    <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>
-                      {reason}
+          {/* "תחומי עניין" — hobbies as premium chips. Own section. */}
+          {hobbies.length > 0 && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                תחומי עניין
+              </ThemedText>
+              <View style={styles.hobbyChips}>
+                {hobbies.map((h) => (
+                  <View
+                    key={h}
+                    style={[
+                      styles.hobbyChip,
+                      {
+                        backgroundColor: dynamicColors.surface,
+                        borderColor: UI_COLORS.branding + '30',
+                      },
+                    ]}>
+                    <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
+                      {h}
                     </ThemedText>
                   </View>
                 ))}
               </View>
-            ) : (
-              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
-                הסיבות יופיעו ברגע שהן יחושבו.
-              </ThemedText>
-            )}
-          </View>
+            </View>
+          )}
 
-          {icebreaker && (
+          {/* "קצת עליי" — bio as its own breathable card. */}
+          {bio && (
             <View
               style={[
-                styles.icebreakerCard,
-                {
-                  backgroundColor: dynamicColors.surface,
-                  borderColor: UI_COLORS.branding + '20',
-                },
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
               ]}>
-              <ThemedText style={[styles.icebreakerTitle, { color: UI_COLORS.branding }]}>
-                שאלה לפתוח איתה שיחה
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                קצת עליי
               </ThemedText>
-              <ThemedText style={[styles.icebreakerText, { color: dynamicColors.text }]}>
-                {icebreaker}
+              <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                {bio}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* Empty-profile fallback. Renders only if peer has no info
+              rows, no hobbies, and no bio. */}
+          {infoRows.length === 0 && hobbies.length === 0 && !bio && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
+                {isClosed
+                  ? 'פרטי הפרופיל אינם זמינים עוד.'
+                  : 'פרטים נוספים יופיעו כשההתאמה תשלים את הפרופיל.'}
               </ThemedText>
             </View>
           )}
@@ -830,6 +808,20 @@ const styles = StyleSheet.create({
   profileCard: {
     borderRadius: 24,
     padding: 24,
+    borderWidth: 1,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  // BATCH-H5: per-section cards. Same visual vocabulary as profileCard
+  // but slightly tighter padding/radius so the identity card stays the
+  // clear hero and the content sections read as supporting context.
+  sectionCard: {
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
     gap: 12,
     shadowColor: '#000',
