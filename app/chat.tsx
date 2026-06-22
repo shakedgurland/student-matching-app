@@ -309,6 +309,31 @@ export default function ChatScreen() {
     }
   }
 
+  // BATCH-H1: re-fetch this match's current status from the DB so we
+  // can detect a status flip that happened between chat init and a
+  // failed send (peer ended the match, cron flipped to expired, etc.).
+  // Awaited from send()'s error branch — no fire-and-forget races
+  // (this screen stays mounted on send failure; nothing navigates).
+  // Returns the fresh row on success, null on failure / no row.
+  async function refreshMatchStatus(): Promise<MatchLite | null> {
+    if (!match?.id) return null;
+    try {
+      const { data } = await supabase
+        .from('matches')
+        .select('id, user_a_id, user_b_id, compatibility_score, status, expires_at')
+        .eq('id', match.id)
+        .maybeSingle();
+      if (data) {
+        const fresh = data as MatchLite;
+        setMatch(fresh);
+        return fresh;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async function send() {
     const text = draft.trim();
     if (!text || sending || !conversationId || !meId) return;
@@ -328,15 +353,35 @@ export default function ChatScreen() {
         .select('id, conversation_id, sender_id, content, read_at, created_at')
         .single();
       if (error || !data) {
-        // HOTFIX P0: surface failures to the user. Previously the error
-        // was logged and the function returned silently, so the chat UI
-        // gave zero feedback when a send was rejected (RLS, expired
-        // session, network). TestFlight build 12 reported "send button
-        // does nothing"; this is the missing acknowledgement. Internal
-        // detail still goes to logError for debugging; the user sees
-        // a friendly Hebrew message only.
+        // BATCH-H1: diagnostic console log so the next TestFlight build
+        // can localize which RLS clause / data condition rejected the
+        // insert. Non-sensitive only — excludes auth tokens, emails,
+        // and the message content itself. match_id + conversation_id
+        // are internal UUIDs.
+        const supaErr = (error ?? null) as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown } | null;
+        console.log('[chat-send] insert failed', {
+          message: typeof supaErr?.message === 'string' ? supaErr.message : null,
+          code: typeof supaErr?.code === 'string' ? supaErr.code : null,
+          details: typeof supaErr?.details === 'string' ? supaErr.details : null,
+          hint: typeof supaErr?.hint === 'string' ? supaErr.hint : null,
+          match_id: match?.id ?? null,
+          conversation_id: conversationId,
+          match_status: match?.status ?? null,
+        });
         logError('Chat', 'send_message_failed', error ?? new Error('send returned no row'));
-        Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
+
+        // BATCH-H1: re-fetch match status. If it has transitioned to
+        // terminal (expired/unmatched) since chat init, sync local
+        // state so the composer locks (via isLocked) and the banner
+        // explains the situation, and show a clearer Hebrew Alert
+        // instead of the generic "try again". Awaited — no race.
+        const refreshed = await refreshMatchStatus();
+        const terminal = refreshed?.status === 'expired' || refreshed?.status === 'unmatched';
+        if (terminal) {
+          Alert.alert('ההתאמה הסתיימה', 'ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות.');
+        } else {
+          Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
+        }
         return;
       }
       setDraft('');
@@ -347,6 +392,13 @@ export default function ChatScreen() {
       // HOTFIX P0: same surfacing as the error-result branch above.
       // Catches transport-layer failures (offline, DNS, Supabase
       // unreachable) that would otherwise be invisible.
+      // BATCH-H1: also log message + ids for the next TestFlight.
+      const exErr = (e ?? null) as { message?: unknown } | null;
+      console.log('[chat-send] exception', {
+        message: typeof exErr?.message === 'string' ? exErr.message : String(e),
+        match_id: match?.id ?? null,
+        conversation_id: conversationId,
+      });
       logError('Chat', 'send_message_exception', e);
       Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
     } finally {
@@ -476,10 +528,19 @@ export default function ChatScreen() {
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={{ flex: 1 }}>
+        {/*
+          BATCH-H1: keyboardVerticalOffset 90 -> 0. The 90pt was meant to
+          compensate for a fixed navigation header ABOVE the avoiding
+          view, but this screen uses `headerShown: false` and renders
+          its custom header INSIDE the SafeAreaView/KeyboardAvoidingView.
+          The 90pt was therefore pure dead space between the keyboard
+          and the input. SafeAreaView still handles the bottom safe-area
+          inset on notched devices.
+         */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+          keyboardVerticalOffset={0}>
           <View
             style={[
               styles.header,
@@ -627,7 +688,7 @@ export default function ChatScreen() {
                 { backgroundColor: dynamicColors.surface, borderColor: dynamicColors.border },
               ]}>
               <ThemedText style={[styles.lockedBannerText, { color: dynamicColors.textLight }]}>
-                ההתאמה הסתיימה. ניתן עדיין לקרוא את ההיסטוריה כאן.
+                ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות. ניתן עדיין לקרוא את ההיסטוריה כאן.
               </ThemedText>
             </View>
           )}
