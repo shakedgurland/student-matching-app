@@ -246,8 +246,11 @@ export default function MatchResultScreen() {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={[styles.center, { flex: 1 }]}>
+        <SafeAreaView style={[styles.center, { flex: 1, gap: 14 }]}>
           <ActivityIndicator size="large" color={UI_COLORS.primary} />
+          <ThemedText style={[styles.loadingNote, { color: dynamicColors.textLight }]}>
+            טוען את ההתאמה שלך…
+          </ThemedText>
         </SafeAreaView>
       </ThemedView>
     );
@@ -259,17 +262,6 @@ export default function MatchResultScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={{ flex: 1 }}>
           <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
-            {/*
-              BATCH-H3: replaced the misleading back chevron with a
-              profile-access affordance. Match-result is reached via
-              router.replace() from the home tab, so router.back() had
-              nothing meaningful to pop to (it would exit the app on
-              cold launch). The profile icon takes the user to
-              /(tabs)/my-profile where they can edit their profile and
-              reach Privacy Policy / Terms. iOS swipe-from-edge still
-              works for users who happened to push match-result on top
-              of another route.
-             */}
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/my-profile' as any)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -281,13 +273,26 @@ export default function MatchResultScreen() {
             </ThemedText>
             <View style={styles.headerSpacer} />
           </View>
+          {/*
+            BATCH-H6: refined empty/error state. Premium copy + explicit
+            CTA back to the home tab so the user lands on the searching
+            state instead of being stuck on a dead screen. router.replace
+            so /match-result is popped from the stack (it was reached via
+            replace from home, so there's nothing to back-to anyway).
+           */}
           <View style={[styles.center, styles.errorBody]}>
             <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
               {errorMsg ?? 'אין כרגע התאמה פעילה'}
             </ThemedText>
             <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
-              חזרו למסך הראשי כדי לראות התאמות חדשות.
+              נחפש לך התאמה חדשה במסך הראשי.
             </ThemedText>
+            <TouchableOpacity
+              style={[styles.errorPrimaryButton, { backgroundColor: UI_COLORS.primary }]}
+              onPress={() => router.replace('/(tabs)' as any)}
+              activeOpacity={0.85}>
+              <ThemedText style={styles.errorPrimaryButtonText}>חזרה למסך הראשי</ThemedText>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </ThemedView>
@@ -823,5 +828,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
     lineHeight: 22,
+  },
+  // BATCH-H6: subtle note rendered under the load-spinner on initial
+  // open so the user sees verbal confirmation we're working, not just a
+  // bare wheel. Calm light color, no over-promising copy.
+  loadingNote: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  // BATCH-H6: primary CTA on the empty/error state so the user can step
+  // back to the home tab where the searching/empty hero renders. Same
+  // dimensions as the main app primary button to keep visual hierarchy.
+  errorPrimaryButton: {
+    height: 52,
+    paddingHorizontal: 32,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  errorPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

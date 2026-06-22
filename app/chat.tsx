@@ -468,6 +468,15 @@ export default function ChatScreen() {
         // status==='unmatched' so the composer locks automatically on
         // the next render; the lock banner takes over.
         setMatch({ ...match, status: 'unmatched' });
+        // BATCH-H6: prompt + auto-navigate to the home tab on OK so the
+        // user lands on the premium searching/empty hero instead of
+        // being stranded on a locked chat with no clear next step.
+        // Alert is user-driven (no auto-timer that could race a render).
+        Alert.alert(
+          'ההתאמה נסגרה',
+          'תודה על המשוב. מחפשים לך את ההתאמה הבאה.',
+          [{ text: 'אישור', onPress: () => router.replace('/(tabs)' as any) }],
+        );
       } else {
         // RPC returned a non-fatal refusal (race, not_allowed_yet,
         // etc.). Log the discriminator without surfacing internals.
