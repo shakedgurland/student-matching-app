@@ -381,10 +381,40 @@ export default function MatchSelectionScreen() {
     router.push('/(tabs)/my-profile');
   };
 
+  // BATCH-H6: premium searching state used on initial load AND while a
+  // background find-and-create is in flight. Replaces the old bare
+  // ActivityIndicator which felt abrupt right after questionnaire
+  // submission or post-feedback navigation. Reused as a JSX block — kept
+  // local to this file (no new component) to minimize surface area.
+  const searchingHero = (
+    <View style={styles.searchingHero}>
+      <View style={styles.searchingIconCircle}>
+        <IconSymbol name="sparkles" size={56} color={UI_COLORS.accent} />
+      </View>
+      <ThemedText style={[styles.searchingTitle, { color: dynamicColors.text }]}>
+        מחפשים התאמה שמתאימה לך באמת
+      </ThemedText>
+      <ThemedText style={[styles.searchingBody, { color: dynamicColors.textLight }]}>
+        אנחנו בודקים התאמות לפי השאלון שלך, ולא לפי החלקה מהירה.
+      </ThemedText>
+      <ActivityIndicator size="small" color={UI_COLORS.primary} style={{ marginTop: 4 }} />
+      <ThemedText style={[styles.searchingNote, { color: dynamicColors.textLight }]}>
+        זה יכול לקחת רגע.
+      </ThemedText>
+    </View>
+  );
+
   if (loading) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg, justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color={UI_COLORS.primary} />
+      <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={styles.header}>
+            <View style={{ width: 32 }} />
+            <ThemedText style={[styles.logo, { color: UI_COLORS.branding }]}>UniMatch</ThemedText>
+            <View style={{ width: 32 }} />
+          </View>
+          {searchingHero}
+        </SafeAreaView>
       </ThemedView>
     );
   }
@@ -428,19 +458,31 @@ export default function MatchSelectionScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          ) : matching ? (
+            // BATCH-H6: a background find-and-create is running (post-
+            // questionnaire, post-feedback, or post-end-match landing).
+            // Show the same searching hero instead of the empty card
+            // so the user doesn't briefly see "אין התאמה" while we're
+            // still actively looking.
+            searchingHero
           ) : (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconContainer}>
                 <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
               </View>
               <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
-                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'עדיין לא מצאנו לך התאמה'}
+                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'אין התאמה חדשה כרגע'}
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
                 {capReached
                   ? 'בתחילת החודש הבא נוכל להציע לך התאמות חדשות.'
-                  : 'כרגע אין מספיק משתמשים שעומדים בהעדפות שלך. כשיצטרפו משתמשים מתאימים, נוכל להציע לך התאמה חדשה.'}
+                  : 'זה לא אומר שאין התאמה טובה — פשוט אין כרגע התאמה שעומדת בתנאים שלך.'}
               </ThemedText>
+              {!capReached && (
+                <ThemedText style={[styles.emptyHint, { color: dynamicColors.textLight }]}>
+                  נעדכן כשנמצא התאמה מתאימה יותר.
+                </ThemedText>
+              )}
             </View>
           )}
 
@@ -572,6 +614,56 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 20,
+  },
+  // BATCH-H6: secondary line under the empty-state subtitle. Lighter
+  // weight + smaller size so the main subtitle reads as the explanation
+  // and this reads as a calm assurance.
+  emptyHint: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 20,
+    marginTop: -8,
+  },
+  // BATCH-H6: premium searching hero shared by the initial load and the
+  // in-flight findAndCreate path. Intentionally centered (hero pattern)
+  // and uses the same sparkles icon as the empty state so the user sees
+  // a continuous visual language between "looking" and "nothing yet".
+  searchingHero: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 14,
+  },
+  searchingIconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#FFF0EA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  searchingTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    paddingHorizontal: 8,
+  },
+  searchingBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    paddingHorizontal: 12,
+  },
+  searchingNote: {
+    fontSize: 13,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: 2,
   },
   outlineButton: {
     paddingHorizontal: 24,
