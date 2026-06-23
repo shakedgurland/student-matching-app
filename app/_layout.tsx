@@ -237,7 +237,6 @@ export default function RootLayout() {
       root === 'login' ||
       root === 'signup' ||
       root === 'welcome' ||
-      root === 'student-verification' ||
       root === 'verification' ||
       (root === 'questionnaire' && !isQuestionnaireEdit);
 
@@ -261,7 +260,6 @@ export default function RootLayout() {
         <Stack.Screen name="welcome" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="signup" options={{ headerShown: false }} />
-        <Stack.Screen name="student-verification" options={{ headerShown: false }} />
         <Stack.Screen name="verification" options={{ headerShown: false }} />
         <Stack.Screen name="questionnaire" options={{ headerShown: false }} />
         <Stack.Screen name="match-result" options={{ headerShown: false }} />
