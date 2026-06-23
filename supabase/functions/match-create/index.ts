@@ -39,8 +39,46 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { rankCandidates, type CandidateInput } from "./scoring.ts"
+import { rankCandidates, type CandidateInput, type CompatibilityEvidence } from "./scoring.ts"
 import { generateIcebreaker } from "./icebreaker.ts"
+
+// Persist the structured compatibility evidence array onto the
+// just-inserted match row via a service-role JSON merge into
+// matches.metadata. The RPC already populated metadata = { depth }; we
+// SELECT the current value, merge in { compatibility_evidence }, then
+// UPDATE. SELECT-then-UPDATE (two round-trips) is preferred over a blind
+// overwrite so that any future metadata keys added by other writers are
+// preserved. The migration-016 icebreaker update writes a separate
+// column (icebreaker_hint), not metadata — no race on this key.
+//
+// Throws on any read/write error; the caller in the main flow wraps this
+// in try/catch so that an evidence-persist failure is non-fatal — the
+// match is still valid, and compatibility_reasons text[] already carries
+// the same data rendered as Hebrew bullets (a strict superset of what an
+// old client renders today).
+async function persistCompatibilityEvidence(
+  admin: SupabaseClient,
+  matchId: string,
+  evidence: CompatibilityEvidence[],
+): Promise<void> {
+  const { data, error: readErr } = await admin
+    .from('matches')
+    .select('metadata')
+    .eq('id', matchId)
+    .single()
+  if (readErr || !data) {
+    throw readErr ?? new Error('match metadata read returned no row')
+  }
+  const current = (data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata))
+    ? data.metadata as Record<string, unknown>
+    : {}
+  const merged = { ...current, compatibility_evidence: evidence }
+  const { error: writeErr } = await admin
+    .from('matches')
+    .update({ metadata: merged })
+    .eq('id', matchId)
+  if (writeErr) throw writeErr
+}
 
 // Fetch the LLM-derived traits blob for a single user, if any. Returns
 // null when the row is absent (fast users + deep users without enough
@@ -463,6 +501,36 @@ serve(async (req) => {
           } catch (e) {
             console.log(JSON.stringify({
               event: 'icebreaker_generate_exception',
+              message: e instanceof Error ? e.message : 'unknown',
+            }))
+          }
+        }
+
+        // PR 1: persist structured compatibility evidence into
+        // matches.metadata.compatibility_evidence. Mirrors the icebreaker
+        // observability pattern. Non-fatal — the concrete Hebrew strings
+        // are already in matches.compatibility_reasons (written by the
+        // RPC via p_reasons), so a failed evidence write leaves the user
+        // with the same truthful copy a successful write would yield;
+        // only the structured form (which PR 2 will surface as cards) is
+        // missing. evidenceCount is logged for visibility; the contents
+        // are not logged (no raw answers, codes, or labels in logs).
+        if (typeof newMatchId === 'string') {
+          try {
+            await persistCompatibilityEvidence(admin, newMatchId, candidate.evidence)
+            console.log(JSON.stringify({
+              event: 'evidence_persisted',
+              matchIdPrefix: newMatchId.slice(0, 8),
+              evidenceCount: candidate.evidence.length,
+            }))
+          } catch (e) {
+            const code = typeof (e as { code?: unknown }).code === 'string'
+              ? (e as { code: string }).code
+              : null
+            console.log(JSON.stringify({
+              event: 'evidence_persist_failed',
+              matchIdPrefix: newMatchId.slice(0, 8),
+              code,
               message: e instanceof Error ? e.message : 'unknown',
             }))
           }

@@ -61,6 +61,19 @@ import {
   type DerivedPreferences,
   type TraitName,
 } from "./traits.ts";
+import {
+  HOBBY_LABELS_HE,
+  DATE_LABELS_HE,
+  INTENT_LABELS_HE,
+  PACE_LABELS_HE,
+  REGION_LABELS_HE,
+  UNIVERSITY_LABELS_HE,
+  FACULTY_LABELS_HE,
+  YEAR_OF_STUDY_LABELS_HE,
+  CONFLICT_STYLE_LABELS_HE,
+  RELIGION_TYPE_LABELS_HE,
+  VALUE_LABELS_HE,
+} from "./labels.ts";
 
 // ---------------------------------------------------------------------------
 // Generic helpers
@@ -128,6 +141,167 @@ function countOverlap(a: unknown, b: unknown): number {
 function normalizeCity(s: unknown): string {
   if (typeof s !== 'string') return '';
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// ---------------------------------------------------------------------------
+// CompatibilityEvidence — structured, JSON-safe evidence emitted by the
+// scorer at the same threshold sites that used to push a generic Hebrew
+// reason string. PR 1 (this change) writes it into
+// matches.metadata.compatibility_evidence via a post-RPC service-role
+// UPDATE in index.ts. PR 2 will surface these items as premium cards in
+// match-result; until then, the user-facing rendering happens via
+// `compatibility_reasons text[]` (which we now also derive from this
+// evidence — single source of truth, no drift).
+//
+// Privacy constraints (enforced by inclusion list, not by filtering):
+//   * Only safe-public profile fields surface (hobbies, region, campus,
+//     university, faculty, year_of_study).
+//   * Only safe questionnaire codes surface (intent_type, relationship_pace,
+//     preferred_first_date, conflict_style, religion_type, top_values).
+//   * Height preferences, dealbreaker codes, partner-quality filter values,
+//     raw trait numerics, age-range filter values, and score breakdowns are
+//     NEVER serialized into evidence.
+//   * For conflict_style and religion_type the underlying code+label are
+//     stored for analytics, but the rendered Hebrew reason is intentionally
+//     generic (see renderEvidenceText) to avoid surfacing sensitive enum
+//     values on a date-discovery surface.
+// ---------------------------------------------------------------------------
+
+export type CompatibilityEvidence =
+  | { kind: 'shared_hobbies';        values: string[]; labels: string[] }
+  | { kind: 'same_city';             value: string;    label: string    }
+  | { kind: 'same_region';           value: string;    label: string    }
+  | { kind: 'same_university';       value: string;    label: string    }
+  | { kind: 'same_faculty';          value: string;    label: string    }
+  | { kind: 'same_year_of_study';    value: string;    label: string    }
+  | { kind: 'shared_intent';         value: string;    label: string    }
+  | { kind: 'shared_pace';           value: string;    label: string    }
+  | { kind: 'shared_first_date';     value: string;    label: string    }
+  | { kind: 'shared_conflict_style'; value: string;    label: string    }
+  | { kind: 'shared_religion_type';  value: string;    label: string    }
+  | { kind: 'shared_top_values';     values: string[]; labels: string[] }
+  | { kind: 'ai_vibe' };
+
+// Priority order for capping the evidence array. Hobbies first (highest
+// product signal of personal compatibility); academic next (concrete shared
+// context); then location, intent/pace/first-date (questionnaire-derived
+// compatibility); religion + conflict_style (sensitive — surfaced generic);
+// top_values + ai_vibe last.
+const EVIDENCE_PRIORITY: ReadonlyArray<CompatibilityEvidence['kind']> = [
+  'shared_hobbies',
+  'same_university',
+  'same_faculty',
+  'same_year_of_study',
+  'same_city',
+  'same_region',
+  'shared_intent',
+  'shared_pace',
+  'shared_first_date',
+  'shared_religion_type',
+  'shared_conflict_style',
+  'shared_top_values',
+  'ai_vibe',
+];
+
+const ACADEMIC_KINDS: ReadonlySet<CompatibilityEvidence['kind']> = new Set([
+  'same_university',
+  'same_faculty',
+  'same_year_of_study',
+]);
+
+// Strip leading definite-article "ה" when joining after the "ב" preposition
+// (Hebrew "בה..." reads as "ב..."). Example:
+//   joinPrepBet('שניכם לומדים ב', 'האוניברסיטה העברית')
+//     → 'שניכם לומדים באוניברסיטה העברית'
+//   joinPrepBet('שניכם ב', 'תל אביב')
+//     → 'שניכם בתל אביב'
+function joinPrepBet(prefix: string, label: string): string {
+  if (label.startsWith('ה')) return `${prefix}${label.slice(1)}`;
+  return `${prefix}${label}`;
+}
+
+// Hebrew list join with vav-prefix on the last item. Cap is applied by the
+// caller (shared_hobbies caps labels at 3 before this is invoked).
+function joinHebrewList(labels: string[]): string {
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} ו${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} ו${labels[labels.length - 1]}`;
+}
+
+// Render a single evidence item into its user-facing Hebrew reason string.
+// Single source of truth for compatibility_reasons[] strings — by deriving
+// reasons from evidence we guarantee they cannot drift from the structured
+// data. Generic kinds ('shared_conflict_style', 'shared_religion_type',
+// 'ai_vibe', 'shared_top_values') intentionally do NOT embed the underlying
+// label/value into the rendered string.
+export function renderEvidenceText(ev: CompatibilityEvidence): string {
+  switch (ev.kind) {
+    case 'shared_hobbies':
+      return `שניכם סימנתם ${joinHebrewList(ev.labels)}`;
+    case 'same_city':
+      return joinPrepBet('שניכם ב', ev.label);
+    case 'same_region':
+      return `שניכם באזור ${ev.label}`;
+    case 'same_university':
+      return joinPrepBet('שניכם לומדים ב', ev.label);
+    case 'same_faculty':
+      return `שניכם בפקולטה ל${ev.label}`;
+    case 'same_year_of_study':
+      return joinPrepBet('שניכם ב', ev.label);
+    case 'shared_intent':
+      return `שניכם מחפשים ${ev.label}`;
+    case 'shared_pace':
+      return `שניכם מעדיפים ${ev.label}`;
+    case 'shared_first_date':
+      return `שניכם מעדיפים ${ev.label} לדייט ראשון`;
+    case 'shared_conflict_style':
+      return 'שניכם בסגנון פתרון קונפליקטים דומה';
+    case 'shared_religion_type':
+      return 'יש לכם רקע דתי משותף';
+    case 'shared_top_values':
+      return `יש לכם ${ev.values.length} ערכים זוגיים משותפים`;
+    case 'ai_vibe':
+      return 'וייב דומה בהומור ובערכים';
+  }
+}
+
+// Apply priority order + de-duplication + caps to a raw evidence list.
+// Caps:
+//   * Total items capped at `maxItems` (typically 3, or 2 if a caveat will
+//     also be pushed to compatibility_reasons).
+//   * Among academic kinds (university / faculty / year_of_study) at most 2
+//     are kept — otherwise studies-heavy matches would crowd out hobbies /
+//     location / intent.
+//   * If a 'same_city' item is present, 'same_region' is dropped (city is
+//     strictly more specific; both would read as duplicate location).
+function applyEvidencePriorityAndCap(
+  evidence: CompatibilityEvidence[],
+  maxItems: number,
+): CompatibilityEvidence[] {
+  const orderIndex = new Map<string, number>();
+  EVIDENCE_PRIORITY.forEach((k, i) => orderIndex.set(k, i));
+  const sorted = [...evidence].sort((a, b) => {
+    const ai = orderIndex.get(a.kind) ?? 999;
+    const bi = orderIndex.get(b.kind) ?? 999;
+    return ai - bi;
+  });
+  const hasCity = sorted.some((e) => e.kind === 'same_city');
+  const seenKinds = new Set<string>();
+  const kept: CompatibilityEvidence[] = [];
+  let academicCount = 0;
+  for (const ev of sorted) {
+    if (kept.length >= maxItems) break;
+    if (seenKinds.has(ev.kind)) continue;
+    if (ev.kind === 'same_region' && hasCity) continue;
+    if (ACADEMIC_KINDS.has(ev.kind)) {
+      if (academicCount >= 2) continue;
+      academicCount++;
+    }
+    seenKinds.add(ev.kind);
+    kept.push(ev);
+  }
+  return kept;
 }
 
 // Bi-directional soft penalty for the 'important' height preference tier.
@@ -408,8 +582,9 @@ function calculatePenalties(
 //   • Capped at ±8 total (cannot dominate region/intent/values/hard filters)
 //   • Returns 0 silently when either side has no AI traits row
 //     (fast users + deep users with insufficient free text both fall here)
-//   • Reason "וייב דומה גם בהומור וערכים" pushed only when ≥2 dimensions
-//     strongly agreed AND the capped score is ≥+4
+//   • Evidence kind 'ai_vibe' pushed only when ≥2 dimensions strongly
+//     agreed AND the capped score is ≥+4 (rendered generic — see
+//     renderEvidenceText)
 // ---------------------------------------------------------------------------
 
 const EMOTIONAL_TONE_MATRIX: Record<string, Record<string, number>> = {
@@ -497,26 +672,46 @@ function calculateCompatibility(
   candidateAnswers: Record<string, unknown>,
   candidateAi: Record<string, unknown> | null,
   depth: 'fast' | 'deep',
-): { score: number; reasons: string[] } {
+): { score: number; reasons: string[]; evidence: CompatibilityEvidence[] } {
   let fastScore = 0;
   let deepScore = 0;
-  const reasons: string[] = [];
+  const evidence: CompatibilityEvidence[] = [];
 
-  // 1. Intent & Pace (20 pts)
+  // 1. Intent & Pace (20 pts). Score contribution is unchanged. Evidence
+  //    is pushed only where the SPECIFIC dimension matched EXACTLY
+  //    (intentScore === 10 / paceScore === 10) — adjacent-only matches
+  //    still contribute to score but don't form a truthful "you both
+  //    want X" statement and so don't surface as evidence.
   const intentScore = intentCompatibility(myAnswers.intent_type, candidateAnswers.intent_type);
   const paceScore = paceCompatibility(myAnswers.relationship_pace, candidateAnswers.relationship_pace);
-  const intentPaceScore = intentScore + paceScore;
-  if (intentPaceScore >= 10) reasons.push('יש לכם כוונות וקצב היכרות דומים');
-  fastScore += intentPaceScore;
+  fastScore += intentScore + paceScore;
+  if (intentScore === 10) {
+    const v = asString(myAnswers.intent_type);
+    const label = INTENT_LABELS_HE[v];
+    if (label) evidence.push({ kind: 'shared_intent', value: v, label });
+  }
+  if (paceScore === 10) {
+    const v = asString(myAnswers.relationship_pace);
+    const label = PACE_LABELS_HE[v];
+    if (label) evidence.push({ kind: 'shared_pace', value: v, label });
+  }
 
   // 2. Communication & Style (7 pts — conflict_style is the only V2-collected
   //    input. conversation_style and compromise_area were dropped from V2.)
+  //    Evidence stored with code + label (analytics) but rendered generic
+  //    (see renderEvidenceText) to avoid exposing the underlying enum.
   let commScore = 0;
-  if (bothMeaningfulAndEqual(myAnswers.conflict_style, candidateAnswers.conflict_style)) commScore += 7;
-  if (commScore >= 7) reasons.push('סגנון התקשורת והשיחה שלכם דומה');
+  if (bothMeaningfulAndEqual(myAnswers.conflict_style, candidateAnswers.conflict_style)) {
+    commScore += 7;
+    const v = asString(myAnswers.conflict_style);
+    const label = CONFLICT_STYLE_LABELS_HE[v];
+    if (label) evidence.push({ kind: 'shared_conflict_style', value: v, label });
+  }
   fastScore += commScore;
 
-  // 3. Interests & Region/City
+  // 3. Interests & Region/City. Score branches are unchanged; evidence is
+  //    pushed alongside them with the actually-overlapping hobby labels and
+  //    the actually-equal city/region values.
   const myHobbies = (myProfile.hobbies || myAnswers.hobbies) as unknown;
   const candHobbies = (candidateProfile.hobbies || candidateAnswers.hobbies) as unknown;
   const hobbyOverlap = countOverlap(myHobbies, candHobbies);
@@ -534,29 +729,81 @@ function calculateCompatibility(
   const myCity = normalizeCity(myProfile.campus);
   const candCity = normalizeCity(candidateProfile.campus);
   const cityScore = myCity && myCity === candCity ? 3 : 0;
-
-  if (hobbyOverlap >= 2 || sharedPriorityScore >= 3) reasons.push('יש חפיפה בתחומי העניין');
-  if (regionScore >= 7 || cityScore >= 3) reasons.push('יש לכם קרבה גיאוגרפית נוחה');
   fastScore += (interestScore + regionScore + sharedPriorityScore + cityScore);
 
-  // 4. Age Range Compatibility (10 pts)
+  if (hobbyOverlap >= 2 || sharedPriorityScore >= 3) {
+    // Build the (code, label) pairs preserving the caller's hobby order.
+    // Codes whose label is missing from HOBBY_LABELS_HE are skipped — we
+    // never surface raw enum codes in user-facing strings (and we never
+    // surface a pair with an empty label). Cap labeled pairs at 3.
+    const myHobbiesArr = asStringArray(myHobbies);
+    const candHobbiesSet = new Set(asStringArray(candHobbies));
+    const sharedPairs: { code: string; label: string }[] = [];
+    for (const code of myHobbiesArr) {
+      if (!candHobbiesSet.has(code)) continue;
+      const label = HOBBY_LABELS_HE[code];
+      if (typeof label !== 'string' || !label) continue;
+      sharedPairs.push({ code, label });
+    }
+    if (sharedPairs.length > 0) {
+      const capped = sharedPairs.slice(0, 3);
+      evidence.push({
+        kind: 'shared_hobbies',
+        values: capped.map((p) => p.code),
+        labels: capped.map((p) => p.label),
+      });
+    }
+  }
+
+  // City wins over region when both fire — the cap helper drops 'same_region'
+  // in that case. `campus` is a free-text city name (not an enum), so the
+  // user-supplied string IS the label (already shown on match-profile, so
+  // surfacing it as evidence does not expose anything new).
+  if (cityScore >= 3) {
+    const rawCity = asString(myProfile.campus).trim();
+    if (rawCity) {
+      evidence.push({ kind: 'same_city', value: rawCity, label: rawCity });
+    }
+  }
+  // Region evidence only on EXACT region match (the only case where a
+  // single shared region label reads as truthful). regionScore in [7,9]
+  // captures strong-adjacent pairs (center↔jerusalem etc.) where the two
+  // regions differ — those still contribute to score but produce no
+  // shared-region evidence.
+  if (regionScore >= 10) {
+    const v = asString(myProfile.region);
+    const label = REGION_LABELS_HE[v];
+    if (label) evidence.push({ kind: 'same_region', value: v, label });
+  }
+
+  // 4. Age Range Compatibility (10 pts). No evidence emitted: surfacing a
+  //    "you both fall in each other's preferred age range" reason would
+  //    leak the peer's private preferred_age_min / preferred_age_max
+  //    filter values. Age compatibility is also implicit in the displayed
+  //    birth-year on the profile card.
   const ageScore = scoreAgeCompatibility(
     myAnswers,
     (myProfile.birth_year as number | null) ?? null,
     candidateAnswers,
     (candidateProfile.birth_year as number | null) ?? null,
   );
-  if (ageScore >= 10) reasons.push('שניכם בטווח הגילאים המועדף');
   fastScore += ageScore;
 
-  // 5. Preferences (10 pts — preferred_first_date is the only V2-collected
-  //    input. respect_priority and interest_signals were dropped from V2.)
+  // 5. Preferences — preferred_first_date (10 pts on exact match).
   let prefScore = 0;
-  if (bothMeaningfulAndEqual(myAnswers.preferred_first_date, candidateAnswers.preferred_first_date)) prefScore += 10;
-  if (prefScore >= 10) reasons.push('יש לכם העדפות דומות לחיבור ראשוני');
+  if (bothMeaningfulAndEqual(myAnswers.preferred_first_date, candidateAnswers.preferred_first_date)) {
+    prefScore += 10;
+    const v = asString(myAnswers.preferred_first_date);
+    const label = DATE_LABELS_HE[v];
+    if (label) evidence.push({ kind: 'shared_first_date', value: v, label });
+  }
   fastScore += prefScore;
 
-  // 6. Studies (max ~16 pts)
+  // 6. Studies. Each shared academic dimension produces its own evidence
+  //    when truly shared AND its enum code has a safe label. The cap
+  //    helper limits academic evidence to at most 2 items so a
+  //    same-uni/same-faculty/same-year triple-match doesn't crowd out
+  //    other dimensions.
   let studyScore = 0;
   const myMatchPrefs = asStringArray(myAnswers.match_preferences);
   const candMatchPrefs = asStringArray(candidateAnswers.match_preferences);
@@ -567,6 +814,8 @@ function calculateCompatibility(
     if (myMatchPrefs.includes('same_university') || candMatchPrefs.includes('same_university')) {
       studyScore += 3;
     }
+    const label = UNIVERSITY_LABELS_HE[myUni];
+    if (label) evidence.push({ kind: 'same_university', value: myUni, label });
   }
   const myFac = asString(myProfile.faculty);
   const candFac = asString(candidateProfile.faculty);
@@ -575,14 +824,22 @@ function calculateCompatibility(
     if (myMatchPrefs.includes('same_faculty') || candMatchPrefs.includes('same_faculty')) {
       studyScore += 3;
     }
+    const label = FACULTY_LABELS_HE[myFac];
+    if (label) evidence.push({ kind: 'same_faculty', value: myFac, label });
   }
-  if (myProfile.year_of_study && myProfile.year_of_study === candidateProfile.year_of_study) {
+  const myYear = asString(myProfile.year_of_study);
+  const candYear = asString(candidateProfile.year_of_study);
+  if (myYear && myYear === candYear) {
     studyScore += 3;
+    const label = YEAR_OF_STUDY_LABELS_HE[myYear];
+    if (label) evidence.push({ kind: 'same_year_of_study', value: myYear, label });
   }
-  if (studyScore >= 5) reasons.push('יש התאמה ברקע הלימודי');
   fastScore += studyScore;
 
-  // 6b. Religion (max 8 pts)
+  // 6b. Religion (max 8 pts). Evidence pushed only on a same-type match,
+  //     never on level match alone — type is the broader, less sensitive
+  //     dimension and is already implicit in the user's questionnaire
+  //     answer. The rendered reason is intentionally generic.
   let religionScore = 0;
   const myType = asString(myAnswers.religion_type);
   const candType = asString(candidateAnswers.religion_type);
@@ -592,6 +849,8 @@ function calculateCompatibility(
     myType === candType
   ) {
     religionScore += 5;
+    const label = RELIGION_TYPE_LABELS_HE[myType];
+    if (label) evidence.push({ kind: 'shared_religion_type', value: myType, label });
   }
   const myLevel = asString(myAnswers.religion);
   const candLevel = asString(candidateAnswers.religion);
@@ -605,18 +864,22 @@ function calculateCompatibility(
       if (i >= 0 && j >= 0 && Math.abs(i - j) === 1) religionScore += 1;
     }
   }
-  if (religionScore >= 5) reasons.push('יש התאמה באורח החיים הדתי');
   fastScore += religionScore;
 
-  // 7. Deep Factors (max 50 pts, capped)
+  // 7. Deep Factors (max 50 pts, capped). Score logic is unchanged. The
+  //    three previously-pushed deep reasons (trait-derived
+  //    "סגנון התקשורת שלכם יכול להשתלב טוב",
+  //    "וייב דומה בספונטניות ובחברתיות",
+  //    "יש גם התאמה בשאלות העומק") are NOT emitted as evidence — they
+  //    have no concrete data attached and would amount to generic filler
+  //    under the new contract. top_values overlap is the one deep
+  //    dimension safe to surface, and only as a count.
   if (depth === 'deep') {
     let legacyDeepSum = 0;
     if (bothMeaningfulAndEqual(myAnswers.spontaneity, candidateAnswers.spontaneity)) legacyDeepSum += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.elevatorScenario, candidateAnswers.elevatorScenario)) legacyDeepSum += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.karaokeChance, candidateAnswers.karaokeChance)) legacyDeepSum += 2.5;
     if (bothMeaningfulAndEqual(myAnswers.familiarFace, candidateAnswers.familiarFace)) legacyDeepSum += 2.5;
-    // money_style and the singular love_language were dropped from V2; the
-    // love_languages array overlap is scored below as loveLangScore.
     if (bothMeaningfulAndEqual(myAnswers.perfect_date, candidateAnswers.perfect_date)) legacyDeepSum += 5;
     if (bothMeaningfulAndEqual(myAnswers.similarity_preference, candidateAnswers.similarity_preference)) legacyDeepSum += 5;
 
@@ -634,36 +897,36 @@ function calculateCompatibility(
     }
     const traitClosenessScore = Math.round(traitClosenessSum * 10) / 10;
 
-    const topValuesOverlap = countOverlap(myAnswers.relationship_top_values, candidateAnswers.relationship_top_values);
+    const myTopValuesArr = asStringArray(myAnswers.relationship_top_values);
+    const candTopValuesSet = new Set(asStringArray(candidateAnswers.relationship_top_values));
+    const sharedTopValuePairs: { code: string; label: string }[] = [];
+    for (const code of myTopValuesArr) {
+      if (!candTopValuesSet.has(code)) continue;
+      const label = VALUE_LABELS_HE[code];
+      if (typeof label !== 'string' || !label) continue;
+      sharedTopValuePairs.push({ code, label });
+    }
+    const topValuesOverlap = sharedTopValuePairs.length;
     const topValuesScore = Math.min(6, topValuesOverlap * 2);
-    if (topValuesScore >= 4) reasons.push('יש ביניכם התאמה בערכים זוגיים');
+    if (topValuesOverlap >= 2) {
+      // Store labeled codes for analytics + a future enumerating renderer;
+      // the rendered reason today is a count only (intimate values are not
+      // enumerated as bullets — see CompatibilityEvidence privacy note).
+      evidence.push({
+        kind: 'shared_top_values',
+        values: sharedTopValuePairs.map((p) => p.code),
+        labels: sharedTopValuePairs.map((p) => p.label),
+      });
+    }
 
     const strengthsScore = Math.min(4, countOverlap(myAnswers.relationship_strengths, candidateAnswers.relationship_strengths));
     const shouldFeelScore = Math.min(3, countOverlap(myAnswers.partner_should_feel, candidateAnswers.partner_should_feel));
     const loveLangScore = Math.min(3, countOverlap(myAnswers.love_languages, candidateAnswers.love_languages));
 
-    const myCommMin = minTraitScore(myTraits.communication_directness, myTraits.conflict_engagement);
-    const candCommMin = minTraitScore(candidateTraits.communication_directness, candidateTraits.conflict_engagement);
-    if (myCommMin !== null && candCommMin !== null && Math.abs(myCommMin - candCommMin) <= 1) {
-      reasons.push('סגנון התקשורת שלכם יכול להשתלב טוב');
-    }
-
-    const sponClose = traitCloseness(myTraits.spontaneity_level, candidateTraits.spontaneity_level);
-    const socClose = traitCloseness(myTraits.social_confidence, candidateTraits.social_confidence);
-    if (sponClose >= 0.75 && socClose >= 0.75) {
-      reasons.push('יש לכם וייב דומה בספונטניות ובחברתיות');
-    }
-
-    // about_me and relationship_strengths_text are not collected in V2 —
-    // both bonuses were always 0 in the new flow. PR 2 will introduce
-    // analyze-user-traits consumption of the real V2 free-text fields
-    // (partner_should_know_text, conversation_starter, green_flag).
-
     const totalDeepBeforeCap =
       legacyDeepSum + traitClosenessScore + topValuesScore +
       strengthsScore + shouldFeelScore + loveLangScore;
 
-    if (totalDeepBeforeCap >= 25) reasons.push('יש גם התאמה בשאלות העומק');
     deepScore = Math.min(50, totalDeepBeforeCap);
   }
 
@@ -675,39 +938,42 @@ function calculateCompatibility(
     finalScore = fastScore;
   }
 
-  // 8. Height soft preference ('important' tier only). Flat -8 if either
-  //    side's threshold is missed; -8 still if both sides' thresholds are
-  //    missed (cap is deliberate, not additive). must_have is hard-
-  //    filtered in rankCandidates, so candidates that reach here either
-  //    passed the threshold or both sides lack must_have. Kept separate
-  //    from the trait-penalty -25 pool.
+  // 8. Height soft preference ('important' tier only). No evidence emitted
+  //    under any branch — surfacing height-related reasoning is a privacy
+  //    rule (would expose the peer's min_preferred_height_cm filter value).
   finalScore = finalScore + heightSoftPenalty(myProfile, candidateProfile);
 
-  // 9. AI traits soft complement (capped ±8). Silent zero when either
-  //    side lacks a profile_ai_traits row — fast users and deep users
-  //    with insufficient free text both land here without breakage. A
-  //    user-facing reason is pushed only when the agreement is strong
-  //    (≥2 dimensions strongly aligned AND capped score ≥+4).
+  // 9. AI traits soft complement (capped ±8). Evidence pushed only when
+  //    the agreement is strong (≥2 dimensions strongly aligned AND capped
+  //    score ≥+4). The rendered reason is intentionally generic — never
+  //    name a specific trait or score.
   const aiContribution = aiTraitContribution(myAi, candidateAi);
   finalScore = finalScore + aiContribution.score;
-  if (aiContribution.strong) reasons.push('וייב דומה גם בהומור וערכים');
+  if (aiContribution.strong) evidence.push({ kind: 'ai_vibe' });
 
-  // Trait-based penalties (rule-based, closed-answer only)
+  // Trait-based penalties (rule-based, closed-answer only). caveatReason
+  // surfaces only as a string on compatibility_reasons[]; it is NEVER
+  // serialized into evidence (caveats reference trait-derived deltas the
+  // peer never opted to share publicly).
   const { penalty, caveatReason } = calculatePenalties(myAnswers, candidateAnswers);
   finalScore = finalScore + penalty;
 
   // Final cleanup
   finalScore = Math.round(Math.max(40, Math.min(100, finalScore)));
 
-  if (reasons.length === 0) {
+  // Cap evidence (with academic limit + city-dominates-region rule applied
+  // inside the helper). Reserve room for a caveat string if one fired.
+  const evidenceCap = caveatReason ? 2 : 3;
+  const cappedEvidence = applyEvidencePriorityAndCap(evidence, evidenceCap);
+  const reasons = cappedEvidence.map(renderEvidenceText);
+  // Backward-compatible fallback for compatibility_reasons only — evidence
+  // stays empty in this branch per the structured-truth contract.
+  if (reasons.length === 0 && !caveatReason) {
     reasons.push('התאמה כללית טובה');
   }
+  if (caveatReason) reasons.push(caveatReason);
 
-  // Deduplicate; reserve room for a caveat if one fired.
-  const positiveReasons = Array.from(new Set(reasons)).slice(0, caveatReason ? 2 : 3);
-  if (caveatReason) positiveReasons.push(caveatReason);
-
-  return { score: finalScore, reasons: positiveReasons };
+  return { score: finalScore, reasons, evidence: cappedEvidence };
 }
 
 // ---------------------------------------------------------------------------
@@ -729,6 +995,13 @@ export interface ScoredCandidate {
   candidateId: string;
   score: number;
   reasons: string[];
+  // PR 1: structured evidence derived from the same scoring branches that
+  // produced `reasons`. Persisted by index.ts into
+  // matches.metadata.compatibility_evidence via a post-RPC service-role
+  // UPDATE. Empty array is valid (general "fallback" reasons remain in
+  // `reasons` only). See CompatibilityEvidence in this file for the shape
+  // + privacy contract.
+  evidence: CompatibilityEvidence[];
   depth: 'fast' | 'deep';
 }
 
@@ -783,7 +1056,7 @@ export function rankCandidates(
     const candMode = asString(c.profile.onboarding_mode);
     const depth: 'fast' | 'deep' = (myMode === 'deep' && candMode === 'deep') ? 'deep' : 'fast';
 
-    const { score, reasons } = calculateCompatibility(
+    const { score, reasons, evidence } = calculateCompatibility(
       callerProfile,
       callerAnswers,
       callerAiTraits,
@@ -793,7 +1066,7 @@ export function rankCandidates(
       depth,
     );
 
-    scored.push({ candidateId: c.id, score, reasons, depth });
+    scored.push({ candidateId: c.id, score, reasons, evidence, depth });
   }
 
   scored.sort((a, b) => b.score - a.score);
