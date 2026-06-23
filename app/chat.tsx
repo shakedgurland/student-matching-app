@@ -387,58 +387,85 @@ export default function ChatScreen() {
         setMeId(freshUser.id);
       }
 
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: freshUser.id,
-          content: text,
-        })
-        .select('id, conversation_id, sender_id, content, read_at, created_at')
-        .single();
-      if (error || !data) {
-        // BATCH-H1: diagnostic console log so the next TestFlight build
-        // can localize which RLS clause / data condition rejected the
-        // insert. Non-sensitive only — excludes auth tokens, emails,
-        // and the message content itself. match_id + conversation_id
-        // are internal UUIDs.
-        const supaErr = (error ?? null) as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown } | null;
-        const errCode = typeof supaErr?.code === 'string' ? supaErr.code : null;
-        console.log('[chat-send] insert failed', {
-          message: typeof supaErr?.message === 'string' ? supaErr.message : null,
-          code: errCode,
-          details: typeof supaErr?.details === 'string' ? supaErr.details : null,
-          hint: typeof supaErr?.hint === 'string' ? supaErr.hint : null,
+      // BATCH-H8: backend-authorized send via SECURITY DEFINER RPC.
+      // Real-device evidence (PR #44 H7 build) confirmed direct
+      // `from('messages').insert()` was failing with opaque PostgREST
+      // 42501 even when getUser() succeeded, match was active+future,
+      // and caller was a conversation participant — the JWT was
+      // dropping between getUser() and the REST INSERT. The new
+      // `send_chat_message` RPC (migration 030) reads auth.uid()
+      // server-side once, performs explicit participant + lifecycle
+      // validation, and INSERTs with SECURITY DEFINER bypassing
+      // messages RLS. Returns the inserted public.messages row.
+      const { data: rpcData, error: rpcError } = await supabase.rpc('send_chat_message', {
+        p_conversation_id: conversationId,
+        p_content: text,
+      });
+      const insertedRow = (rpcData ?? null) as MessageRow | null;
+      if (rpcError || !insertedRow) {
+        // rpcError.code is the SQLSTATE raised by the function:
+        //   28000 unauthenticated
+        //   22023 empty_content
+        //   P0001 conversation_not_found / not_participant /
+        //         match_not_found / match_terminal / match_expired
+        //         (discriminated by rpcError.message)
+        // Non-sensitive only — excludes content, tokens, emails.
+        const rpcErrCode = (rpcError as { code?: unknown } | null)?.code;
+        const rpcErrMsg = (rpcError as { message?: unknown } | null)?.message;
+        const safeCode = typeof rpcErrCode === 'string' ? rpcErrCode : null;
+        const safeMsg = typeof rpcErrMsg === 'string' ? rpcErrMsg : null;
+        console.log('[chat-send] rpc failed', {
+          code: safeCode,
+          message: safeMsg,
+          details: typeof (rpcError as any)?.details === 'string' ? (rpcError as any).details : null,
+          hint: typeof (rpcError as any)?.hint === 'string' ? (rpcError as any).hint : null,
           match_id: match?.id ?? null,
           conversation_id: conversationId,
           match_status: match?.status ?? null,
         });
-        logError('Chat', 'send_message_failed', error ?? new Error('send returned no row'));
+        logError('Chat', 'send_message_rpc_failed', rpcError ?? new Error('rpc returned no row'));
 
-        // BATCH-H1: re-fetch match status. If it has transitioned to
-        // terminal (expired/unmatched) since chat init, sync local
-        // state so the composer locks (via isLocked) and the banner
-        // explains the situation, and show a clearer Hebrew Alert
-        // instead of the generic "try again". Awaited — no race.
+        // Map known discriminators to specific Hebrew copy.
+        if (safeCode === '28000' || safeMsg === 'unauthenticated') {
+          Alert.alert(
+            'התחברות נדרשת',
+            'נראה שהחיבור שלך הסתיים. התחברי מחדש ונסי שוב.',
+          );
+          return;
+        }
+        if (safeMsg === 'match_terminal' || safeMsg === 'match_expired') {
+          // Sync local match state so the composer locks via isLocked
+          // and the banner explains.
+          await refreshMatchStatus();
+          Alert.alert(
+            'ההתאמה הסתיימה',
+            'ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות.',
+          );
+          return;
+        }
+        // Defensive: refresh in case the failure was a transient match
+        // transition not caught by the explicit branches above.
         const refreshed = await refreshMatchStatus();
         const terminal = refreshed?.status === 'expired' || refreshed?.status === 'unmatched';
         if (terminal) {
-          Alert.alert('ההתאמה הסתיימה', 'ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות.');
-        } else {
-          // BATCH-H7: beta-safe failure code in the user-facing copy so
-          // a real-device tester can report a single short string.
-          // Code is the Supabase error code when present, else UNKNOWN.
-          const userCode = errCode ?? 'UNKNOWN';
           Alert.alert(
-            'שגיאה',
-            `לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_${userCode}`,
+            'ההתאמה הסתיימה',
+            'ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות.',
           );
+          return;
         }
+        // Generic beta-safe failure code. Uses SQLSTATE when present,
+        // else 'UNKNOWN'. Lets a tester report a single short string.
+        const userCode = safeCode ?? 'UNKNOWN';
+        Alert.alert(
+          'שגיאה',
+          `לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_RPC_${userCode}`,
+        );
         return;
       }
       setDraft('');
       setMessages((prev) =>
-        prev.some((p) => p.id === data.id) ? prev : [...prev, data as MessageRow],
+        prev.some((p) => p.id === insertedRow.id) ? prev : [...prev, insertedRow],
       );
     } catch (e) {
       // HOTFIX P0: same surfacing as the error-result branch above.
@@ -452,11 +479,12 @@ export default function ChatScreen() {
         conversation_id: conversationId,
       });
       logError('Chat', 'send_message_exception', e);
-      // BATCH-H7: include exception failure code for parity with the
-      // RLS-rejection alert above.
+      // BATCH-H8: exception failure code uses the new RPC prefix so
+      // logs + tester reports stay consistent with the RPC-rejection
+      // alert above.
       Alert.alert(
         'שגיאה',
-        'לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_EXCEPTION',
+        'לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_RPC_EXCEPTION',
       );
     } finally {
       setSending(false);
