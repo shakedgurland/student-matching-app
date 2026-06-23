@@ -44,7 +44,20 @@
 --     (migration 026:127-131) fires on rows inserted via this RPC
 --     exactly as it did on direct inserts.
 --   * search_path = public (Supabase-required for SECURITY DEFINER).
---   * GRANT EXECUTE TO authenticated only; REVOKE FROM PUBLIC + anon.
+--   * GRANT EXECUTE TO authenticated AND anon. Counter-intuitively
+--     anon must have EXECUTE so the function body runs at all for an
+--     unauthenticated caller — otherwise PostgreSQL raises SQLSTATE
+--     42501 (insufficient_privilege) at the EXECUTE permission check
+--     BEFORE the function body fires, and the client sees an opaque
+--     42501 indistinguishable from a real RLS rejection (which is
+--     exactly the original direct-insert problem this RPC exists to
+--     fix). With anon EXECUTE, the function enters its body, the
+--     first statement checks auth.uid(), and raises a discriminated
+--     28000 'unauthenticated' that the client maps to a clear
+--     "התחברות נדרשת" alert. The in-function auth.uid() check is
+--     the security boundary, not the EXECUTE grant. The function
+--     does ZERO data access for unauthenticated callers — it raises
+--     before reading conversations / matches / profiles.
 --   * sender_id is set inside the function from auth.uid() — caller
 --     cannot supply or spoof it.
 --   * Does NOT touch migration 022.
@@ -148,12 +161,16 @@ BEGIN
 END;
 $$;
 
--- Safe grants only. authenticated role only; anon and public revoked.
--- The function checks auth.uid() at entry so anon (auth.uid()=NULL)
--- would raise 28000 anyway, but explicit revoke is defense-in-depth.
+-- Grants. Strip the default PUBLIC EXECUTE; then explicitly grant to
+-- BOTH anon and authenticated. anon needs EXECUTE so the function
+-- body can run for an unauthenticated caller and raise the
+-- discriminated 28000 'unauthenticated' (see scope/safety note above).
+-- The security boundary is the in-function `IF auth.uid() IS NULL`
+-- check, NOT the EXECUTE grant — the function performs zero data
+-- access for unauthenticated callers.
 REVOKE ALL ON FUNCTION public.send_chat_message(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.send_chat_message(uuid, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.send_chat_message(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.send_chat_message(uuid, text) TO anon;
 
 COMMENT ON FUNCTION public.send_chat_message(uuid, text) IS
   'Production-grade chat message INSERT. Replaces direct client INSERT '
