@@ -336,18 +336,62 @@ export default function ChatScreen() {
 
   async function send() {
     const text = draft.trim();
-    if (!text || sending || !conversationId || !meId) return;
+    // BATCH-H7 REFINEMENT: dropped `!meId` from the precondition list.
+    // The suspected failure mode is precisely that meId went stale or
+    // never matched the current auth user — gating on it would silently
+    // swallow the very case we're trying to diagnose + recover. The
+    // fresh supabase.auth.getUser() call below is now the single source
+    // of truth for "is the user authenticated."
+    if (!text || sending || !conversationId) return;
     // Safety belt — the UI disables the send button when isLocked, but
     // a stale render or a programmatic click could still call send().
     // Refuse if the match is terminal or active-but-past-expiry.
     if (isLocked) return;
     setSending(true);
     try {
+      // BATCH-H7: re-read the authenticated user immediately before
+      // insert. TestFlight evidence: the failing send hit the generic
+      // "שגיאה" alert (not "ההתאמה הסתיימה"), while live SELECT
+      // confirmed the match was active+future, conversation existed,
+      // and caller was a participant. The remaining plausible cause
+      // is meId captured at init() going stale vs the current
+      // auth.uid() at send-time (token rotation / session refresh /
+      // background user switch). Re-reading auth.getUser() here
+      // ensures sender_id matches the live auth.uid() the RLS sees.
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const freshUser = authData?.user ?? null;
+      if (authError || !freshUser?.id) {
+        console.log('[chat-send] auth missing', {
+          message: authError?.message ?? null,
+          match_id: match?.id ?? null,
+          conversation_id: conversationId,
+        });
+        logError('Chat', 'send_auth_missing', authError ?? new Error('no fresh user'));
+        Alert.alert(
+          'התחברות נדרשת',
+          'נראה שהחיבור שלך הסתיים. התחברי מחדש ונסי שוב.',
+        );
+        return;
+      }
+      if (meId !== freshUser.id) {
+        // Fresh user wins. Diagnostic + sync local meId so bubble
+        // own-vs-peer rendering (m.sender_id === meId) and any
+        // subsequent send in this session use the live auth user.
+        // Diagnostic logs UUIDs only — no tokens, emails, or content.
+        console.log('[chat-send] auth user mismatch', {
+          init_me_id: meId,
+          fresh_user_id: freshUser.id,
+          match_id: match?.id ?? null,
+          conversation_id: conversationId,
+        });
+        setMeId(freshUser.id);
+      }
+
       const { data, error } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
-          sender_id: meId,
+          sender_id: freshUser.id,
           content: text,
         })
         .select('id, conversation_id, sender_id, content, read_at, created_at')
@@ -359,9 +403,10 @@ export default function ChatScreen() {
         // and the message content itself. match_id + conversation_id
         // are internal UUIDs.
         const supaErr = (error ?? null) as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown } | null;
+        const errCode = typeof supaErr?.code === 'string' ? supaErr.code : null;
         console.log('[chat-send] insert failed', {
           message: typeof supaErr?.message === 'string' ? supaErr.message : null,
-          code: typeof supaErr?.code === 'string' ? supaErr.code : null,
+          code: errCode,
           details: typeof supaErr?.details === 'string' ? supaErr.details : null,
           hint: typeof supaErr?.hint === 'string' ? supaErr.hint : null,
           match_id: match?.id ?? null,
@@ -380,7 +425,14 @@ export default function ChatScreen() {
         if (terminal) {
           Alert.alert('ההתאמה הסתיימה', 'ההתאמה הסתיימה — אי אפשר לשלוח הודעות חדשות.');
         } else {
-          Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
+          // BATCH-H7: beta-safe failure code in the user-facing copy so
+          // a real-device tester can report a single short string.
+          // Code is the Supabase error code when present, else UNKNOWN.
+          const userCode = errCode ?? 'UNKNOWN';
+          Alert.alert(
+            'שגיאה',
+            `לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_${userCode}`,
+          );
         }
         return;
       }
@@ -400,7 +452,12 @@ export default function ChatScreen() {
         conversation_id: conversationId,
       });
       logError('Chat', 'send_message_exception', e);
-      Alert.alert('שגיאה', 'לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.');
+      // BATCH-H7: include exception failure code for parity with the
+      // RLS-rejection alert above.
+      Alert.alert(
+        'שגיאה',
+        'לא הצלחנו לשלוח את ההודעה. קוד תקלה: CHAT_SEND_EXCEPTION',
+      );
     } finally {
       setSending(false);
     }
