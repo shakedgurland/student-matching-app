@@ -897,6 +897,19 @@ function calculateCompatibility(
     }
     const traitClosenessScore = Math.round(traitClosenessSum * 10) / 10;
 
+    // Score path uses the RAW overlap count (every shared value, including
+    // 'attraction' and 'other') — bit-identical to the pre-PR scoring so
+    // the deepScore branch keeps its previous calibration.
+    const topValuesOverlap = countOverlap(myAnswers.relationship_top_values, candidateAnswers.relationship_top_values);
+    const topValuesScore = Math.min(6, topValuesOverlap * 2);
+
+    // Evidence path is filtered: only codes mapped in VALUE_LABELS_HE
+    // surface (excludes 'attraction' as body-adjacent and 'other' as
+    // open-text noise — see labels.ts). The filtered count can be lower
+    // than topValuesOverlap; emit evidence only when at least 2 SAFE
+    // labeled values overlap so the rendered "יש לכם N ערכים זוגיים
+    // משותפים" count is truthful AND privacy-safe. Score is unaffected
+    // by this gate.
     const myTopValuesArr = asStringArray(myAnswers.relationship_top_values);
     const candTopValuesSet = new Set(asStringArray(candidateAnswers.relationship_top_values));
     const sharedTopValuePairs: { code: string; label: string }[] = [];
@@ -906,12 +919,7 @@ function calculateCompatibility(
       if (typeof label !== 'string' || !label) continue;
       sharedTopValuePairs.push({ code, label });
     }
-    const topValuesOverlap = sharedTopValuePairs.length;
-    const topValuesScore = Math.min(6, topValuesOverlap * 2);
-    if (topValuesOverlap >= 2) {
-      // Store labeled codes for analytics + a future enumerating renderer;
-      // the rendered reason today is a count only (intimate values are not
-      // enumerated as bullets — see CompatibilityEvidence privacy note).
+    if (sharedTopValuePairs.length >= 2) {
       evidence.push({
         kind: 'shared_top_values',
         values: sharedTopValuePairs.map((p) => p.code),
