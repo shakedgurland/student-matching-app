@@ -7,7 +7,6 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
-  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -31,26 +30,11 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
-// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for the
-// peer/candidate avatar used in the home-tab match card. Matches the
-// value used by match-profile / chat / match-result so every peer-image
-// surface bounds the stale-access window to the same 5 minutes if the
-// match closes after the URL is minted. Own-user images
-// (my-profile, questionnaire onboarding) intentionally keep the longer
-// 3600s TTL — owner access does not need bounding.
-const SIGNED_URL_TTL_SECONDS = 300;
-
-// BATCH-B: tracks match IDs we've already auto-redirected to
-// /match-result during this app session. Lives at module scope so it
-// survives the home-tab's mount/unmount cycle as the user navigates
-// in/out of the tab. Prevents an infinite redirect loop: if the user
-// taps the back arrow on /match-result and lands back on the home
-// tab, we should NOT immediately bounce them right back — they
-// explicitly asked to leave. Per-id rather than a single boolean so
-// that if a new match is created later in the session (e.g., the
-// previous one ended and they got a fresh one), the new id is treated
-// as fresh and the redirect fires once for it.
-const redirectedMatchIds = new Set<string>();
+// PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): removed
+// SIGNED_URL_TTL_SECONDS constant. Sole users were the avatar-signing
+// blocks in fetchCurrentMatch + handleFindMatch, which served the
+// removed intermediate active-match card. match-profile / chat /
+// match-result keep their own copies of the same 300s TTL.
 
 export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -58,7 +42,11 @@ export default function MatchSelectionScreen() {
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<any>(null);
-  const [otherUser, setOtherUser] = useState<any>(null);
+  // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): otherUser state removed —
+  // sole consumer was the intermediate active-match card removed in
+  // PR #57. The Match tab no longer renders peer details; it auto-
+  // forwards to /match-result (or /chat for chat_started) where the
+  // peer is loaded fresh with the right column set.
   // Set to true when the backend returns { status: 'monthly_cap_reached' }.
   // Drives the empty-state copy so the user sees a clear cap message instead
   // of a "still searching..." text that would never resolve. Reset on every
@@ -83,14 +71,9 @@ export default function MatchSelectionScreen() {
     fetchCurrentMatch();
   }, []);
 
-  // BATCH-B: auto-forward to /match-result when a current match exists.
-  // BATCH-E1: extended to also forward to /chat when the match has
-  // already transitioned to 'chat_started' (i.e., at least one message
-  // has been exchanged — migration 023's trigger flips the status on
-  // first message INSERT). Avoids forcing returning users through the
-  // match-result preview every cold launch when their conversation
-  // is already underway. The match profile remains reachable from the
-  // chat header avatar/title (added in PR-MATCH-PROFILE-V1).
+  // Auto-forward to the actual match screen whenever an active match is
+  // resolved. The Match tab is purely a router — it never renders an
+  // intermediate "active match" card.
   //
   // Status branching:
   //   - 'active'        → /match-result (no chat yet; preview is right)
@@ -100,25 +83,20 @@ export default function MatchSelectionScreen() {
   //     ['active', 'chat_started']) so currentMatch stays null and
   //     the home empty state renders — correct UX.
   //
-  // Uses router.replace so the home tab is dropped from the stack —
-  // back-from-match-result/chat exits the (tabs) layer entirely
-  // rather than re-entering this screen and re-triggering the redirect.
-  // Loop guard: redirectedMatchIds (module scope) records each id
-  // we've already redirected for this app session. A back navigation
-  // that somehow lands us back here with the same currentMatch will
-  // skip the redirect because the id is already in the set. A NEW
-  // match (different id) re-triggers the redirect once.
-  // Deps are [currentMatch?.id, currentMatch?.status, loading] so the
-  // effect fires once currentMatch's id stabilizes; including status
-  // also re-fires if the trigger flips active→chat_started mid-session
-  // (e.g., the user just sent the first message and re-enters the home
-  // tab) — though in practice the redirect-once guard handles that too.
+  // PR-MATCH-FLOW (PR #57): removed the redirectedMatchIds Set +
+  // dedupe guard. Previously the Match tab showed a redundant
+  // "התאמה פעילה / צפייה בהתאמה" card when the guard blocked a
+  // re-redirect (e.g., user tapped the Match tab pill after backing
+  // out of /match-result). With the card removed, re-redirecting is
+  // the correct behavior: the Match tab IS the match entry point and
+  // should always land on the actual match screen. router.replace
+  // (not push) is used so the (tabs) screen does not stack on top of
+  // /match-result; the only way back to the home tab is the tab pill
+  // itself, which is the user's explicit ask to land on the match.
   useEffect(() => {
     if (loading) return;
     const matchId = currentMatch?.id;
     if (!matchId) return;
-    if (redirectedMatchIds.has(matchId)) return;
-    redirectedMatchIds.add(matchId);
     const target = currentMatch?.status === 'chat_started' ? '/chat' : '/match-result';
     router.replace({ pathname: target as any, params: { match_id: matchId } });
   }, [currentMatch?.id, currentMatch?.status, loading, router]);
@@ -285,22 +263,17 @@ export default function MatchSelectionScreen() {
           return;
         }
 
-        // Generate signed URL for avatar if storage_path exists.
-        // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer avatar — 300s TTL.
-        let avatarUrl = profile.avatar_url;
-        if (profile.avatar_storage_path) {
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from('profile-photos')
-            .createSignedUrl(profile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
-          if (!signedError) {
-            avatarUrl = signedData.signedUrl;
-          }
-        }
-
-        // Peer profile resolved successfully — safe to set currentMatch
-        // (which will trigger the auto-forward useEffect) and otherUser.
+        // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): avatar signing and
+        // setOtherUser were removed — sole consumer was the deleted
+        // intermediate active-match card. The peer-missing resilience
+        // check above (PR #51) still verifies the profile exists; we
+        // just no longer hold any peer detail in state here. The
+        // /match-result and /chat screens load the peer afresh with
+        // their own column sets and signed-URL minting.
+        //
+        // Peer profile resolved successfully — set currentMatch which
+        // triggers the auto-forward useEffect.
         setCurrentMatch(openMatch);
-        setOtherUser({ ...profile, avatar_url: avatarUrl });
       } else {
         // Automatically try to find a match if none exists
         handleFindMatch(user.id, true);
@@ -322,28 +295,22 @@ export default function MatchSelectionScreen() {
       const newMatch = await findAndCreateBestMatch(targetUserId);
 
       if (newMatch && 'matchId' in newMatch) {
-        // Success path: backend returned 'created' and lib/matching loaded
-        // the candidate profile. Sign the avatar URL for the carousel and
-        // render the match card.
+        // Success path: backend returned 'created'. Set currentMatch
+        // which triggers the auto-forward useEffect to /match-result
+        // (or /chat if a subsequent fetch shows the match already
+        // transitioned to chat_started).
+        //
+        // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): the candidate-
+        // profile avatar-signing + setOtherUser call were removed.
+        // Sole consumer was the intermediate active-match card that
+        // PR #57 deleted. /match-result loads the peer afresh with
+        // its own column set and signed-URL minting.
         logEvent('match_found', { metadata: { matchId: newMatch.matchId, score: newMatch.compatibilityScore } });
-        let candidateProfile = newMatch.candidateProfile;
-
-        if (candidateProfile.avatar_storage_path) {
-          // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer/candidate avatar — 300s TTL.
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from('profile-photos')
-            .createSignedUrl(candidateProfile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
-          if (!signedError) {
-            candidateProfile = { ...candidateProfile, avatar_url: signedData.signedUrl };
-          }
-        }
-
         setCurrentMatch({
           id: newMatch.matchId,
           compatibility_score: newMatch.compatibilityScore,
           compatibility_reasons: newMatch.compatibilityReasons,
         });
-        setOtherUser(candidateProfile);
         return;
       }
 
@@ -395,11 +362,6 @@ export default function MatchSelectionScreen() {
     } finally {
       setMatching(false);
     }
-  };
-
-  const handleStartChat = () => {
-    if (!currentMatch?.id) return;
-    router.push({ pathname: '/match-result', params: { match_id: currentMatch.id } });
   };
 
   const handleProfile = () => {
@@ -456,39 +418,16 @@ export default function MatchSelectionScreen() {
             <View style={{ width: 32 }} />
           </View>
 
-          {currentMatch && otherUser ? (
-            <View style={styles.matchCardContainer}>
-              <View style={[styles.card, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
-                <ThemedText style={[styles.cardLabel, { color: UI_COLORS.branding }]}>התאמה פעילה</ThemedText>
-                <ThemedText style={[styles.cardTitle, { color: dynamicColors.text }]}>הכירו את {otherUser.full_name || otherUser.username || 'ההתאמה שלך'}</ThemedText>
-                
-                <View style={styles.visualContainer}>
-                   <View style={[styles.avatarPlaceholder, { borderColor: UI_COLORS.branding }]}>
-                      {otherUser.avatar_url ? (
-                        <Image source={{ uri: otherUser.avatar_url }} style={styles.avatarImage} />
-                      ) : (
-                        <ThemedText style={styles.avatarText}>{(otherUser.full_name || otherUser.username || '?')[0]}</ThemedText>
-                      )}
-                   </View>
-                </View>
-
-                <ThemedText style={[styles.matchScore, { color: UI_COLORS.primary }]}>
-                   {currentMatch.compatibility_score}% התאמה
-                </ThemedText>
-
-                <TouchableOpacity 
-                  style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
-                  onPress={handleStartChat}>
-                  <ThemedText style={styles.primaryButtonText}>צפייה בהתאמה</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : matching ? (
-            // BATCH-H6: a background find-and-create is running (post-
-            // questionnaire, post-feedback, or post-end-match landing).
-            // Show the same searching hero instead of the empty card
-            // so the user doesn't briefly see "אין התאמה" while we're
-            // still actively looking.
+          {/* PR-MATCH-FLOW (PR #57): the redundant "התאמה פעילה / הכירו
+              את / צפייה בהתאמה" intermediate card was removed entirely.
+              The Match tab now renders only:
+                * searchingHero — while loading OR while a background
+                  find-and-create is in flight OR briefly between
+                  currentMatch being set and the auto-forward useEffect
+                  redirecting to /match-result | /chat
+                * emptyState   — when there is no active/chat_started
+                  match and no search is in flight */}
+          {(currentMatch || matching) ? (
             searchingHero
           ) : (
             <View style={styles.emptyContainer}>
@@ -550,71 +489,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
   },
-  matchCardContainer: {
-    marginTop: 20,
-  },
-  card: {
-    borderRadius: 24,
-    padding: 32,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  cardLabel: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  visualContainer: {
-    marginVertical: 10,
-  },
-  avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFF0EA',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarText: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#FF3D57',
-  },
-  matchScore: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  primaryButton: {
-    width: '100%',
-    height: 56,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
+  // PR-MATCH-FLOW (PR #57): removed dead styles that only served the
+  // old intermediate "התאמה פעילה / הכירו את / צפייה בהתאמה" card:
+  //   matchCardContainer, card, cardLabel, cardTitle, visualContainer,
+  //   avatarPlaceholder, avatarImage, avatarText, matchScore,
+  //   primaryButton, primaryButtonText.
+  // Confirmed unreferenced elsewhere in this file before deletion.
   emptyContainer: {
     alignItems: 'center',
     paddingTop: 40,
