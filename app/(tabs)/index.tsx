@@ -248,20 +248,42 @@ export default function MatchSelectionScreen() {
           }
         }
 
-        setCurrentMatch(openMatch);
-
         // Fetch other user profile — minimal column set; never select email
         // or other sensitive fields. Matched-peer SELECT access is granted
         // by the policy from migration 020 (widened to chat_started by
         // migration 023).
+        //
+        // PR-DEL-CLIENT: changed .single() -> .maybeSingle() and deferred
+        // setCurrentMatch until the peer profile is confirmed present. If
+        // the peer's account was deleted (via PR #50 delete-account or a
+        // manual Supabase Dashboard delete), the FK cascade chain has
+        // either already removed the matches row OR is about to. Until
+        // the cascade lands on this client we can briefly observe a match
+        // row whose peer profile is gone. Setting currentMatch before
+        // checking the peer would trigger the auto-forward useEffect
+        // (lines 116-124) and push the user into a broken match-result
+        // preview. Instead: bail out cleanly and let the empty-state /
+        // auto-search path take over so the surviving user can search
+        // for a new match without being stuck.
         const otherUserId = openMatch.user_a_id === user.id ? openMatch.user_b_id : openMatch.user_a_id;
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('id, username, full_name, avatar_url, avatar_storage_path')
           .eq('id', otherUserId)
-          .single();
+          .maybeSingle();
 
         if (profileError) throw profileError;
+
+        if (!profile) {
+          // Peer profile missing — peer was deleted and the cascade
+          // either has already removed this match row or will momentarily.
+          // Do NOT setCurrentMatch (avoids auto-forward to a broken
+          // /match-result). Treat as "no open match" and trigger the
+          // same auto-search path the empty branch below uses.
+          logEvent('home_peer_profile_missing', { metadata: { matchId: openMatch.id } });
+          handleFindMatch(user.id, true);
+          return;
+        }
 
         // Generate signed URL for avatar if storage_path exists.
         // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer avatar — 300s TTL.
@@ -275,6 +297,9 @@ export default function MatchSelectionScreen() {
           }
         }
 
+        // Peer profile resolved successfully — safe to set currentMatch
+        // (which will trigger the auto-forward useEffect) and otherUser.
+        setCurrentMatch(openMatch);
         setOtherUser({ ...profile, avatar_url: avatarUrl });
       } else {
         // Automatically try to find a match if none exists

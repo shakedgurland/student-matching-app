@@ -24,6 +24,14 @@ export type EventType =
   | 'match_not_found'
   | 'match_search_failed'
   | 'profile_updated'
+  // PR-DEL-CLIENT: account-deletion lifecycle + home-tab peer-missing
+  // resilience. delete_account_* fire from my-profile when the user
+  // confirms the destructive flow. home_peer_profile_missing fires
+  // from (tabs)/index.tsx when an open match row resolves a null peer
+  // profile (deletion cascade race or pre-cascade observation).
+  | 'delete_account_started'
+  | 'delete_account_succeeded'
+  | 'home_peer_profile_missing'
   | 'app_error';
 
 interface LogOptions {
