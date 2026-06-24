@@ -9,9 +9,11 @@ import {
   Alert,
   TextInput,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   Dimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -683,9 +685,16 @@ export default function MyProfileScreen() {
             PR-DEL-CLIENT: account-deletion confirmation modal. Rendered as
             a sibling of the ScrollView (inside SafeAreaView) so it overlays
             the full screen. transparent + animationType="fade" matches the
-            iOS-native action-sheet feel without an iOS-only API. Backdrop
-            tap closes the modal (matching iOS alert dismiss gesture); the
-            close path resets the typed text so a re-open starts clean.
+            iOS-native action-sheet feel without an iOS-only API.
+            PR #59 — backdrop tap dismisses the keyboard (so the user can
+            read the bullets / buttons after typing in the TextInput) but
+            does NOT close the modal and does NOT trigger deletion. The
+            inner card uses a Pressable with an empty onPress so taps on
+            card chrome are absorbed and don't propagate up to the
+            backdrop's Keyboard.dismiss. Cancel button + Android
+            onRequestClose remain the only paths that actually close the
+            modal; both still reset the typed text so a re-open starts
+            clean.
            */}
           <Modal
             visible={deleteModalOpen}
@@ -697,12 +706,18 @@ export default function MyProfileScreen() {
               setDeleteConfirmText('');
             }}
           >
-            <View style={styles.deleteModalBackdrop}>
-              <View
+            <Pressable
+              style={styles.deleteModalBackdrop}
+              onPress={Keyboard.dismiss}
+              accessible={false}
+            >
+              <Pressable
                 style={[
                   styles.deleteModalCard,
                   { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
                 ]}
+                onPress={() => {}}
+                accessible={false}
               >
                 <ThemedText style={[styles.deleteModalTitle, { color: dynamicColors.text }]}>
                   מחיקת חשבון
@@ -790,8 +805,8 @@ export default function MyProfileScreen() {
                     )}
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
+              </Pressable>
+            </Pressable>
           </Modal>
         </SafeAreaView>
       </ThemedView>
