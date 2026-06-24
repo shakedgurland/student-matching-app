@@ -18,13 +18,14 @@ import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
 import { labelFor } from '@/lib/profile-labels';
 
-// PR-PREMIUM-UI: lighter, more iOS-like palette. Background shifted from
-// warm pink (#FFF9F6) to off-white (#FFFCFA). Cards stay pure white. Rose
-// tint reserved for small accent chips/strips so the screen doesn't read
-// as "child-pink". Primary coral kept for the sticky CTA. Dark mode
-// inherits the existing scheme — only light-mode tones change.
+// PR-UI-POLISH: shifted background from off-white (#FFFCFA) to pure
+// white (#FFFFFF) per QA — testers felt the off-white read as creamy
+// next to the white cards. Cards still pure white; rose tint reserved
+// for small accent chips/strips. Primary coral kept for the sticky CTA.
+// Dark mode inherits the existing scheme — only light-mode background
+// tone changes.
 const UI_COLORS = {
-  bg: '#FFFCFA',
+  bg: '#FFFFFF',
   primary: '#FF4D3D',
   branding: '#FF3D57',
   surfaceRose: '#FFF3F4',
@@ -657,7 +658,7 @@ export default function MatchResultScreen() {
             {
               backgroundColor: dynamicColors.bg,
               borderTopColor: dynamicColors.border,
-              paddingBottom: Math.max(insets.bottom, 12),
+              paddingBottom: Math.max(insets.bottom, 8),
             },
           ]}>
           <TouchableOpacity
@@ -852,9 +853,13 @@ const styles = StyleSheet.create({
   secondaryLinkText: { fontSize: 14, fontWeight: '600', writingDirection: 'rtl' },
 
   // Sticky footer — minimal padding so it stops feeling like a big block.
+  // PR-UI-POLISH: tightened paddingTop 10 → 6 + paddingBottom floor 12 → 8
+  // (in the JSX above) so the footer is closer to a calm iOS CTA strip
+  // and stops eating vertical space. The 52pt button height stays above
+  // iOS's 44pt minimum tap target.
   stickyFooter: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 6,
     borderTopWidth: 1,
   },
   primaryButton: {
