@@ -493,8 +493,10 @@ export default function ChatScreen() {
 
   const peerName = (peer?.full_name || peer?.username || 'ההתאמה שלך').trim();
   const peerInitial = (peerName.trim()[0] || '?').toUpperCase();
-  const headerSubtitle =
-    match?.compatibility_score != null ? `${match.compatibility_score}% התאמה` : null;
+  // PR-MATCH-FLOW (PR #57): removed the "{compatibility_score}% התאמה"
+  // header subtitle. compatibility_score is still SELECT-ed for the
+  // MatchLite type / future analytics; only the user-facing render
+  // was removed per product decision.
 
   // Composer lock. The match is read-only when:
   //   - status is terminal ('expired' or 'unmatched'), OR
@@ -697,11 +699,7 @@ export default function ChatScreen() {
                 style={[styles.headerTitle, { color: dynamicColors.text }]}>
                 {peerName}
               </ThemedText>
-              {headerSubtitle && (
-                <ThemedText style={[styles.headerSubtitle, { color: dynamicColors.textLight }]}>
-                  {headerSubtitle}
-                </ThemedText>
-              )}
+              {/* PR-MATCH-FLOW (PR #57): headerSubtitle removed. */}
             </TouchableOpacity>
 
             {canEnd && (
@@ -884,12 +882,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  headerSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 2,
-  },
+  // PR-MATCH-FLOW (PR #57): removed headerSubtitle style (sole user
+  // was the deleted "{compatibility_score}% התאמה" subtitle).
   headerSpacer: { width: 24 },
   endMatchButton: {
     paddingHorizontal: 6,

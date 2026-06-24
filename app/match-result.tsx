@@ -380,7 +380,11 @@ export default function MatchResultScreen() {
   const displayName = (peer.full_name || peer.username || 'ההתאמה שלך').trim();
   const age = peer.birth_year ? new Date().getFullYear() - peer.birth_year : null;
   const nameWithAge = age ? `${displayName}, ${age}` : displayName;
-  const score = match.compatibility_score ?? null;
+  // PR-MATCH-FLOW (PR #57): compatibility_score is no longer surfaced
+  // to users. The column is still SELECT-ed (line above) for backwards
+  // compatibility of the MatchRow type / future analytics, but the
+  // chip + label render below were removed per product decision —
+  // matching is internal, not a leaderboard.
   const initial = (displayName.trim()[0] || '?').toUpperCase();
   const icebreaker = match.icebreaker_hint?.trim() || null;
 
@@ -516,13 +520,8 @@ export default function MatchResultScreen() {
               </ThemedText>
             )}
 
-            {score !== null && (
-              <View style={[styles.scoreChip, { backgroundColor: dynamicColors.surfaceRose }]}>
-                <ThemedText style={[styles.scoreChipText, { color: UI_COLORS.branding }]}>
-                  {score}% התאמה
-                </ThemedText>
-              </View>
-            )}
+            {/* PR-MATCH-FLOW (PR #57): score chip removed (was
+                "{score}% התאמה"). Score stays internal. */}
           </View>
 
           {/* Reasons — evidence cards (PR #48) or compatibility_reasons fallback */}
@@ -723,13 +722,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  scoreChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  scoreChipText: { fontSize: 13, fontWeight: '700', writingDirection: 'rtl' },
+  // PR-MATCH-FLOW (PR #57): removed scoreChip + scoreChipText styles
+  // (sole users were the deleted "{score}% התאמה" hero chip).
 
   // Reasons
   section: { gap: 10 },
