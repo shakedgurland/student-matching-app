@@ -16,29 +16,24 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
-// BATCH-C: Hebrew display labels for peer profile enum values.
-// Previously the infoRow values rendered raw codes like "huji", "law",
-// "year_3" — visible to users on TestFlight build 12. labelFor() also
-// covers the region row, which Match Result didn't render before this
-// batch but is added here for parity with the match-profile screen.
 import { labelFor } from '@/lib/profile-labels';
 
+// PR-PREMIUM-UI: lighter, more iOS-like palette. Background shifted from
+// warm pink (#FFF9F6) to off-white (#FFFCFA). Cards stay pure white. Rose
+// tint reserved for small accent chips/strips so the screen doesn't read
+// as "child-pink". Primary coral kept for the sticky CTA. Dark mode
+// inherits the existing scheme — only light-mode tones change.
 const UI_COLORS = {
-  bg: '#FFF9F6',
+  bg: '#FFFCFA',
   primary: '#FF4D3D',
-  accent: '#FF8A00',
   branding: '#FF3D57',
-  surface: '#FFF0EA',
+  surfaceRose: '#FFF3F4',
   text: '#172033',
   textLight: '#667085',
-  border: '#E9E4E0',
+  border: '#EEEAE6',
   card: '#FFFFFF',
 };
 
-// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for the
-// peer avatar. Bounds the stale-access window if the match closes
-// after the URL is minted. Match-result is a short-lived view; 5 min
-// is comfortably long enough for the user to read and act.
 const SIGNED_URL_TTL_SECONDS = 300;
 
 interface MatchRow {
@@ -51,6 +46,12 @@ interface MatchRow {
   status: string;
   expires_at: string;
   created_at: string;
+  // PR-PREMIUM-UI: metadata now selected so we can render per-kind premium
+  // evidence cards from metadata.compatibility_evidence (introduced by
+  // PR #48). Old matches created before PR #48 deploy have metadata =
+  // { depth } only and no compatibility_evidence key — the UI falls back
+  // to compatibility_reasons rendered as plain text cards.
+  metadata: Record<string, unknown> | null;
 }
 
 interface PeerProfile {
@@ -65,14 +66,126 @@ interface PeerProfile {
   avatar_storage_path: string | null;
 }
 
-function formatCountdown(msRemaining: number): string {
-  if (msRemaining <= 0) return '00:00:00';
-  const totalSeconds = Math.floor(msRemaining / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+// Discriminated-union mirror of the CompatibilityEvidence type defined in
+// supabase/functions/match-create/scoring.ts (PR #48). Local copy because
+// Edge Function code is not importable from the app bundle. If the server
+// adds a new kind in the future, parseEvidence below silently drops it
+// (forward-compatible).
+type CompatibilityEvidence =
+  | { kind: 'shared_hobbies'; values: string[]; labels: string[] }
+  | { kind: 'same_city'; value: string; label: string }
+  | { kind: 'same_region'; value: string; label: string }
+  | { kind: 'same_university'; value: string; label: string }
+  | { kind: 'same_faculty'; value: string; label: string }
+  | { kind: 'same_year_of_study'; value: string; label: string }
+  | { kind: 'shared_intent'; value: string; label: string }
+  | { kind: 'shared_pace'; value: string; label: string }
+  | { kind: 'shared_first_date'; value: string; label: string }
+  | { kind: 'shared_conflict_style'; value: string; label: string }
+  | { kind: 'shared_religion_type'; value: string; label: string }
+  | { kind: 'shared_top_values'; values: string[]; labels: string[] }
+  | { kind: 'ai_vibe' };
+
+// Defensive parse — accepts only items matching the expected per-kind
+// shape. Malformed or unknown entries are dropped silently. Never throws.
+function parseEvidence(metadata: MatchRow['metadata']): CompatibilityEvidence[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const raw = (metadata as Record<string, unknown>).compatibility_evidence;
+  if (!Array.isArray(raw)) return [];
+  const out: CompatibilityEvidence[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+    const kind = obj.kind;
+    if (typeof kind !== 'string') continue;
+
+    if (kind === 'shared_hobbies' || kind === 'shared_top_values') {
+      const values = Array.isArray(obj.values)
+        ? obj.values.filter((v): v is string => typeof v === 'string')
+        : [];
+      const labels = Array.isArray(obj.labels)
+        ? obj.labels.filter((v): v is string => typeof v === 'string')
+        : [];
+      out.push({ kind, values, labels } as CompatibilityEvidence);
+      continue;
+    }
+    if (kind === 'ai_vibe') {
+      out.push({ kind: 'ai_vibe' });
+      continue;
+    }
+    if (
+      kind === 'same_city' || kind === 'same_region' ||
+      kind === 'same_university' || kind === 'same_faculty' ||
+      kind === 'same_year_of_study' || kind === 'shared_intent' ||
+      kind === 'shared_pace' || kind === 'shared_first_date' ||
+      kind === 'shared_conflict_style' || kind === 'shared_religion_type'
+    ) {
+      const value = obj.value;
+      const label = obj.label;
+      if (typeof value === 'string' && typeof label === 'string') {
+        out.push({ kind, value, label } as CompatibilityEvidence);
+      }
+      continue;
+    }
+    // Unknown kind from a future server version — skip silently.
+  }
+  return out;
+}
+
+// Mirror of supabase/functions/match-create/scoring.ts renderEvidenceText.
+// Identical templates so the rendered Hebrew matches exactly what the
+// server wrote into compatibility_reasons. Sensitive kinds intentionally
+// render generic copy — the underlying value/label is stored for analytics
+// + future UI but never surfaced on this screen.
+function joinPrepBet(prefix: string, label: string): string {
+  if (label.startsWith('ה')) return `${prefix}${label.slice(1)}`;
+  return `${prefix}${label}`;
+}
+function joinHebrewList(labels: string[]): string {
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} ו${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} ו${labels[labels.length - 1]}`;
+}
+function renderEvidenceText(ev: CompatibilityEvidence): string {
+  switch (ev.kind) {
+    case 'shared_hobbies':
+      return `שניכם סימנתם ${joinHebrewList(ev.labels)}`;
+    case 'same_city':
+      return joinPrepBet('שניכם ב', ev.label);
+    case 'same_region':
+      return `שניכם באזור ${ev.label}`;
+    case 'same_university':
+      return joinPrepBet('שניכם לומדים ב', ev.label);
+    case 'same_faculty':
+      return `שניכם בפקולטה ל${ev.label}`;
+    case 'same_year_of_study':
+      return joinPrepBet('שניכם ב', ev.label);
+    case 'shared_intent':
+      return `שניכם מחפשים ${ev.label}`;
+    case 'shared_pace':
+      return `שניכם מעדיפים ${ev.label}`;
+    case 'shared_first_date':
+      return `שניכם מעדיפים ${ev.label} לדייט ראשון`;
+    case 'shared_conflict_style':
+      return 'שניכם בסגנון פתרון קונפליקטים דומה';
+    case 'shared_religion_type':
+      return 'יש לכם רקע דתי משותף';
+    case 'shared_top_values':
+      return `יש לכם ${ev.values.length} ערכים זוגיים משותפים`;
+    case 'ai_vibe':
+      return 'וייב דומה בהומור ובערכים';
+  }
+}
+
+// Compact "hours remaining" chip. Seconds/minutes intentionally omitted —
+// the previous countdown card felt like a sale timer and put pressure on
+// the user. Hours-only reads as informative, not stressful.
+function formatRemainingChip(msRemaining: number): string {
+  if (msRemaining <= 0) return '';
+  const hours = Math.floor(msRemaining / (1000 * 60 * 60));
+  if (hours >= 1) return `נותרו ${hours}ש׳`;
+  return 'פחות משעה';
 }
 
 export default function MatchResultScreen() {
@@ -80,10 +193,10 @@ export default function MatchResultScreen() {
   const params = useLocalSearchParams<{ match_id?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  // BATCH-B: sticky-footer safe-area inset for iPhone home indicator.
-  // Footer pads to max(inset, 16) so older devices without an indicator
-  // still get a comfortable bottom gap and modern iPhones don't tuck the
-  // button under the home bar.
+  // Sticky-footer safe-area inset for iPhone home indicator. Footer pads
+  // to max(inset, 12) so older devices without an indicator still get a
+  // comfortable bottom gap and modern iPhones don't tuck the button under
+  // the home bar.
   const insets = useSafeAreaInsets();
 
   const dynamicColors = {
@@ -91,8 +204,8 @@ export default function MatchResultScreen() {
     card: isDark ? '#1D2939' : UI_COLORS.card,
     text: isDark ? '#FFFFFF' : UI_COLORS.text,
     textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
-    border: isDark ? 'rgba(255,255,255,0.1)' : UI_COLORS.border,
-    surface: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface,
+    border: isDark ? 'rgba(255,255,255,0.10)' : UI_COLORS.border,
+    surfaceRose: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surfaceRose,
   };
 
   const [loading, setLoading] = useState(true);
@@ -135,8 +248,11 @@ export default function MatchResultScreen() {
         return;
       }
 
+      // PR-PREMIUM-UI: metadata added to the SELECT so the UI can render
+      // structured evidence cards (PR #48) with a clean fallback to
+      // compatibility_reasons for older rows.
       const matchColumns =
-        'id, user_a_id, user_b_id, compatibility_score, compatibility_reasons, icebreaker_hint, status, expires_at, created_at';
+        'id, user_a_id, user_b_id, compatibility_score, compatibility_reasons, icebreaker_hint, status, expires_at, created_at, metadata';
 
       let matchRow: MatchRow | null = null;
       if (params.match_id) {
@@ -261,7 +377,7 @@ export default function MatchResultScreen() {
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={{ flex: 1 }}>
-          <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+          <View style={styles.header}>
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/my-profile' as any)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -271,15 +387,8 @@ export default function MatchResultScreen() {
             <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
               ההתאמה שלך
             </ThemedText>
-            <View style={styles.headerSpacer} />
+            <View style={styles.headerSlot} />
           </View>
-          {/*
-            BATCH-H6: refined empty/error state. Premium copy + explicit
-            CTA back to the home tab so the user lands on the searching
-            state instead of being stuck on a dead screen. router.replace
-            so /match-result is popped from the stack (it was reached via
-            replace from home, so there's nothing to back-to anyway).
-           */}
           <View style={[styles.center, styles.errorBody]}>
             <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
               {errorMsg ?? 'אין כרגע התאמה פעילה'}
@@ -307,25 +416,16 @@ export default function MatchResultScreen() {
   //                       neither sent → "waiting to start"
   //                       I sent only  → "waiting for reply"
   //                       peer sent only → "they wrote back, your turn"
-  //                     Mutual-sent should NOT occur for status='active'
-  //                     (the trigger transitions to chat_started), but
-  //                     we defensively treat is_mutual_started as
-  //                     chat_started in case a refresh races the trigger.
   //   'chat_started'  — both participants have sent at least one message;
   //                     timer is irrelevant; chat is durable; no countdown.
   //   'expired' / 'unmatched' — terminal; chat is read-only on the next
-  //                     screen; no CTA here.
+  //                     screen; CTA stays present but disabled.
   const isChatStarted = match.status === 'chat_started'
     || (messageState?.is_mutual_started ?? false);
   const isClosed = match.status === 'expired' || match.status === 'unmatched';
   const isCountdownExpired = msLeft <= 0;
-  // CTA disabled when the match is terminal OR active-with-elapsed-timer.
-  // chat_started ignores the timer (chat already happening).
   const ctaDisabled = isClosed || (match.status === 'active' && isCountdownExpired);
 
-  // 'active' sub-states (only meaningful when !isChatStarted && !isClosed).
-  // Both default to false when messageState hasn't loaded yet, which makes
-  // the UI show the safe default "waiting to start" copy.
   const iSent = messageState?.i_have_sent ?? false;
   const peerSent = messageState?.peer_has_sent ?? false;
   const isWaitingForMyReply = !isChatStarted && !isClosed && !iSent && peerSent;
@@ -335,37 +435,70 @@ export default function MatchResultScreen() {
   const age = peer.birth_year ? new Date().getFullYear() - peer.birth_year : null;
   const nameWithAge = age ? `${displayName}, ${age}` : displayName;
   const score = match.compatibility_score ?? null;
-  const reasons = Array.isArray(match.compatibility_reasons)
+  const initial = (displayName.trim()[0] || '?').toUpperCase();
+  const icebreaker = match.icebreaker_hint?.trim() || null;
+
+  // Evidence-first reason list. Each evidence item maps to one premium
+  // card with a small rose accent strip on the leading (right, under RTL)
+  // edge. Falls back to compatibility_reasons rendered as plain text-only
+  // cards for old matches (created before PR #48 deploy) or matches whose
+  // metadata.compatibility_evidence write failed (non-fatal — see
+  // supabase/functions/match-create/index.ts).
+  const evidence = parseEvidence(match.metadata);
+  const reasonsArr = Array.isArray(match.compatibility_reasons)
     ? match.compatibility_reasons.filter((r) => typeof r === 'string' && r.trim().length > 0)
     : [];
-  const icebreaker = match.icebreaker_hint?.trim() || null;
-  const initial = (displayName.trim()[0] || '?').toUpperCase();
+  const evidenceCards: { key: string; text: string }[] = evidence.length > 0
+    ? evidence.map((ev, i) => ({ key: `ev-${i}-${ev.kind}`, text: renderEvidenceText(ev) }))
+    : reasonsArr.map((r, i) => ({ key: `reason-${i}`, text: r }));
 
-  // BATCH-C: pass enum codes through labelFor for Hebrew display.
-  // `campus` is a free-text city name (not an enum) so it renders
-  // verbatim. Don't push rows with empty values from labelFor —
-  // 'לא צוין' would be misleading for fields the peer never
-  // answered; treat unmapped/empty as "skip the row entirely".
-  const infoRows: { label: string; value: string }[] = [];
+  // Compact peer info line — "פקולטה · שנה · אוניברסיטה" with safe label
+  // lookups. Empty / 'לא צוין' entries dropped so the line never reads
+  // half-empty.
+  const infoParts: string[] = [];
   if (peer.faculty) {
     const v = labelFor('faculty', peer.faculty);
-    if (v && v !== 'לא צוין') infoRows.push({ label: 'פקולטה', value: v });
+    if (v && v !== 'לא צוין') infoParts.push(v);
   }
   if (peer.year_of_study) {
     const v = labelFor('year_of_study', peer.year_of_study);
-    if (v && v !== 'לא צוין') infoRows.push({ label: 'שנה', value: v });
+    if (v && v !== 'לא צוין') infoParts.push(v);
   }
   if (peer.university) {
     const v = labelFor('university', peer.university);
-    if (v && v !== 'לא צוין') infoRows.push({ label: 'מוסד', value: v });
+    if (v && v !== 'לא צוין') infoParts.push(v);
   }
-  if (peer.campus) infoRows.push({ label: 'עיר', value: peer.campus });
+  const infoLine = infoParts.join(' · ');
+  const cityLine = peer.campus?.trim() || null;
+
+  // Header countdown chip — only visible while the 72h window is still
+  // meaningful and the match isn't terminal or already in chat_started.
+  const headerCountdown = (!isChatStarted && !isClosed && !isCountdownExpired)
+    ? formatRemainingChip(msLeft)
+    : '';
+
+  // Status copy — calm, single line. No big timer card.
+  const statusText: string = (() => {
+    if (isClosed) return 'ההתאמה הסתיימה';
+    if (isChatStarted) return 'השיחה התחילה — אפשר להמשיך לכתוב מתי שמתאים';
+    if (isCountdownExpired) return 'ההתאמה הסתיימה';
+    if (isWaitingForMyReply) return `${displayName} כתב/ה לך — ענה/י כדי שהשיחה תתקבע`;
+    if (isWaitingForPeerReply) return 'ההודעה נשלחה — מחכים לתגובה';
+    return 'אם אף אחד לא שולח הודעה בזמן — ההתאמה תיסגר';
+  })();
+
+  // CTA copy — "להמשיך לשיחה" once any messages exist or chat started,
+  // otherwise the initiating "להתחיל שיחה". Disabled visual is handled
+  // separately; copy doesn't change for disabled state (iOS convention).
+  const ctaLabel = (isChatStarted || iSent || peerSent)
+    ? 'להמשיך לשיחה'
+    : 'להתחיל שיחה';
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+        <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/my-profile' as any)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -375,24 +508,36 @@ export default function MatchResultScreen() {
           <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
             ההתאמה שלך
           </ThemedText>
-          <View style={styles.headerSpacer} />
+          {headerCountdown ? (
+            <View
+              style={[
+                styles.countdownChip,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.countdownChipText, { color: dynamicColors.textLight }]}>
+                {headerCountdown}
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.headerSlot} />
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.titleBlock}>
-            <ThemedText style={[styles.preTitle, { color: UI_COLORS.branding }]}>
+          {/* Hero: eyebrow → name → avatar → info line → optional city → score chip.
+              Single source of name+age — no second profile card below. */}
+          <View style={styles.hero}>
+            <ThemedText style={[styles.eyebrow, { color: UI_COLORS.branding }]}>
               ההתאמה שלך מוכנה
             </ThemedText>
-            <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
-              הכירו את {nameWithAge}
+            <ThemedText style={[styles.heroName, { color: dynamicColors.text }]}>
+              {nameWithAge}
             </ThemedText>
-          </View>
 
-          <View style={styles.avatarRow}>
             <View
               style={[
                 styles.avatarCircle,
-                { backgroundColor: dynamicColors.surface, borderColor: UI_COLORS.branding },
+                { backgroundColor: dynamicColors.surfaceRose, borderColor: UI_COLORS.branding },
               ]}>
               {peerAvatarUrl ? (
                 <Image source={{ uri: peerAvatarUrl }} style={styles.avatarImage} />
@@ -402,73 +547,67 @@ export default function MatchResultScreen() {
                 </ThemedText>
               )}
             </View>
-          </View>
 
-          <View
-            style={[
-              styles.profileCard,
-              { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-            ]}>
-            <View style={styles.profileHeader}>
-              <ThemedText style={[styles.profileName, { color: dynamicColors.text }]}>
-                {nameWithAge}
+            {infoLine.length > 0 && (
+              <ThemedText style={[styles.heroInfoLine, { color: dynamicColors.textLight }]}>
+                {infoLine}
               </ThemedText>
-              {score !== null && (
-                <View style={[styles.scoreBadge, { backgroundColor: dynamicColors.surface }]}>
-                  <ThemedText style={[styles.scoreText, { color: UI_COLORS.branding }]}>
-                    {score}% התאמה
-                  </ThemedText>
-                </View>
-              )}
-            </View>
+            )}
+            {cityLine && (
+              <ThemedText style={[styles.heroCityLine, { color: dynamicColors.textLight }]}>
+                {cityLine}
+              </ThemedText>
+            )}
 
-            {infoRows.length === 0 ? (
-              <ThemedText style={[styles.noInfoNote, { color: dynamicColors.textLight }]}>
-                פרטים נוספים יופיעו כשההתאמה תשלים את הפרופיל.
-              </ThemedText>
-            ) : (
-              infoRows.map((row) => (
-                <View key={row.label} style={styles.infoRow}>
-                  <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
-                    {row.label}:
-                  </ThemedText>
-                  <ThemedText style={[styles.infoValue, { color: dynamicColors.text }]}>
-                    {row.value}
-                  </ThemedText>
-                </View>
-              ))
+            {score !== null && (
+              <View style={[styles.scoreChip, { backgroundColor: dynamicColors.surfaceRose }]}>
+                <ThemedText style={[styles.scoreChipText, { color: UI_COLORS.branding }]}>
+                  {score}% התאמה
+                </ThemedText>
+              </View>
             )}
           </View>
 
-          {reasons.length > 0 && (
+          {/* Reasons — evidence cards (PR #48) or compatibility_reasons fallback */}
+          {evidenceCards.length > 0 && (
             <View style={styles.section}>
               <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
                 למה זו התאמה טובה
               </ThemedText>
-              <View style={styles.bullets}>
-                {reasons.map((reason, i) => (
-                  <View key={i} style={styles.bulletItem}>
-                    <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.branding }]} />
-                    <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>
-                      {reason}
-                    </ThemedText>
+              <View style={styles.reasonsList}>
+                {evidenceCards.map((card) => (
+                  <View
+                    key={card.key}
+                    style={[
+                      styles.reasonCard,
+                      { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+                    ]}>
+                    {/* JSX: [strip, text]. Under RTL row, the strip sits on
+                        the physical right (leading edge). */}
+                    <View style={[styles.reasonStrip, { backgroundColor: UI_COLORS.branding }]} />
+                    <View style={styles.reasonTextWrap}>
+                      <ThemedText style={[styles.reasonText, { color: dynamicColors.text }]}>
+                        {card.text}
+                      </ThemedText>
+                    </View>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
+          {/* Icebreaker — subtle rose-tinted card, calmer copy */}
           {icebreaker && (
             <View
               style={[
                 styles.icebreakerCard,
                 {
-                  backgroundColor: dynamicColors.surface,
+                  backgroundColor: dynamicColors.surfaceRose,
                   borderColor: UI_COLORS.branding + '20',
                 },
               ]}>
               <ThemedText style={[styles.icebreakerTitle, { color: UI_COLORS.branding }]}>
-                שאלה לפתוח איתה שיחה
+                פתיח שיחה מוצע
               </ThemedText>
               <ThemedText style={[styles.icebreakerText, { color: dynamicColors.text }]}>
                 {icebreaker}
@@ -476,123 +615,49 @@ export default function MatchResultScreen() {
             </View>
           )}
 
-          <View
-            style={[
-              styles.timerCard,
-              { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-            ]}>
-            {isChatStarted ? (
-              <>
-                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-                  השיחה כבר התחילה
-                </ThemedText>
-                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight, marginTop: 4 }]}>
-                  אפשר להמשיך לכתוב מתי שמתאים.
-                </ThemedText>
-              </>
-            ) : isClosed ? (
-              <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-                ההתאמה הסתיימה
-              </ThemedText>
-            ) : isWaitingForMyReply ? (
-              <>
-                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-                  {isCountdownExpired
-                    ? 'ההתאמה הסתיימה'
-                    : `${displayName} כתב/ה לך — ענה/י כדי שהשיחה תתקבע`}
-                </ThemedText>
-                <ThemedText
-                  style={[
-                    styles.timerValue,
-                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
-                  ]}>
-                  {formatCountdown(msLeft)}
-                </ThemedText>
-              </>
-            ) : isWaitingForPeerReply ? (
-              <>
-                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-                  {isCountdownExpired
-                    ? 'ההתאמה הסתיימה'
-                    : 'שלחת הודעה — מחכים לתגובה. ההתאמה תפוג אם לא תהיה תגובה בזמן.'}
-                </ThemedText>
-                <ThemedText
-                  style={[
-                    styles.timerValue,
-                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
-                  ]}>
-                  {formatCountdown(msLeft)}
-                </ThemedText>
-              </>
-            ) : (
-              <>
-                <ThemedText style={[styles.timerLabel, { color: dynamicColors.textLight }]}>
-                  {isCountdownExpired ? 'ההתאמה הסתיימה' : 'נותר זמן להתחיל שיחה'}
-                </ThemedText>
-                <ThemedText
-                  style={[
-                    styles.timerValue,
-                    { color: isCountdownExpired ? dynamicColors.textLight : UI_COLORS.primary },
-                  ]}>
-                  {formatCountdown(msLeft)}
-                </ThemedText>
-              </>
-            )}
-          </View>
+          {/* Status line — single muted sentence in place of the old timer card */}
+          <ThemedText style={[styles.statusText, { color: dynamicColors.textLight }]}>
+            {statusText}
+          </ThemedText>
 
-          {/*
-            BATCH-B: secondary actions stay in the scroll body. The
-            primary CTA was promoted to a sticky footer below so it's
-            always reachable without scrolling — see the View after
-            ScrollView. Secondary buttons being inside the scroll body
-            keeps the footer single-purpose and uncrowded.
-           */}
-          <View style={styles.secondaryActions}>
-            {/*
-              PR-MATCH-PROFILE-V1: opens the rich match-profile screen
-              (photo gallery + safe peer details + reasons + icebreaker).
-              Visible for any status — even expired/unmatched lets the
-              user re-view what they had.
-             */}
+          {/* Secondary links — quieter than the primary CTA */}
+          <View style={styles.secondaryLinks}>
             <TouchableOpacity
-              style={[styles.secondaryButton, styles.secondaryButtonRow]}
+              style={styles.secondaryLinkRow}
               onPress={() => {
                 router.push({
                   pathname: '/match-profile' as any,
                   params: { match_id: match.id },
                 });
-              }}>
-              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.branding }]}>
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <ThemedText style={[styles.secondaryLinkText, { color: UI_COLORS.branding }]}>
                 צפייה בפרופיל המלא
               </ThemedText>
-              <IconSymbol name="chevron.left" size={18} color={UI_COLORS.branding} />
+              <IconSymbol name="chevron.left" size={16} color={UI_COLORS.branding} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.secondaryButton} onPress={openFeedback}>
-              <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.branding }]}>
+            <TouchableOpacity
+              style={styles.secondaryLinkRow}
+              onPress={openFeedback}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <ThemedText style={[styles.secondaryLinkText, { color: dynamicColors.textLight }]}>
                 משוב על ההתאמה
               </ThemedText>
             </TouchableOpacity>
           </View>
         </ScrollView>
 
-        {/*
-          BATCH-B: sticky primary CTA. Always visible above the home
-          indicator regardless of scroll position. Renders for every
-          status: when isClosed, the button stays present as a disabled
-          control (ctaDisabled is true) so the layout doesn't shift and
-          the user still sees the chat affordance for terminal matches.
-          paddingBottom uses the home-indicator safe-area inset, with a
-          16pt floor for older iPhones without an indicator. Top border
-          gives a visual separator from the scrollable body.
-         */}
+        {/* Sticky primary CTA — slimmer footer, minimal padding, safe-area
+            aware. Stays present even for terminal matches so the layout
+            doesn't shift; rendered as visually disabled when ctaDisabled. */}
         <View
           style={[
             styles.stickyFooter,
             {
               backgroundColor: dynamicColors.bg,
               borderTopColor: dynamicColors.border,
-              paddingBottom: Math.max(insets.bottom, 16),
+              paddingBottom: Math.max(insets.bottom, 12),
             },
           ]}>
           <TouchableOpacity
@@ -602,10 +667,8 @@ export default function MatchResultScreen() {
             ]}
             onPress={openChat}
             disabled={ctaDisabled}
-            activeOpacity={0.8}>
-            <ThemedText style={styles.primaryButtonText}>
-              {isChatStarted ? 'המשך לצ׳אט' : 'פתח/י צ׳אט'}
-            </ThemedText>
+            activeOpacity={0.85}>
+            <ThemedText style={styles.primaryButtonText}>{ctaLabel}</ThemedText>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -616,131 +679,146 @@ export default function MatchResultScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center' },
+
+  // Header — borderless iOS-style; trailing slot holds the countdown chip
+  // when active, otherwise collapses to a width-matched placeholder so the
+  // title stays optically centered.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    minHeight: 48,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  headerSpacer: { width: 24 },
-  errorBody: { flex: 1, padding: 24, gap: 12 },
-  // BATCH-B: bumped paddingBottom from 60 to 120 so the trailing
-  // secondary buttons inside the scroll body clear the new sticky
-  // footer height (button 56 + footer padding ~32 + buffer) and the
-  // user can fully scroll to the last "משוב על ההתאמה" row without it
-  // being visually clipped or tappable under the footer.
-  scrollContent: { padding: 24, paddingBottom: 120, gap: 24 },
-  titleBlock: { alignItems: 'center', gap: 8, marginTop: 12 },
-  // BATCH-E1: premium polish — letterSpacing 1 → 0.5 + weight 800 → 700.
-  // The previous combo read as ALL-CAPS-shouty next to the hero title;
-  // refined letterSpacing + slightly lighter weight reads premium.
-  preTitle: {
-    fontSize: 13,
+  headerSlot: { minWidth: 70, height: 24 },
+  countdownChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    minWidth: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countdownChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    writingDirection: 'rtl',
+  },
+
+  // Scroll body — 20pt gap between top-level sections.
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 96,
+    gap: 20,
+  },
+
+  // Hero
+  hero: { alignItems: 'center', gap: 8 },
+  eyebrow: {
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  // BATCH-E1: title weight 900 → 800. 900 was the heaviest possible
-  // weight; 800 keeps the hero impact while feeling less bombastic
-  // alongside the avatar and score badge below.
-  title: {
+  heroName: {
     fontSize: 24,
     fontWeight: '800',
     textAlign: 'center',
     writingDirection: 'rtl',
     lineHeight: 32,
   },
-  avatarRow: { alignItems: 'center', marginVertical: 4 },
-  // BATCH-E1: avatar border 3 → 2. A 3pt branding-red border around
-  // the hero avatar competed visually with the title + score badge;
-  // 2pt keeps the brand frame visible but lets the avatar breathe.
   avatarCircle: {
-    width: 132,
-    height: 132,
-    borderRadius: 66,
-    borderWidth: 2,
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+    marginVertical: 4,
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarInitial: { fontSize: 52, fontWeight: '800' },
-  profileCard: {
-    borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  profileName: { fontSize: 22, fontWeight: '800' },
-  scoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  scoreText: { fontSize: 14, fontWeight: '700' },
-  noInfoNote: {
+  avatarInitial: { fontSize: 48, fontWeight: '800' },
+  heroInfoLine: {
     fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
     writingDirection: 'rtl',
-    alignSelf: 'flex-start',
-    fontStyle: 'italic',
   },
-  // BATCH-C: explicit row-reverse so label sits on the RIGHT (Hebrew
-  // reading order) regardless of whether the host shell's RTL auto-
-  // flip is active. RN's `flexDirection: 'row'` is supposed to flip
-  // under I18nManager.forceRTL but on iOS this can be inconsistent
-  // across cold launches / hot-reloads. Pin it explicitly. justify
-  // content keeps label-right + value-left-of-label tight (no extra
-  // spread) so the pair reads as a natural "label: value" unit.
-  // BATCH-G1: JSX is [Label, Value]; under RTL with `row` the label
-  // sits on the RIGHT (leading edge) and the value to its LEFT —
-  // natural "label: value" Hebrew reading order. Earlier row-reverse
-  // pin double-flipped it back to LTR on TestFlight build 14.
-  infoRow: { flexDirection: 'row', gap: 8, justifyContent: 'flex-start' },
-  infoLabel: { fontSize: 16, fontWeight: '500', writingDirection: 'rtl' },
-  infoValue: { fontSize: 16, fontWeight: '700', writingDirection: 'rtl' },
-  section: { gap: 12 },
+  heroCityLine: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  scoreChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  scoreChipText: { fontSize: 13, fontWeight: '700', writingDirection: 'rtl' },
+
+  // Reasons
+  section: { gap: 10 },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     writingDirection: 'rtl',
     alignSelf: 'flex-start',
+    marginBottom: 2,
   },
-  bullets: { gap: 10 },
-  // JSX is [Dot, Text]; under forceRTL with `row` the dot sits on the
-  // physical right and the text flows leftward — natural Hebrew bullet.
-  bulletItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bulletDot: { width: 6, height: 6, borderRadius: 3 },
-  bulletText: {
+  reasonsList: { gap: 10 },
+  // JSX: [accentStrip, textWrap]. Under RTL row the strip sits on the
+  // physical right (leading edge). overflow: 'hidden' clips the strip
+  // corners to the rounded card outline.
+  reasonCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    minHeight: 52,
+  },
+  reasonStrip: { width: 3 },
+  reasonTextWrap: {
     flex: 1,
-    fontSize: 16,
-    writingDirection: 'rtl',
-    lineHeight: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
   },
-  icebreakerCard: { padding: 20, borderRadius: 20, borderWidth: 1, gap: 8 },
+  reasonText: {
+    fontSize: 15,
+    lineHeight: 22,
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+  },
+
+  // Icebreaker
+  icebreakerCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
   icebreakerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     letterSpacing: 0.5,
     writingDirection: 'rtl',
     alignSelf: 'flex-start',
@@ -751,72 +829,44 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     alignSelf: 'flex-start',
   },
-  timerCard: {
-    borderRadius: 20,
-    // BATCH-B: bumped from padding: 18 to paddingVertical: 22 +
-    // paddingHorizontal: 18. The previous symmetric 18 didn't give
-    // the fontSize-36 + weight-900 + tabular-nums countdown enough
-    // vertical room — descenders/ascenders were getting clipped on
-    // iPhone, especially when wrapped in `<>` with the label above.
-    paddingVertical: 22,
-    paddingHorizontal: 18,
-    borderWidth: 1,
+
+  // Lifecycle status — plain muted line, no card
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 20,
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+  },
+
+  // Secondary links — quieter than the primary CTA. Chevron uses
+  // chevron.left so under RTL it points toward the destination in
+  // reading-direction terms.
+  secondaryLinks: { gap: 8, marginTop: 4 },
+  secondaryLinkRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingVertical: 6,
   },
-  timerLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-  timerValue: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: 2,
-    fontVariant: ['tabular-nums'],
-    // BATCH-B: explicit lineHeight so the large tabular-nums countdown
-    // isn't clipped at top/bottom by RN's default text bounding box on
-    // iOS. 44 gives ~22% leading above the 36pt glyph — comfortable
-    // breathing room for the heaviest weight without affecting layout
-    // outside the timerCard. textAlignVertical doesn't help here
-    // because the issue is the bounding box, not the alignment.
-    lineHeight: 44,
-    textAlign: 'center',
-  },
-  // BATCH-B: secondary actions stay in the scroll body (renamed from
-  // `actions`). Sticky primary CTA lives in stickyFooter below.
-  secondaryActions: { gap: 12, marginTop: 4 },
-  // BATCH-B: sticky footer for the primary chat CTA. Rendered outside
-  // the ScrollView so the button is always reachable. Background match
-  // is opaque so scroll content underneath doesn't bleed through.
+  secondaryLinkText: { fontSize: 14, fontWeight: '600', writingDirection: 'rtl' },
+
+  // Sticky footer — minimal padding so it stops feeling like a big block.
   stickyFooter: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     borderTopWidth: 1,
   },
-  // BATCH-E1: primary button height 56 → 52 + weight 800 → 700 +
-  // fontSize 18 → 17. Still well above iOS 44pt min tap target;
-  // refined visual weight reads premium. Matches the same step-down
-  // applied to onboarding / login / signup primary buttons.
   primaryButton: {
     height: 52,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  primaryButtonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  secondaryButton: {
-    height: 48,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  secondaryButtonRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  secondaryButtonText: { fontSize: 16, fontWeight: '700' },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  // Error / loading states
+  errorBody: { flex: 1, padding: 24, gap: 12 },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '800',
@@ -829,22 +879,16 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     lineHeight: 22,
   },
-  // BATCH-H6: subtle note rendered under the load-spinner on initial
-  // open so the user sees verbal confirmation we're working, not just a
-  // bare wheel. Calm light color, no over-promising copy.
   loadingNote: {
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-  // BATCH-H6: primary CTA on the empty/error state so the user can step
-  // back to the home tab where the searching/empty hero renders. Same
-  // dimensions as the main app primary button to keep visual hierarchy.
   errorPrimaryButton: {
     height: 52,
     paddingHorizontal: 32,
-    borderRadius: 18,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 12,
