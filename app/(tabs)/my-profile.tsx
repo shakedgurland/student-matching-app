@@ -1027,9 +1027,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  // PR-RTL-FIX: flex: 1 + textAlign: 'right' added so each settings row's
+  // text container grows to fill the row width and the text pins to the
+  // physical right under Hebrew RTL. Without these, the row's
+  // 'space-between' had nothing to space (single child) and the text sat
+  // at its natural width without explicit right-alignment — TestFlight
+  // reported it reading visually left/center. Applies to all four rows
+  // that share this style (how-it-works, privacy-policy, terms-of-use,
+  // delete-account); identical fix per row.
   settingsRowText: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '600',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
   settingsDivider: {

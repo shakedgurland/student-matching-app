@@ -206,7 +206,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
+  // PR-RTL-FIX: flex: 1 added so the title container grows to fill the
+  // row's leftover space between the back chevron (physical right under
+  // RTL) and the spacer (physical left). Without flex: 1 the title
+  // container takes only its content width and gets centered by the row's
+  // 'space-between' — visually the title appeared centered, not right-
+  // aligned. With flex: 1 the existing textAlign: 'right' actually pins
+  // the text next to the chevron in Hebrew RTL.
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'right',
