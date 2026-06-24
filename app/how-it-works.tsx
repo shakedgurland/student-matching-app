@@ -260,18 +260,26 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 50,
   },
-  // BATCH-C REVISION: alignSelf stretch so the small "שלב N" label
-  // centers relative to the full card width, not relative to a
-  // shrink-to-fit text island created by the card's alignItems:
-  // 'center'. Matches the same fix already applied to title/body.
-  // BATCH-G1: letterSpacing 1 → 0.5. The wider tracking felt
-  // marketing-poster heavy; 0.5 keeps the all-caps-style rhythm
-  // without shouting.
+  // PR #59: textAlign 'center' → 'right'. The previous design kept
+  // "שלב N" centered as a small anchor badge, but TestFlight QA on the
+  // RTL pass found that the centered label visually broke the
+  // right-anchored Hebrew block (label centered, then title/body/bullets
+  // all right-aligned). Right-aligning the label too pins the entire
+  // text block to a single Hebrew reading axis. The emoji circle stays
+  // centered as the hero icon — it isn't text, so it doesn't need to
+  // join the reading axis.
+  // BATCH-C REVISION (preserved): alignSelf stretch so the label spans
+  // the full card width, not a shrink-to-fit island created by the
+  // card's alignItems: 'center'. Required for textAlign to do anything
+  // visible. Matches the same setup on title/body.
+  // BATCH-G1 (preserved): letterSpacing 1 → 0.5. Wider tracking felt
+  // marketing-poster heavy; 0.5 keeps the all-caps rhythm without
+  // shouting.
   stepLabel: {
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.5,
-    textAlign: 'center',
+    textAlign: 'right',
     writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
