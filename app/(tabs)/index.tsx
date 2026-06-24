@@ -30,14 +30,11 @@ const UI_COLORS = {
   card: '#FFFFFF',
 };
 
-// PR-PREBUILD-MATCH-PRIVACY-POLISH: shorter signed-URL TTL for the
-// peer/candidate avatar used in the home-tab match card. Matches the
-// value used by match-profile / chat / match-result so every peer-image
-// surface bounds the stale-access window to the same 5 minutes if the
-// match closes after the URL is minted. Own-user images
-// (my-profile, questionnaire onboarding) intentionally keep the longer
-// 3600s TTL — owner access does not need bounding.
-const SIGNED_URL_TTL_SECONDS = 300;
+// PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): removed
+// SIGNED_URL_TTL_SECONDS constant. Sole users were the avatar-signing
+// blocks in fetchCurrentMatch + handleFindMatch, which served the
+// removed intermediate active-match card. match-profile / chat /
+// match-result keep their own copies of the same 300s TTL.
 
 export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -45,7 +42,11 @@ export default function MatchSelectionScreen() {
   const [loading, setLoading] = useState(true);
   const [matching, setMatching] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<any>(null);
-  const [otherUser, setOtherUser] = useState<any>(null);
+  // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): otherUser state removed —
+  // sole consumer was the intermediate active-match card removed in
+  // PR #57. The Match tab no longer renders peer details; it auto-
+  // forwards to /match-result (or /chat for chat_started) where the
+  // peer is loaded fresh with the right column set.
   // Set to true when the backend returns { status: 'monthly_cap_reached' }.
   // Drives the empty-state copy so the user sees a clear cap message instead
   // of a "still searching..." text that would never resolve. Reset on every
@@ -262,22 +263,17 @@ export default function MatchSelectionScreen() {
           return;
         }
 
-        // Generate signed URL for avatar if storage_path exists.
-        // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer avatar — 300s TTL.
-        let avatarUrl = profile.avatar_url;
-        if (profile.avatar_storage_path) {
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from('profile-photos')
-            .createSignedUrl(profile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
-          if (!signedError) {
-            avatarUrl = signedData.signedUrl;
-          }
-        }
-
-        // Peer profile resolved successfully — safe to set currentMatch
-        // (which will trigger the auto-forward useEffect) and otherUser.
+        // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): avatar signing and
+        // setOtherUser were removed — sole consumer was the deleted
+        // intermediate active-match card. The peer-missing resilience
+        // check above (PR #51) still verifies the profile exists; we
+        // just no longer hold any peer detail in state here. The
+        // /match-result and /chat screens load the peer afresh with
+        // their own column sets and signed-URL minting.
+        //
+        // Peer profile resolved successfully — set currentMatch which
+        // triggers the auto-forward useEffect.
         setCurrentMatch(openMatch);
-        setOtherUser({ ...profile, avatar_url: avatarUrl });
       } else {
         // Automatically try to find a match if none exists
         handleFindMatch(user.id, true);
@@ -299,28 +295,22 @@ export default function MatchSelectionScreen() {
       const newMatch = await findAndCreateBestMatch(targetUserId);
 
       if (newMatch && 'matchId' in newMatch) {
-        // Success path: backend returned 'created' and lib/matching loaded
-        // the candidate profile. Sign the avatar URL for the carousel and
-        // render the match card.
+        // Success path: backend returned 'created'. Set currentMatch
+        // which triggers the auto-forward useEffect to /match-result
+        // (or /chat if a subsequent fetch shows the match already
+        // transitioned to chat_started).
+        //
+        // PR-MATCH-FLOW-CLEANUP (PR #57 follow-up): the candidate-
+        // profile avatar-signing + setOtherUser call were removed.
+        // Sole consumer was the intermediate active-match card that
+        // PR #57 deleted. /match-result loads the peer afresh with
+        // its own column set and signed-URL minting.
         logEvent('match_found', { metadata: { matchId: newMatch.matchId, score: newMatch.compatibilityScore } });
-        let candidateProfile = newMatch.candidateProfile;
-
-        if (candidateProfile.avatar_storage_path) {
-          // PR-PREBUILD-MATCH-PRIVACY-POLISH: peer/candidate avatar — 300s TTL.
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from('profile-photos')
-            .createSignedUrl(candidateProfile.avatar_storage_path, SIGNED_URL_TTL_SECONDS);
-          if (!signedError) {
-            candidateProfile = { ...candidateProfile, avatar_url: signedData.signedUrl };
-          }
-        }
-
         setCurrentMatch({
           id: newMatch.matchId,
           compatibility_score: newMatch.compatibilityScore,
           compatibility_reasons: newMatch.compatibilityReasons,
         });
-        setOtherUser(candidateProfile);
         return;
       }
 
