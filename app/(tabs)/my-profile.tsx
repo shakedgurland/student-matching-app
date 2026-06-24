@@ -10,6 +10,7 @@ import {
   TextInput,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Dimensions,
   type NativeScrollEvent,
@@ -69,6 +70,15 @@ export default function MyProfileScreen() {
   // Photo carousel index (clamped at render time against photos.length).
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const carouselRef = useRef<ScrollView>(null);
+
+  // PR-DEL-CLIENT: delete-account confirmation modal state.
+  //   deleteModalOpen — modal visibility
+  //   deleteConfirmText — user's typed confirmation, must equal 'מחק' (trimmed)
+  //   deleting — in-flight flag prevents double-tap on the destructive button
+  //              and disables both buttons while the Edge Function runs
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // When a photo is deleted, clamp currentPhotoIndex and scroll the carousel
   // to the new last cell so the user doesn't end up looking at blank space.
@@ -353,6 +363,87 @@ export default function MyProfileScreen() {
     await supabase.auth.signOut();
   };
 
+  // PR-DEL-CLIENT: invoke the backend-authoritative delete-account Edge
+  // Function (deployed after PR #50). The function derives the user from
+  // the JWT — we MUST NOT pass user_id, email, or any profile data in
+  // the body. On success we sign out locally and replace the route to
+  // /login; the _layout.tsx auth subscriber would also catch the
+  // signed-out state, but the explicit replace avoids a brief flash of
+  // my-profile while the layout reconciles.
+  //
+  // Failure handling is intentionally generic: do NOT sign the user out
+  // (their account is still intact), do NOT expose service-role / SQL
+  // error details, and show a calm retry-friendly Hebrew alert. The
+  // double-tap guard via `deleting` covers both rapid taps and a stuck
+  // network round-trip.
+  const handleDeleteAccount = async () => {
+    if (deleting) return;
+    try {
+      setDeleting(true);
+      logEvent('delete_account_started', { screen: 'MyProfile' });
+
+      const { error } = await supabase.functions.invoke('delete-account', {
+        body: {},
+      });
+
+      if (error) {
+        // The Edge Function returned a non-2xx status. Could be the
+        // server-misconfig path, storage-cleanup failure, or auth-delete
+        // failure — all map to the same user-facing copy because none
+        // of them are actionable on the user's side. The diagnostic
+        // detail is captured in logError + the function logs.
+        logError('MyProfile', 'delete_account_function_error', error);
+        Alert.alert(
+          'מחיקה לא הצליחה',
+          'לא הצלחנו למחוק את החשבון כרגע. נסו שוב בעוד רגע.',
+        );
+        return;
+      }
+
+      logEvent('delete_account_succeeded', { screen: 'MyProfile' });
+
+      // Close the modal before signing out so the user briefly sees
+      // the my-profile background, then the success alert, then the
+      // login screen. signOut clears the session, which the
+      // _layout.tsx auth subscriber redirects on; the explicit
+      // router.replace is a safety net that avoids a flicker if the
+      // subscriber lag is noticeable.
+      setDeleteModalOpen(false);
+      setDeleteConfirmText('');
+      Alert.alert('החשבון נמחק בהצלחה', undefined, [
+        {
+          text: 'אישור',
+          onPress: async () => {
+            try {
+              await supabase.auth.signOut();
+            } catch (signOutErr) {
+              // SignOut failure is non-fatal — the account is already
+              // gone on the server; the next auth.getUser call will
+              // return null and the layout subscriber will redirect.
+              logError('MyProfile', 'post_delete_signout_failed', signOutErr);
+            }
+            router.replace('/login' as any);
+          },
+        },
+      ]);
+    } catch (e) {
+      // Transport-level / unexpected exception. Same treatment as a
+      // function error: do NOT sign out, show generic alert.
+      logError('MyProfile', 'delete_account_exception', e);
+      Alert.alert(
+        'מחיקה לא הצליחה',
+        'לא הצלחנו למחוק את החשבון כרגע. נסו שוב בעוד רגע.',
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Confirmation gate. The destructive button stays disabled until the
+  // user types exactly "מחק" (trimmed). Hebrew has no case, so no
+  // case-folding needed.
+  const deleteConfirmed = deleteConfirmText.trim() === 'מחק';
+
   if (loading && !profile) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg, justifyContent: 'center' }]}>
@@ -564,19 +655,144 @@ export default function MyProfileScreen() {
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <View
+                  {/*
+                    PR-DEL-CLIENT: destructive account-deletion entry point.
+                    Opens a confirmation modal that requires typed "מחק" before
+                    enabling the destructive button. Wired to the delete-
+                    account Edge Function (deployed after PR #50).
+                   */}
+                  <TouchableOpacity
                     style={styles.settingsRow}
+                    onPress={() => {
+                      logButtonTap('MyProfile', 'open_delete_account_modal');
+                      setDeleteConfirmText('');
+                      setDeleteModalOpen(true);
+                    }}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: true }}
+                    accessibilityLabel="מחיקת חשבון"
                   >
-                    <ThemedText style={[styles.settingsRowText, { color: dynamicColors.textLight }]}>מחיקת חשבון</ThemedText>
-                    <View style={[styles.comingSoonBadge, { backgroundColor: dynamicColors.border }]}>
-                      <ThemedText style={[styles.comingSoonText, { color: dynamicColors.textLight }]}>בקרוב</ThemedText>
-                    </View>
-                  </View>
+                    <ThemedText style={[styles.settingsRowText, styles.destructiveRowText]}>
+                      מחיקת חשבון
+                    </ThemedText>
+                  </TouchableOpacity>
                 </View>
               </View>
           </ScrollView>
+
+          {/*
+            PR-DEL-CLIENT: account-deletion confirmation modal. Rendered as
+            a sibling of the ScrollView (inside SafeAreaView) so it overlays
+            the full screen. transparent + animationType="fade" matches the
+            iOS-native action-sheet feel without an iOS-only API. Backdrop
+            tap closes the modal (matching iOS alert dismiss gesture); the
+            close path resets the typed text so a re-open starts clean.
+           */}
+          <Modal
+            visible={deleteModalOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              if (deleting) return;
+              setDeleteModalOpen(false);
+              setDeleteConfirmText('');
+            }}
+          >
+            <View style={styles.deleteModalBackdrop}>
+              <View
+                style={[
+                  styles.deleteModalCard,
+                  { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+                ]}
+              >
+                <ThemedText style={[styles.deleteModalTitle, { color: dynamicColors.text }]}>
+                  מחיקת חשבון
+                </ThemedText>
+                <ThemedText style={[styles.deleteModalIntro, { color: dynamicColors.text }]}>
+                  זוהי פעולה בלתי הפיכה. החשבון שלך והנתונים הבאים יימחקו לצמיתות:
+                </ThemedText>
+                <View style={styles.deleteModalBullets}>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • הפרופיל שלך
+                  </ThemedText>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • כל התמונות שהעלית
+                  </ThemedText>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • כל תשובות השאלון
+                  </ThemedText>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • כל ההתאמות (פעילות וקודמות)
+                  </ThemedText>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • כל השיחות וההיסטוריה שלהן
+                  </ThemedText>
+                  <ThemedText style={[styles.deleteModalBullet, { color: dynamicColors.text }]}>
+                    • ההודעות שכתבת ושנשלחו אליך
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.deleteModalConfirmHint, { color: dynamicColors.textLight }]}>
+                  לאישור המחיקה, יש להקליד "מחק" בשדה למטה.
+                </ThemedText>
+                <TextInput
+                  style={[
+                    styles.deleteModalInput,
+                    {
+                      backgroundColor: dynamicColors.inputBg,
+                      color: dynamicColors.text,
+                      borderColor: dynamicColors.border,
+                    },
+                  ]}
+                  value={deleteConfirmText}
+                  onChangeText={setDeleteConfirmText}
+                  placeholder="הקלידו כאן: מחק"
+                  placeholderTextColor={dynamicColors.textLight}
+                  textAlign="right"
+                  editable={!deleting}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  accessibilityLabel="שדה אישור מחיקה"
+                />
+                <View style={styles.deleteModalActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteModalCancelButton,
+                      { borderColor: dynamicColors.border },
+                    ]}
+                    onPress={() => {
+                      if (deleting) return;
+                      setDeleteModalOpen(false);
+                      setDeleteConfirmText('');
+                    }}
+                    disabled={deleting}
+                    activeOpacity={0.85}
+                  >
+                    <ThemedText style={[styles.deleteModalCancelText, { color: dynamicColors.text }]}>
+                      ביטול
+                    </ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteModalDestructiveButton,
+                      { backgroundColor: (deleteConfirmed && !deleting) ? UI_COLORS.primary : dynamicColors.border },
+                    ]}
+                    onPress={handleDeleteAccount}
+                    disabled={!deleteConfirmed || deleting}
+                    activeOpacity={0.85}
+                    accessibilityLabel="מחק את החשבון"
+                    accessibilityState={{ disabled: !deleteConfirmed || deleting }}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <ThemedText style={styles.deleteModalDestructiveText}>
+                        מחק חשבון
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </SafeAreaView>
       </ThemedView>
     </KeyboardAvoidingView>
@@ -828,5 +1044,99 @@ const styles = StyleSheet.create({
   comingSoonText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  // PR-DEL-CLIENT: destructive row text. Uses the existing brand coral
+  // so it reads as dangerous without introducing a new color token.
+  destructiveRowText: {
+    color: UI_COLORS.primary,
+  },
+  // PR-DEL-CLIENT: delete-account confirmation modal — dimmed backdrop
+  // + centered card. Padding accounts for the modal sitting outside
+  // SafeAreaView's own padding; horizontal 24 keeps the card from
+  // touching the edges on small phones.
+  deleteModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  deleteModalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+    gap: 12,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+  },
+  deleteModalIntro: {
+    fontSize: 15,
+    lineHeight: 22,
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+  },
+  deleteModalBullets: {
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  deleteModalBullet: {
+    fontSize: 14,
+    lineHeight: 20,
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+  },
+  deleteModalConfirmHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    writingDirection: 'rtl',
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  deleteModalInput: {
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    fontSize: 16,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  // Cancel is the safe default — neutral border, comfortable hit area,
+  // grows last so the destructive button doesn't dominate.
+  deleteModalCancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    writingDirection: 'rtl',
+  },
+  // Destructive button uses brand coral; switches to a muted color via
+  // backgroundColor override when the confirmation gate hasn't been
+  // satisfied so it visually reads as disabled (matches existing
+  // disabled-button pattern on the home tab).
+  deleteModalDestructiveButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalDestructiveText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    writingDirection: 'rtl',
   },
 });
