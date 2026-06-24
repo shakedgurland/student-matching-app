@@ -52,14 +52,18 @@ import { logScreenView, logError } from '@/lib/analytics';
 // university / faculty / year_of_study.
 import { labelFor } from '@/lib/profile-labels';
 
+// PR-UI-POLISH: shifted background from warm cream (#FFF9F6) to pure
+// white (#FFFFFF) to match the match-result update. Surface tint, border,
+// and card colors retuned alongside so cards still read on the lighter
+// background. Branding coral/primary unchanged.
 const UI_COLORS = {
-  bg: '#FFF9F6',
+  bg: '#FFFFFF',
   primary: '#FF4D3D',
   branding: '#FF3D57',
-  surface: '#FFF0EA',
+  surface: '#FFF3F4',
   text: '#172033',
   textLight: '#667085',
-  border: '#E9E4E0',
+  border: '#EEEAE6',
   card: '#FFFFFF',
 };
 
@@ -670,8 +674,14 @@ export default function MatchProfileScreen() {
                         borderColor: UI_COLORS.branding + '30',
                       },
                     ]}>
+                    {/* PR-UI-POLISH: render Hebrew label via labelFor
+                        (lib/profile-labels.ts hobbies map) so chips no
+                        longer leak the raw enum (e.g., 'concerts' →
+                        'הופעות'). Unknown codes fall through labelFor's
+                        passthrough so a brand-new questionnaire code is
+                        never erased. */}
                     <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
-                      {h}
+                      {labelFor('hobbies', h)}
                     </ThemedText>
                   </View>
                 ))}
@@ -912,11 +922,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+  // PR-UI-POLISH: shrunk match-profile CTA to match match-result's
+  // calmer scale — height 56 → 52, radius 18 → 16, font 18 → 16,
+  // weight 800 → 700. Still well above iOS's 44pt minimum tap target;
+  // reads as an iOS-native CTA instead of a marketing button.
   primaryButton: {
-    height: 56,
-    borderRadius: 18,
+    height: 52,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

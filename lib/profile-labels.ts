@@ -94,6 +94,42 @@ export const LABEL_MAPS: Record<string, Record<string, string>> = {
     masters: 'תואר שני',
     other: 'אחר',
   },
+  // PR-UI-POLISH: hobby labels — Hebrew display for profile.hobbies[]
+  // codes. Source of truth: HOBBY_OPTIONS_V2 in app/questionnaire.tsx.
+  // All 23 codes mirrored verbatim, including 'other' so a free-text-
+  // selecting user's chip reads "אחר" instead of the raw enum. The
+  // Edge Function maintains an independent HOBBY_LABELS_HE map under
+  // supabase/functions/match-create/labels.ts for evidence rendering;
+  // that map excludes 'other' deliberately (an "other" hobby never
+  // produces a meaningful shared_hobbies evidence entry). The two
+  // surfaces must stay in sync with the questionnaire — if a new
+  // hobby is added there, mirror it in both this map AND the Edge
+  // Function map.
+  hobbies: {
+    gym: 'חדר כושר',
+    running: 'ריצה',
+    hiking: 'טיולים',
+    camping: 'קמפינג',
+    beach: 'ים',
+    music: 'מוזיקה',
+    concerts: 'הופעות',
+    movies: 'סרטים',
+    series: 'סדרות',
+    reading: 'קריאה',
+    gaming: 'גיימינג',
+    cooking: 'בישול',
+    restaurants: 'מסעדות',
+    art: 'אומנות',
+    photography: 'צילום',
+    dancing: 'ריקוד',
+    dogs: 'כלבים',
+    cats: 'חתולים',
+    tech: 'טכנולוגיה',
+    entrepreneurship: 'יזמות',
+    tennis: 'טניס',
+    jet_ski: 'אופנוע ים',
+    other: 'אחר',
+  },
 };
 
 /**
