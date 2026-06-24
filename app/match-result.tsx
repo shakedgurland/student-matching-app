@@ -613,7 +613,7 @@ export default function MatchResultScreen() {
             {
               backgroundColor: dynamicColors.bg,
               borderTopColor: dynamicColors.border,
-              paddingBottom: Math.max(insets.bottom, 8),
+              paddingBottom: Math.max(insets.bottom, 4),
             },
           ]}>
           <TouchableOpacity
@@ -670,10 +670,16 @@ const styles = StyleSheet.create({
   },
 
   // Scroll body — 20pt gap between top-level sections.
+  // PR-FINAL-UI: paddingBottom 96 → 84. The previous value left a
+  // visibly large gap above the sticky footer on short content; 84
+  // is still enough buffer to scroll past the footer (sticky footer
+  // is ~52px button + ~6px top + safe-area, so 84 covers it on
+  // non-home-indicator devices and home-indicator devices get the
+  // natural safe-area lift from the footer itself).
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 96,
+    paddingBottom: 84,
     gap: 20,
   },
 
@@ -803,13 +809,17 @@ const styles = StyleSheet.create({
   secondaryLinkText: { fontSize: 14, fontWeight: '600', writingDirection: 'rtl' },
 
   // Sticky footer — minimal padding so it stops feeling like a big block.
-  // PR-UI-POLISH: tightened paddingTop 10 → 6 + paddingBottom floor 12 → 8
-  // (in the JSX above) so the footer is closer to a calm iOS CTA strip
-  // and stops eating vertical space. The 52pt button height stays above
-  // iOS's 44pt minimum tap target.
+  // PR-UI-POLISH (preserved): tightened paddingTop 10 → 6.
+  // PR-FINAL-UI: paddingTop 6 → 4 + paddingBottom floor 8 → 4 (in JSX
+  // above). Further trim after QA flagged excess space below "להתחיל
+  // שיחה". Safe-area correctness is unchanged because the JSX uses
+  // Math.max(insets.bottom, 4) — devices with home indicators (insets
+  // ~34px) still get the full safe-area lift; only simulator / older
+  // phones see the 4px floor instead of 8px. 52pt button height stays
+  // above iOS 44pt minimum tap target.
   stickyFooter: {
     paddingHorizontal: 20,
-    paddingTop: 6,
+    paddingTop: 4,
     borderTopWidth: 1,
   },
   primaryButton: {
