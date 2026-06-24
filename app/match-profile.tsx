@@ -230,6 +230,39 @@ export default function MatchProfileScreen() {
   // navigating back to the screen and then an iOS notification-center
   // peek both within a second).
   const lastRefreshAtRef = useRef(0);
+  // PR-CHAT-PROFILE-HARDEN (PR #58): mounted guard + load sequence
+  // counter. load() runs many sequential awaits (auth.getUser → match
+  // SELECT → profiles SELECT → get_match_context RPC → profile_photos
+  // SELECT → signed-URL minting loop). Without these guards:
+  //   * Rapid focus + AppState foreground can run two load()s
+  //     concurrently; the slower one's late setState calls overwrite
+  //     the fresher results.
+  //   * Unmount during a long load (user navigates back from match-
+  //     profile mid-photo-signing) writes setState on an unmounted
+  //     component — RN logs a warning but the bigger risk is native-
+  //     side memory pressure from Image components holding stale
+  //     signed-URL strings while the carousel ScrollView is being
+  //     torn down. This is one plausible vector for the
+  //     EXC_BAD_ACCESS / SIGSEGV repros QA reported.
+  // isMountedRef flips to false on unmount via the dedicated useEffect
+  // below. loadSeqRef increments on each load() entry; the load body
+  // captures `mySeq` and only writes state when `mySeq` is still the
+  // current seq AND the component is still mounted.
+  const isMountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
+
+  // PR-CHAT-PROFILE-HARDEN (PR #58): mount-tracking effect. Pairs with
+  // isMountedRef.current checks inside load(). Empty deps → runs once
+  // on mount, cleanup runs once on unmount. Does NOT replace the
+  // existing useFocusEffect / AppState listeners — they handle
+  // refresh-on-focus / refresh-on-foreground, while this one tracks
+  // the broader mount lifecycle.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Whether the user got here from the chat screen — drives CTA wording
   // (return vs forward) so we don't push redundant /chat onto the stack.
@@ -288,9 +321,20 @@ export default function MatchProfileScreen() {
   };
 
   async function load(opts: { silent?: boolean } = {}): Promise<void> {
+    // PR-CHAT-PROFILE-HARDEN (PR #58): claim a load-sequence id and
+    // capture it in this closure. After every await that follows,
+    // stillFresh() returns false if (a) the component unmounted OR
+    // (b) a newer load() started — in which case we early-return to
+    // short-circuit wasted work and skip the setState calls that
+    // would otherwise overwrite the newer load's results or write to
+    // an unmounted component. Every setState below is wrapped in
+    // `if (stillFresh())` as the second safety net.
+    const mySeq = ++loadSeqRef.current;
+    const stillFresh = () => isMountedRef.current && mySeq === loadSeqRef.current;
+
     try {
-      if (!opts.silent) setLoading(true);
-      setErrorMsg(null);
+      if (!opts.silent && stillFresh()) setLoading(true);
+      if (stillFresh()) setErrorMsg(null);
       // PR-PREBUILD-MATCH-PRIVACY-POLISH: stamp before the async work
       // so the throttle window starts from the call moment, not the
       // completion moment — prevents a slow load + a quick foreground
@@ -298,14 +342,15 @@ export default function MatchProfileScreen() {
       lastRefreshAtRef.current = Date.now();
 
       const { data: userRes } = await supabase.auth.getUser();
+      if (!stillFresh()) return;
       const me = userRes.user;
       if (!me) {
-        setErrorMsg('יש להתחבר מחדש');
+        if (stillFresh()) setErrorMsg('יש להתחבר מחדש');
         return;
       }
 
       if (!params.match_id) {
-        setErrorMsg('לא נמצאה התאמה');
+        if (stillFresh()) setErrorMsg('לא נמצאה התאמה');
         return;
       }
 
@@ -323,14 +368,15 @@ export default function MatchProfileScreen() {
         .select(matchColumns)
         .eq('id', params.match_id)
         .maybeSingle();
+      if (!stillFresh()) return;
 
       if (matchErr) {
         logError('MatchProfile', 'load_match_failed', matchErr);
-        setErrorMsg('לא ניתן לטעון את ההתאמה');
+        if (stillFresh()) setErrorMsg('לא ניתן לטעון את ההתאמה');
         return;
       }
       if (!matchData) {
-        setErrorMsg('ההתאמה לא נמצאה');
+        if (stillFresh()) setErrorMsg('ההתאמה לא נמצאה');
         return;
       }
       const matchRow = matchData as MatchRow;
@@ -339,10 +385,10 @@ export default function MatchProfileScreen() {
       // on matches to participants, but if we somehow saw the row, refuse
       // to derive a peer from a non-participant caller.
       if (matchRow.user_a_id !== me.id && matchRow.user_b_id !== me.id) {
-        setErrorMsg('אין הרשאה לצפות בהתאמה הזו');
+        if (stillFresh()) setErrorMsg('אין הרשאה לצפות בהתאמה הזו');
         return;
       }
-      setMatch(matchRow);
+      if (stillFresh()) setMatch(matchRow);
 
       const peerId =
         matchRow.user_a_id === me.id ? matchRow.user_b_id : matchRow.user_a_id;
@@ -355,6 +401,7 @@ export default function MatchProfileScreen() {
         )
         .eq('id', peerId)
         .maybeSingle();
+      if (!stillFresh()) return;
 
       // peerErr / null peerData happens for terminal matches (peer-RLS
       // restricts to active/chat_started after migration 023). NOT an
@@ -375,18 +422,18 @@ export default function MatchProfileScreen() {
           // active). Without this, the closed-state render below would
           // show the previously-cached name/age/hobbies even though
           // RLS now hides those columns.
-          setPeer(null);
+          if (stillFresh()) setPeer(null);
         } else {
           logError(
             'MatchProfile',
             'load_peer_failed',
             peerErr ?? new Error('peer not found'),
           );
-          setErrorMsg('לא ניתן לטעון את פרטי ההתאמה');
+          if (stillFresh()) setErrorMsg('לא ניתן לטעון את פרטי ההתאמה');
           return;
         }
       } else {
-        setPeer(peerData as PeerProfile);
+        if (stillFresh()) setPeer(peerData as PeerProfile);
       }
 
       // PR-MATCH-CTX (PR #56): fetch safe peer questionnaire details +
@@ -401,6 +448,7 @@ export default function MatchProfileScreen() {
           'get_match_context',
           { p_match_id: matchRow.id },
         );
+        if (!stillFresh()) return;
         if (ctxErr) {
           logError('MatchProfile', 'get_match_context_failed', ctxErr);
         } else if (
@@ -409,8 +457,10 @@ export default function MatchProfileScreen() {
           !('error' in (ctxData as Record<string, unknown>))
         ) {
           const obj = ctxData as Record<string, unknown>;
-          setPeerDetails(parsePeerDetails(obj.peer_details));
-          setMatchEvidence(parseEvidenceArray(obj.compatibility_evidence));
+          if (stillFresh()) {
+            setPeerDetails(parsePeerDetails(obj.peer_details));
+            setMatchEvidence(parseEvidenceArray(obj.compatibility_evidence));
+          }
         }
       } catch (e) {
         logError('MatchProfile', 'get_match_context_exception', e);
@@ -425,6 +475,7 @@ export default function MatchProfileScreen() {
         .select('id, storage_path, display_order')
         .eq('user_id', peerId)
         .order('display_order', { ascending: true });
+      if (!stillFresh()) return;
 
       if (photosErr) {
         logError('MatchProfile', 'load_photos_failed', photosErr);
@@ -464,10 +515,17 @@ export default function MatchProfileScreen() {
       // No DB rows are deleted. No storage objects are removed. This
       // is a render-time filter only; the underlying DB is left for a
       // separate one-shot cleanup if and when product decides.
+      //
+      // PR-CHAT-PROFILE-HARDEN (PR #58): stillFresh() check at the top
+      // of each iteration short-circuits the signing loop if a newer
+      // load started or the component unmounted — prevents wasted
+      // signed-URL mints AND prevents the loop from running long
+      // enough to push to `collected` after we should have bailed.
       const seenPaths = new Set<string>();
       const seenOrders = new Set<number>();
       const collected: PhotoEntry[] = [];
       for (const row of photoRows ?? []) {
+        if (!stillFresh()) return;
         if (!row.storage_path) continue;
         if (seenPaths.has(row.storage_path)) continue;
         // Treat display_order as a logical slot identity ONLY when
@@ -501,18 +559,22 @@ export default function MatchProfileScreen() {
         collected.length === 0
       ) {
         const url = await signOne(peerData.avatar_storage_path);
+        if (!stillFresh()) return;
         if (url) {
           seenPaths.add(peerData.avatar_storage_path);
           collected.push({ key: 'avatar', signedUrl: url });
         }
       }
 
-      setPhotos(collected);
+      if (stillFresh()) setPhotos(collected);
     } catch (e) {
       logError('MatchProfile', 'load_exception', e);
-      setErrorMsg('אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+      if (stillFresh()) setErrorMsg('אירעה שגיאה. נסה/י שוב מאוחר יותר.');
     } finally {
-      if (!opts.silent) setLoading(false);
+      // PR-CHAT-PROFILE-HARDEN (PR #58): gate the spinner clear too.
+      // A stale load completing must not flip the FRESH load's
+      // loading=true back to false prematurely.
+      if (!opts.silent && stillFresh()) setLoading(false);
     }
   }
 
