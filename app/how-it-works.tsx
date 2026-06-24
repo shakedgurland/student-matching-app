@@ -206,18 +206,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  // PR-RTL-FIX: flex: 1 added so the title container grows to fill the
-  // row's leftover space between the back chevron (physical right under
-  // RTL) and the spacer (physical left). Without flex: 1 the title
-  // container takes only its content width and gets centered by the row's
-  // 'space-between' — visually the title appeared centered, not right-
-  // aligned. With flex: 1 the existing textAlign: 'right' actually pins
-  // the text next to the chevron in Hebrew RTL.
+  // PR-RTL-POLISH: textAlign 'right' → 'center'. The previous right-
+  // alignment pinned the title against the back chevron (chevron on the
+  // physical right under RTL + title right-aligned in the flex:1 middle
+  // container = title visually crowding the chevron). Centering matches
+  // the standard iOS Hebrew header pattern (chevron right, title
+  // optically centered between chevron and matching-width spacer).
+  // flex: 1 + matching headerSpacer width: 24 stay, so the title
+  // centers in the row.
   headerTitle: {
     flex: 1,
     fontSize: 18,
     fontWeight: '800',
-    textAlign: 'right',
+    textAlign: 'center',
     writingDirection: 'rtl',
   },
   headerSpacer: { width: 24 },
@@ -229,9 +230,23 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     justifyContent: 'flex-start',
   },
-  // BATCH-G1: restrained polish — padding 28→24, gap 14→12. Card feels
-  // less heavy and more documentary. Shadow already at premium-soft
-  // 0.06 opacity — kept.
+  // PR-RTL-POLISH (final, post-review): card.alignItems kept at 'center'
+  // so the emoji circle stays as a centered visual hero — that reads as
+  // a more premium iOS card than a right-shifted decorative icon. Text
+  // right-anchoring is fully achieved INDEPENDENTLY of this value:
+  // every text style below (stepLabel / title / body / bulletText) sets
+  // its own alignSelf:'stretch' + textAlign:'right' + writingDirection:
+  // 'rtl', which overrides the card's cross-axis alignment for those
+  // children. So:
+  //   * emoji circle → centered (no alignSelf override; inherits 'center')
+  //   * stepLabel / title / body / bullets → stretched full-width, text
+  //     right-aligned (their own alignSelf:'stretch' overrides 'center')
+  // Net: premium centered hero icon + fully right-anchored Hebrew text
+  // block. No "centered English layout" feel because all the text reads
+  // from the right edge; the emoji is decorative, not part of the
+  // reading flow.
+  // BATCH-G1 (preserved): restrained polish — padding 28→24, gap 14→12.
+  // Shadow stays at premium-soft 0.06.
   card: {
     borderRadius: 28,
     borderWidth: 1,
@@ -260,18 +275,14 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 50,
   },
-  // PR #59: textAlign 'center' → 'right'. The previous design kept
-  // "שלב N" centered as a small anchor badge, but TestFlight QA on the
-  // RTL pass found that the centered label visually broke the
-  // right-anchored Hebrew block (label centered, then title/body/bullets
-  // all right-aligned). Right-aligning the label too pins the entire
-  // text block to a single Hebrew reading axis. The emoji circle stays
-  // centered as the hero icon — it isn't text, so it doesn't need to
-  // join the reading axis.
-  // BATCH-C REVISION (preserved): alignSelf stretch so the label spans
-  // the full card width, not a shrink-to-fit island created by the
-  // card's alignItems: 'center'. Required for textAlign to do anything
-  // visible. Matches the same setup on title/body.
+  // PR #59 → PR-RTL-POLISH (final): stepLabel uses
+  // alignSelf:'stretch' + textAlign:'right'. The stretch overrides the
+  // card's alignItems:'center', so the label spans full card width and
+  // the text right-aligns inside it. This pattern is repeated on title,
+  // body, and bulletText — every text element opts out of the card's
+  // center alignment in favor of its own right-anchored stretch. That
+  // way the emoji circle (no alignSelf) stays centered as a premium
+  // hero while the Hebrew reading flow runs cleanly from the right.
   // BATCH-G1 (preserved): letterSpacing 1 → 0.5. Wider tracking felt
   // marketing-poster heavy; 0.5 keeps the all-caps rhythm without
   // shouting.

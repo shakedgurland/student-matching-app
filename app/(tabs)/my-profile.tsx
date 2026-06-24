@@ -66,7 +66,11 @@ export default function MyProfileScreen() {
   const sectionsLogged = React.useRef<Set<string>>(new Set());
 
   // Editable fields
-  const [username, setUsername] = useState('');
+  // PR-FINAL-UI: username state removed. Username is no longer editable
+  // from this screen — the edit form is bio-only now. Display fallback
+  // (`profile?.full_name || profile?.username`) still reads `username`
+  // from the `profile` state directly, so identity rendering is intact.
+  // Signup/auth still owns username creation.
   const [bio, setBio] = useState('');
 
   // Photo carousel index (clamped at render time against photos.length).
@@ -142,7 +146,6 @@ export default function MyProfileScreen() {
       }
 
       setProfile({ ...profileData, avatar_url: avatarUrl });
-      setUsername(profileData.username || '');
       setBio(profileData.bio || '');
 
       const { data: photosData, error: photosError } = await supabase
@@ -195,7 +198,6 @@ export default function MyProfileScreen() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          username: username.trim(),
           bio: bio.trim(),
           updated_at: new Date().toISOString(),
         })
@@ -205,9 +207,11 @@ export default function MyProfileScreen() {
         logError('MyProfile', 'profile_update_failed', error);
         throw error;
       }
-      
+
       logFormSubmit('MyProfile', 'profile_updated');
-      setProfile({ ...profile, username, bio });
+      // PR-FINAL-UI: only bio is mergeable into local state. Username stays
+      // at whatever the DB returned on the last fetchProfile() pass.
+      setProfile({ ...profile, bio });
       setEditing(false);
       Alert.alert('הצלחה', 'הפרופיל עודכן בהצלחה');
     } catch (error) {
@@ -567,15 +571,10 @@ export default function MyProfileScreen() {
               <View style={styles.infoSection}>
                 {editing ? (
                   <View style={styles.editForm}>
-                    <ThemedText style={[styles.label, { color: dynamicColors.text }]}>שם משתמש</ThemedText>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: dynamicColors.inputBg, color: dynamicColors.text, borderColor: dynamicColors.border }]}
-                      value={username}
-                      onChangeText={setUsername}
-                      placeholder="שם משתמש"
-                      textAlign="right"
-                    />
-                    
+                    {/* PR-FINAL-UI: username field removed from edit
+                        mode. Username is set once at signup and is not
+                        user-editable from the profile screen anymore.
+                        Bio is the only mutable field here. */}
                     <ThemedText style={[styles.label, { color: dynamicColors.text }]}>ביו (קצת עלייך)</ThemedText>
                     <TextInput
                       style={[styles.input, styles.bioInput, { backgroundColor: dynamicColors.inputBg, color: dynamicColors.text, borderColor: dynamicColors.border }]}
@@ -645,16 +644,28 @@ export default function MyProfileScreen() {
               <View style={styles.settingsSection}>
                 <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>הגדרות וחוקיות</ThemedText>
                 <View style={[styles.settingsCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
+                  {/* PR-FINAL-UI: added chevron.left disclosure on each
+                      navigable row. Under forceRTL, flexDirection:'row'
+                      + justifyContent:'space-between' on settingsRow
+                      puts the text (flex:1) on the physical right and
+                      the chevron on the physical left — the standard
+                      iOS Hebrew settings-row layout. The destructive
+                      delete-account row below stays without a chevron
+                      per iOS convention (destructive actions don't
+                      have disclosure indicators). */}
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>איך זה עובד?</ThemedText>
+                    <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
+                    <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
+                    <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   {/*
@@ -1000,9 +1011,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  // PR-FINAL-UI: textAlign:'right' added so the section titles
+  // ("שאלון ההתאמה שלי", "הגדרות וחוקיות") are explicitly right-anchored.
+  // Without textAlign, the text fell back to its container's default
+  // alignment which produced inconsistent visual results in TestFlight
+  // RTL QA (sometimes left-leaning, sometimes centered).
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
   questionnaireSection: {
