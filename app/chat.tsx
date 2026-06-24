@@ -104,6 +104,15 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  // PR-CHAT-PROFILE-HARDEN (PR #58): debounce ref shared by the title
+  // and avatar taps in the header. Both targets navigate to the same
+  // /match-profile screen; rapid double-tap previously stacked two
+  // pushes which (per QA repro) correlates with native EXC_BAD_ACCESS /
+  // SIGSEGV crashes after several transitions. The ref is checked +
+  // set inside openMatchProfile() and cleared 500ms later — long
+  // enough to absorb a double-tap, short enough that legitimate later
+  // taps (e.g., after returning from match-profile) still work.
+  const navigatingToProfileRef = useRef(false);
 
   useEffect(() => {
     logScreenView('Chat');
@@ -576,6 +585,26 @@ export default function ChatScreen() {
     }
   }
 
+  // PR-CHAT-PROFILE-HARDEN (PR #58): single guarded entry point for
+  // the two header taps that open match-profile. Rapid double-tap
+  // returns early on the second call (ref already set), preventing
+  // a second router.push that would stack a duplicate match-profile
+  // screen on the navigation stack. The 500ms release window is
+  // longer than a typical double-tap and shorter than a screen
+  // transition — legitimate later taps still work.
+  const openMatchProfile = () => {
+    if (!match?.id) return;
+    if (navigatingToProfileRef.current) return;
+    navigatingToProfileRef.current = true;
+    setTimeout(() => {
+      navigatingToProfileRef.current = false;
+    }, 500);
+    router.push({
+      pathname: '/match-profile' as any,
+      params: { match_id: match.id, from: 'chat' },
+    });
+  };
+
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
@@ -684,14 +713,7 @@ export default function ChatScreen() {
              */}
             <TouchableOpacity
               style={styles.headerTitleBlock}
-              onPress={() => {
-                if (match?.id) {
-                  router.push({
-                    pathname: '/match-profile' as any,
-                    params: { match_id: match.id, from: 'chat' },
-                  });
-                }
-              }}
+              onPress={openMatchProfile}
               accessibilityLabel="פרופיל ההתאמה"
               activeOpacity={0.7}>
               <ThemedText
@@ -719,14 +741,7 @@ export default function ChatScreen() {
                 styles.headerAvatar,
                 { backgroundColor: dynamicColors.surface, borderColor: UI_COLORS.branding },
               ]}
-              onPress={() => {
-                if (match?.id) {
-                  router.push({
-                    pathname: '/match-profile' as any,
-                    params: { match_id: match.id, from: 'chat' },
-                  });
-                }
-              }}
+              onPress={openMatchProfile}
               accessibilityLabel="פרופיל ההתאמה"
               activeOpacity={0.7}>
               {peerAvatarUrl ? (
