@@ -230,21 +230,28 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     justifyContent: 'flex-start',
   },
-  // PR-RTL-POLISH: alignItems 'center' → 'flex-start'. Under forceRTL,
-  // flex-start on the cross axis is the physical RIGHT, so every direct
-  // child of the card pins to the right unless it overrides alignSelf.
-  // This removes the "centered English layout" feel: the emoji circle
-  // now sits top-right (the natural Hebrew reading-entry point) instead
-  // of as a centered hero. Text items (stepLabel/title/body/bullets)
-  // already have alignSelf:'stretch' so they remain full-width and
-  // their textAlign:'right' continues to right-anchor the text inside.
+  // PR-RTL-POLISH (final, post-review): card.alignItems kept at 'center'
+  // so the emoji circle stays as a centered visual hero — that reads as
+  // a more premium iOS card than a right-shifted decorative icon. Text
+  // right-anchoring is fully achieved INDEPENDENTLY of this value:
+  // every text style below (stepLabel / title / body / bulletText) sets
+  // its own alignSelf:'stretch' + textAlign:'right' + writingDirection:
+  // 'rtl', which overrides the card's cross-axis alignment for those
+  // children. So:
+  //   * emoji circle → centered (no alignSelf override; inherits 'center')
+  //   * stepLabel / title / body / bullets → stretched full-width, text
+  //     right-aligned (their own alignSelf:'stretch' overrides 'center')
+  // Net: premium centered hero icon + fully right-anchored Hebrew text
+  // block. No "centered English layout" feel because all the text reads
+  // from the right edge; the emoji is decorative, not part of the
+  // reading flow.
   // BATCH-G1 (preserved): restrained polish — padding 28→24, gap 14→12.
   // Shadow stays at premium-soft 0.06.
   card: {
     borderRadius: 28,
     borderWidth: 1,
     padding: 24,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -268,14 +275,14 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 50,
   },
-  // PR #59 → PR-RTL-POLISH: stepLabel kept at textAlign:'right'. With
-  // the parent card now using alignItems:'flex-start' (physical right
-  // under RTL), the emoji also right-anchors and the entire card
-  // content reads as one cohesive Hebrew block from the right edge.
-  // alignSelf:'stretch' kept so the label spans the full card width
-  // (otherwise it would shrink to content width and sit against the
-  // card's flex-start right edge — visually identical for short labels
-  // but worse for long-form variants).
+  // PR #59 → PR-RTL-POLISH (final): stepLabel uses
+  // alignSelf:'stretch' + textAlign:'right'. The stretch overrides the
+  // card's alignItems:'center', so the label spans full card width and
+  // the text right-aligns inside it. This pattern is repeated on title,
+  // body, and bulletText — every text element opts out of the card's
+  // center alignment in favor of its own right-anchored stretch. That
+  // way the emoji circle (no alignSelf) stays centered as a premium
+  // hero while the Hebrew reading flow runs cleanly from the right.
   // BATCH-G1 (preserved): letterSpacing 1 → 0.5. Wider tracking felt
   // marketing-poster heavy; 0.5 keeps the all-caps rhythm without
   // shouting.
