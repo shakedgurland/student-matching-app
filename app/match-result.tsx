@@ -17,6 +17,12 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { logScreenView, logError } from '@/lib/analytics';
 import { labelFor } from '@/lib/profile-labels';
+import {
+  type CompatibilityEvidence,
+  parseEvidenceArray,
+  parseEvidenceFromMetadata,
+  renderEvidenceText,
+} from '@/lib/match-evidence';
 
 // PR-UI-POLISH: shifted background from off-white (#FFFCFA) to pure
 // white (#FFFFFF) per QA — testers felt the off-white read as creamy
@@ -67,117 +73,10 @@ interface PeerProfile {
   avatar_storage_path: string | null;
 }
 
-// Discriminated-union mirror of the CompatibilityEvidence type defined in
-// supabase/functions/match-create/scoring.ts (PR #48). Local copy because
-// Edge Function code is not importable from the app bundle. If the server
-// adds a new kind in the future, parseEvidence below silently drops it
-// (forward-compatible).
-type CompatibilityEvidence =
-  | { kind: 'shared_hobbies'; values: string[]; labels: string[] }
-  | { kind: 'same_city'; value: string; label: string }
-  | { kind: 'same_region'; value: string; label: string }
-  | { kind: 'same_university'; value: string; label: string }
-  | { kind: 'same_faculty'; value: string; label: string }
-  | { kind: 'same_year_of_study'; value: string; label: string }
-  | { kind: 'shared_intent'; value: string; label: string }
-  | { kind: 'shared_pace'; value: string; label: string }
-  | { kind: 'shared_first_date'; value: string; label: string }
-  | { kind: 'shared_conflict_style'; value: string; label: string }
-  | { kind: 'shared_religion_type'; value: string; label: string }
-  | { kind: 'shared_top_values'; values: string[]; labels: string[] }
-  | { kind: 'ai_vibe' };
-
-// Defensive parse — accepts only items matching the expected per-kind
-// shape. Malformed or unknown entries are dropped silently. Never throws.
-function parseEvidence(metadata: MatchRow['metadata']): CompatibilityEvidence[] {
-  if (!metadata || typeof metadata !== 'object') return [];
-  const raw = (metadata as Record<string, unknown>).compatibility_evidence;
-  if (!Array.isArray(raw)) return [];
-  const out: CompatibilityEvidence[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const obj = item as Record<string, unknown>;
-    const kind = obj.kind;
-    if (typeof kind !== 'string') continue;
-
-    if (kind === 'shared_hobbies' || kind === 'shared_top_values') {
-      const values = Array.isArray(obj.values)
-        ? obj.values.filter((v): v is string => typeof v === 'string')
-        : [];
-      const labels = Array.isArray(obj.labels)
-        ? obj.labels.filter((v): v is string => typeof v === 'string')
-        : [];
-      out.push({ kind, values, labels } as CompatibilityEvidence);
-      continue;
-    }
-    if (kind === 'ai_vibe') {
-      out.push({ kind: 'ai_vibe' });
-      continue;
-    }
-    if (
-      kind === 'same_city' || kind === 'same_region' ||
-      kind === 'same_university' || kind === 'same_faculty' ||
-      kind === 'same_year_of_study' || kind === 'shared_intent' ||
-      kind === 'shared_pace' || kind === 'shared_first_date' ||
-      kind === 'shared_conflict_style' || kind === 'shared_religion_type'
-    ) {
-      const value = obj.value;
-      const label = obj.label;
-      if (typeof value === 'string' && typeof label === 'string') {
-        out.push({ kind, value, label } as CompatibilityEvidence);
-      }
-      continue;
-    }
-    // Unknown kind from a future server version — skip silently.
-  }
-  return out;
-}
-
-// Mirror of supabase/functions/match-create/scoring.ts renderEvidenceText.
-// Identical templates so the rendered Hebrew matches exactly what the
-// server wrote into compatibility_reasons. Sensitive kinds intentionally
-// render generic copy — the underlying value/label is stored for analytics
-// + future UI but never surfaced on this screen.
-function joinPrepBet(prefix: string, label: string): string {
-  if (label.startsWith('ה')) return `${prefix}${label.slice(1)}`;
-  return `${prefix}${label}`;
-}
-function joinHebrewList(labels: string[]): string {
-  if (labels.length === 0) return '';
-  if (labels.length === 1) return labels[0];
-  if (labels.length === 2) return `${labels[0]} ו${labels[1]}`;
-  return `${labels.slice(0, -1).join(', ')} ו${labels[labels.length - 1]}`;
-}
-function renderEvidenceText(ev: CompatibilityEvidence): string {
-  switch (ev.kind) {
-    case 'shared_hobbies':
-      return `שניכם סימנתם ${joinHebrewList(ev.labels)}`;
-    case 'same_city':
-      return joinPrepBet('שניכם ב', ev.label);
-    case 'same_region':
-      return `שניכם באזור ${ev.label}`;
-    case 'same_university':
-      return joinPrepBet('שניכם לומדים ב', ev.label);
-    case 'same_faculty':
-      return `שניכם בפקולטה ל${ev.label}`;
-    case 'same_year_of_study':
-      return joinPrepBet('שניכם ב', ev.label);
-    case 'shared_intent':
-      return `שניכם מחפשים ${ev.label}`;
-    case 'shared_pace':
-      return `שניכם מעדיפים ${ev.label}`;
-    case 'shared_first_date':
-      return `שניכם מעדיפים ${ev.label} לדייט ראשון`;
-    case 'shared_conflict_style':
-      return 'שניכם בסגנון פתרון קונפליקטים דומה';
-    case 'shared_religion_type':
-      return 'יש לכם רקע דתי משותף';
-    case 'shared_top_values':
-      return `יש לכם ${ev.values.length} ערכים זוגיים משותפים`;
-    case 'ai_vibe':
-      return 'וייב דומה בהומור ובערכים';
-  }
-}
+// PR-MATCH-CTX (PR #56): CompatibilityEvidence type + parseEvidence*
+// + renderEvidenceText moved to lib/match-evidence.ts so match-profile
+// can share the same shape + rendering. Imported at the top of this
+// file alongside the other lib helpers.
 
 // Compact "hours remaining" chip. Seconds/minutes intentionally omitted —
 // the previous countdown card felt like a sale timer and put pressure on
@@ -226,6 +125,16 @@ export default function MatchResultScreen() {
     distinct_sender_count: number;
     is_mutual_started: boolean;
   } | null>(null);
+
+  // PR-MATCH-CTX (PR #56): when the stored metadata.compatibility_evidence
+  // is empty (typical for matches created before the PR #48 deploy),
+  // call get_match_context (migration 032) to derive concrete evidence
+  // on the fly. null = not yet attempted / metadata had stored items;
+  // [] = RPC attempted, returned no usable items — section will hide;
+  // [items] = RPC returned derived evidence — render as cards.
+  const [fallbackEvidence, setFallbackEvidence] = useState<
+    CompatibilityEvidence[] | null
+  >(null);
 
   useEffect(() => {
     logScreenView('MatchResult');
@@ -294,6 +203,42 @@ export default function MatchResultScreen() {
         return;
       }
       setMatch(matchRow);
+
+      // PR-MATCH-CTX: if the stored metadata has no compatibility_evidence
+      // (old matches from before PR #48 deploy), call get_match_context
+      // for a fresh derive. Non-fatal — RPC failure leaves the section
+      // hidden (never falls back to legacy generic compatibility_reasons
+      // strings like "יש חפיפה בתחומי העניין"). Fire-and-forget so the
+      // peer + storage + message-state fetches below don't block on this.
+      const storedEvidence = parseEvidenceFromMetadata(matchRow.metadata);
+      if (storedEvidence.length === 0) {
+        void (async () => {
+          try {
+            const { data: ctxData, error: ctxErr } = await supabase.rpc(
+              'get_match_context',
+              { p_match_id: matchRow.id },
+            );
+            if (ctxErr) {
+              logError('MatchResult', 'get_match_context_failed', ctxErr);
+              setFallbackEvidence([]);
+              return;
+            }
+            if (
+              ctxData &&
+              typeof ctxData === 'object' &&
+              !('error' in (ctxData as Record<string, unknown>))
+            ) {
+              const raw = (ctxData as Record<string, unknown>).compatibility_evidence;
+              setFallbackEvidence(parseEvidenceArray(raw));
+            } else {
+              setFallbackEvidence([]);
+            }
+          } catch (e) {
+            logError('MatchResult', 'get_match_context_exception', e);
+            setFallbackEvidence([]);
+          }
+        })();
+      }
 
       const peerId = matchRow.user_a_id === me.id ? matchRow.user_b_id : matchRow.user_a_id;
       const { data: peerData, error: peerErr } = await supabase
@@ -441,17 +386,28 @@ export default function MatchResultScreen() {
 
   // Evidence-first reason list. Each evidence item maps to one premium
   // card with a small rose accent strip on the leading (right, under RTL)
-  // edge. Falls back to compatibility_reasons rendered as plain text-only
-  // cards for old matches (created before PR #48 deploy) or matches whose
-  // metadata.compatibility_evidence write failed (non-fatal — see
-  // supabase/functions/match-create/index.ts).
-  const evidence = parseEvidence(match.metadata);
-  const reasonsArr = Array.isArray(match.compatibility_reasons)
-    ? match.compatibility_reasons.filter((r) => typeof r === 'string' && r.trim().length > 0)
-    : [];
-  const evidenceCards: { key: string; text: string }[] = evidence.length > 0
-    ? evidence.map((ev, i) => ({ key: `ev-${i}-${ev.kind}`, text: renderEvidenceText(ev) }))
-    : reasonsArr.map((r, i) => ({ key: `reason-${i}`, text: r }));
+  // edge.
+  //
+  // PR-MATCH-CTX (PR #56): three-tier evidence resolution:
+  //   1. stored — matches.metadata.compatibility_evidence (PR #48 path
+  //      for new matches; preserved verbatim for stability across loads)
+  //   2. derived — get_match_context RPC (migration 032) called when
+  //      stored evidence is empty, for old matches that pre-date the
+  //      Edge Function update
+  //   3. hide — if both are empty, the section does not render. The
+  //      legacy compatibility_reasons text[] (which contains generic
+  //      strings like "יש חפיפה בתחומי העניין" for old matches) is
+  //      intentionally NOT used as a fallback — generic copy is worse
+  //      than no section.
+  const storedEvidence = parseEvidenceFromMetadata(match.metadata);
+  const evidence: CompatibilityEvidence[] =
+    storedEvidence.length > 0
+      ? storedEvidence
+      : (fallbackEvidence ?? []);
+  const evidenceCards: { key: string; text: string }[] = evidence.map((ev, i) => ({
+    key: `ev-${i}-${ev.kind}`,
+    text: renderEvidenceText(ev),
+  }));
 
   // Compact peer info line — "פקולטה · שנה · אוניברסיטה" with safe label
   // lookups. Empty / 'לא צוין' entries dropped so the line never reads

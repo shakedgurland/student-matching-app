@@ -51,6 +51,15 @@ import { logScreenView, logError } from '@/lib/analytics';
 // REGION_LABELS_HE map and the previous raw-value rendering for
 // university / faculty / year_of_study.
 import { labelFor } from '@/lib/profile-labels';
+// PR-MATCH-CTX (PR #56): shared evidence type + renderer used by the
+// "מה משותף לכם" section below. Same helpers consumed by
+// app/match-result.tsx so the two surfaces render identical Hebrew
+// for any given evidence item.
+import {
+  type CompatibilityEvidence,
+  parseEvidenceArray,
+  renderEvidenceText,
+} from '@/lib/match-evidence';
 
 // PR-UI-POLISH: shifted background from warm cream (#FFF9F6) to pure
 // white (#FFFFFF) to match the match-result update. Surface tint, border,
@@ -125,6 +134,48 @@ interface PhotoEntry {
   signedUrl: string;
 }
 
+// PR-MATCH-CTX (PR #56): inclusion-listed peer detail shape returned
+// by the get_match_context RPC (migration 032). The server enforces
+// the inclusion list — this type only documents which keys the client
+// expects, and parsePeerDetails defensively type-narrows each. Raw
+// codes are returned by the server; the client renders Hebrew via
+// labelFor() (no server/client label drift).
+interface PeerDetails {
+  intent_type?: string;
+  relationship_pace?: string;
+  preferred_first_date?: string;
+  relationship_top_values?: string[];
+  partner_should_know_text?: string;
+  conversation_starter?: string;
+  green_flag?: string;
+}
+
+// Defensive parser — accepts only string / string-array values per the
+// expected shape. Anything else (number, object, null) is dropped.
+// Never throws.
+function parsePeerDetails(raw: unknown): PeerDetails {
+  if (!raw || typeof raw !== 'object') return {};
+  const obj = raw as Record<string, unknown>;
+  const out: PeerDetails = {};
+  if (typeof obj.intent_type === 'string') out.intent_type = obj.intent_type;
+  if (typeof obj.relationship_pace === 'string') out.relationship_pace = obj.relationship_pace;
+  if (typeof obj.preferred_first_date === 'string') out.preferred_first_date = obj.preferred_first_date;
+  if (Array.isArray(obj.relationship_top_values)) {
+    const vals = obj.relationship_top_values.filter((v): v is string => typeof v === 'string');
+    if (vals.length > 0) out.relationship_top_values = vals;
+  }
+  if (typeof obj.partner_should_know_text === 'string' && obj.partner_should_know_text.length > 0) {
+    out.partner_should_know_text = obj.partner_should_know_text;
+  }
+  if (typeof obj.conversation_starter === 'string' && obj.conversation_starter.length > 0) {
+    out.conversation_starter = obj.conversation_starter;
+  }
+  if (typeof obj.green_flag === 'string' && obj.green_flag.length > 0) {
+    out.green_flag = obj.green_flag;
+  }
+  return out;
+}
+
 async function signOne(storagePath: string): Promise<string | null> {
   const { data, error } = await supabase.storage
     .from('profile-photos')
@@ -154,6 +205,14 @@ export default function MatchProfileScreen() {
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // PR-MATCH-CTX (PR #56): peer questionnaire details + compatibility
+  // evidence from the get_match_context RPC (migration 032). Each is
+  // populated only after the RPC resolves successfully — on error /
+  // permission_denied / terminal match they stay at the initial empty
+  // values, and every section that depends on them is hidden
+  // conditionally in the JSX below.
+  const [peerDetails, setPeerDetails] = useState<PeerDetails>({});
+  const [matchEvidence, setMatchEvidence] = useState<CompatibilityEvidence[]>([]);
   const carouselRef = useRef<ScrollView>(null);
   // PR-PREBUILD-MATCH-PRIVACY-POLISH: distinguishes first focus (full
   // spinner load) from later refocuses (silent background refresh). Lets
@@ -328,6 +387,33 @@ export default function MatchProfileScreen() {
         }
       } else {
         setPeer(peerData as PeerProfile);
+      }
+
+      // PR-MATCH-CTX (PR #56): fetch safe peer questionnaire details +
+      // compatibility evidence via the get_match_context RPC
+      // (migration 032). Non-fatal — failure / permission_denied /
+      // terminal match (RPC refuses with permission_denied for
+      // non-active/non-chat_started) leaves peerDetails empty and
+      // matchEvidence empty, and every section below renders
+      // conditionally so the screen still works.
+      try {
+        const { data: ctxData, error: ctxErr } = await supabase.rpc(
+          'get_match_context',
+          { p_match_id: matchRow.id },
+        );
+        if (ctxErr) {
+          logError('MatchProfile', 'get_match_context_failed', ctxErr);
+        } else if (
+          ctxData &&
+          typeof ctxData === 'object' &&
+          !('error' in (ctxData as Record<string, unknown>))
+        ) {
+          const obj = ctxData as Record<string, unknown>;
+          setPeerDetails(parsePeerDetails(obj.peer_details));
+          setMatchEvidence(parseEvidenceArray(obj.compatibility_evidence));
+        }
+      } catch (e) {
+        logError('MatchProfile', 'get_match_context_exception', e);
       }
 
       // Photos. Storage RLS (migration 007) is match-status-gated, so
@@ -529,6 +615,27 @@ export default function MatchProfileScreen() {
     : [];
   const bio = peer?.bio?.trim() || null;
 
+  // PR-MATCH-CTX: per-section conditionals. Each section renders only
+  // when its underlying data is present. The "מה חשוב לי בקשר" block
+  // is gated on ANY of intent/pace/top_values so it surfaces partial
+  // data without empty rows.
+  const topValuesCapped = (peerDetails.relationship_top_values ?? []).slice(0, 3);
+  const hasRelationshipImportance =
+    Boolean(peerDetails.intent_type) ||
+    Boolean(peerDetails.relationship_pace) ||
+    topValuesCapped.length > 0;
+  const hasFirstDate = Boolean(peerDetails.preferred_first_date);
+  const hasPartnerShouldKnow = Boolean(peerDetails.partner_should_know_text);
+  const hasConversationStarter = Boolean(peerDetails.conversation_starter);
+  const hasGreenFlag = Boolean(peerDetails.green_flag);
+  const hasEvidence = matchEvidence.length > 0;
+  // Empty-profile fallback now also accounts for the new RPC-driven
+  // sections — if any of them has data, we have a non-empty profile.
+  const hasAnyContent =
+    infoRows.length > 0 || hobbies.length > 0 || Boolean(bio) ||
+    hasRelationshipImportance || hasFirstDate || hasPartnerShouldKnow ||
+    hasConversationStarter || hasGreenFlag || hasEvidence;
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -705,9 +812,164 @@ export default function MatchProfileScreen() {
             </View>
           )}
 
+          {/* PR-MATCH-CTX (PR #56): peer questionnaire details + shared
+              evidence sections. Each renders only when its underlying
+              data is present. labelFor() handles enum-to-Hebrew so chips
+              never show raw codes. */}
+
+          {/* "מה חשוב לי בקשר" — intent_type + relationship_pace +
+              top values (capped at 3 chips). */}
+          {hasRelationshipImportance && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                מה חשוב לי בקשר
+              </ThemedText>
+              {peerDetails.intent_type && (
+                <View style={styles.infoRow}>
+                  <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
+                    מחפש/ת:
+                  </ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: dynamicColors.text }]}>
+                    {labelFor('intent_type', peerDetails.intent_type)}
+                  </ThemedText>
+                </View>
+              )}
+              {peerDetails.relationship_pace && (
+                <View style={styles.infoRow}>
+                  <ThemedText style={[styles.infoLabel, { color: dynamicColors.textLight }]}>
+                    קצב:
+                  </ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: dynamicColors.text }]}>
+                    {labelFor('relationship_pace', peerDetails.relationship_pace)}
+                  </ThemedText>
+                </View>
+              )}
+              {topValuesCapped.length > 0 && (
+                <View style={styles.hobbyChips}>
+                  {topValuesCapped.map((v) => (
+                    <View
+                      key={v}
+                      style={[
+                        styles.hobbyChip,
+                        {
+                          backgroundColor: dynamicColors.surface,
+                          borderColor: UI_COLORS.branding + '30',
+                        },
+                      ]}>
+                      <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
+                        {labelFor('relationship_top_values', v)}
+                      </ThemedText>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* "איך אני אוהב/ת להכיר" — preferred_first_date. */}
+          {hasFirstDate && peerDetails.preferred_first_date && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                איך אני אוהב/ת להכיר
+              </ThemedText>
+              <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                {labelFor('preferred_first_date', peerDetails.preferred_first_date)}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* "משהו שכדאי לדעת עליי" — free-text partner_should_know_text.
+              Server-side trimmed + capped at 500 chars by migration 032. */}
+          {hasPartnerShouldKnow && peerDetails.partner_should_know_text && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                משהו שכדאי לדעת עליי
+              </ThemedText>
+              <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                {peerDetails.partner_should_know_text}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* "נושא לפתיחת שיחה" — free-text conversation_starter. */}
+          {hasConversationStarter && peerDetails.conversation_starter && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                נושא לפתיחת שיחה
+              </ThemedText>
+              <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                {peerDetails.conversation_starter}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* "סימן שזה מתחיל טוב" — free-text green_flag. */}
+          {hasGreenFlag && peerDetails.green_flag && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                סימן שזה מתחיל טוב
+              </ThemedText>
+              <ThemedText style={[styles.bioText, { color: dynamicColors.text }]}>
+                {peerDetails.green_flag}
+              </ThemedText>
+            </View>
+          )}
+
+          {/* "מה משותף לכם" — compatibility evidence from the same RPC,
+              rendered via the shared renderEvidenceText helper so each
+              kind reads identically to its sibling on match-result. */}
+          {hasEvidence && (
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+              ]}>
+              <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
+                מה משותף לכם
+              </ThemedText>
+              <View style={styles.hobbyChips}>
+                {matchEvidence.map((ev, i) => (
+                  <View
+                    key={`ev-${i}-${ev.kind}`}
+                    style={[
+                      styles.hobbyChip,
+                      {
+                        backgroundColor: dynamicColors.surface,
+                        borderColor: UI_COLORS.branding + '30',
+                      },
+                    ]}>
+                    <ThemedText style={[styles.hobbyChipText, { color: UI_COLORS.branding }]}>
+                      {renderEvidenceText(ev)}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* Empty-profile fallback. Renders only if peer has no info
-              rows, no hobbies, and no bio. */}
-          {infoRows.length === 0 && hobbies.length === 0 && !bio && (
+              rows, no hobbies, no bio, and no RPC-driven sections. */}
+          {!hasAnyContent && (
             <View
               style={[
                 styles.sectionCard,
