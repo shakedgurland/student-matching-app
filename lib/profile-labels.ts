@@ -130,6 +130,43 @@ export const LABEL_MAPS: Record<string, Record<string, string>> = {
     jet_ski: 'אופנוע ים',
     other: 'אחר',
   },
+  // PR-LABELS: relationship_pace — Hebrew labels mirrored verbatim from
+  // RELATIONSHIP_PACE_OPTIONS_V2 in app/questionnaire.tsx (the source of
+  // truth). All 4 V2 codes included. The supabase/functions/match-create/
+  // labels.ts PACE_LABELS_HE map carries slightly different wording
+  // optimized for evidence sentence templates; this client map mirrors
+  // the user's own questionnaire labels so a future "what they're looking
+  // for" section on match-profile reads the same words the peer typed.
+  // No consumer in this PR — added for the planned match-profile RPC PR.
+  relationship_pace: {
+    very_slow: 'איטי מאוד',
+    gradual: 'להכיר בהדרגה',
+    medium: 'קצב בינוני',
+    fast_with_connection: 'כשיש חיבור אני זורם/ת מהר',
+  },
+  // PR-LABELS: relationship_top_values — SAFE DISPLAY SUBSET. Mirrors
+  // only the codes from RELATIONSHIP_TOP_VALUES_OPTIONS in app/
+  // questionnaire.tsx that are safe to surface to a peer. This is NOT
+  // every questionnaire option:
+  //   * 'attraction' (משיכה) — body-adjacent; same exclusion the Edge
+  //     Function VALUE_LABELS_HE applies for evidence rendering.
+  //   * 'other' (אחר) — no concrete shared meaning; never useful as a
+  //     "shared value" label.
+  // labelFor()'s unknown-value passthrough still renders the raw code
+  // safely if a value not in this map is ever encountered, so the
+  // exclusion is a display-time filter only — it does NOT prevent the
+  // user from selecting these in the questionnaire. No consumer in
+  // this PR — added for the planned match-profile RPC PR.
+  relationship_top_values: {
+    trust: 'אמון',
+    communication: 'תקשורת',
+    humor: 'הומור',
+    stability: 'יציבות',
+    friendship: 'חברות',
+    independence: 'עצמאות',
+    ambition: 'שאפתנות',
+    family: 'משפחתיות',
+  },
 };
 
 /**
