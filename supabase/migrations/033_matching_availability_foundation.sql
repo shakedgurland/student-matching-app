@@ -275,9 +275,15 @@ BEGIN
   );
 
 EXCEPTION WHEN OTHERS THEN
-  -- Surface a clean status; do not leak SQLSTATE / table names to the
-  -- client. Mirrors the create_authorized_match exception envelope.
-  RETURN jsonb_build_object('status', 'error', 'message', SQLERRM);
+  -- Do NOT include SQLERRM here. SQLERRM is the raw Postgres error
+  -- text and can leak internal table names, column names, constraint
+  -- names, or schema details to the client. Return ONLY the generic
+  -- status — if diagnostic detail is needed for ops, log it
+  -- server-side via RAISE LOG or pg_notify, never via the user-facing
+  -- envelope. (A pre-existing SQLERRM leak in
+  -- create_authorized_match exists; that is a separate concern for
+  -- its own PR and does not justify repeating the pattern here.)
+  RETURN jsonb_build_object('status', 'error');
 END;
 $$;
 
