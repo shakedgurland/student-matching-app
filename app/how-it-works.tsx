@@ -30,38 +30,45 @@ const UI_COLORS = {
 // Pager snaps to full screen width. Cards are full-width cells with internal padding.
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
+// PR #64 — unified Step shape: every card has emoji + number + title + body.
+// Bullet rendering was removed when card 3 switched from a list to a single
+// paragraph; the simpler shape makes the three cards visually consistent and
+// reduces JSX/style surface area.
 type Step = {
   emoji: string;
   number: string;
   title: string;
-  body?: string;
-  bullets?: string[];
+  body: string;
 };
 
+// PR #64 — content refreshed to reflect the new "אני פנוי/ה להכיר" opt-in
+// model. Card 1 stays on the questionnaire (lightly tightened). Card 2 is
+// rewritten end-to-end — the old "we send you one quality match" copy
+// implied passive auto-matching; new copy explains the explicit opt-in.
+// Card 3 is rewritten — the old bullet list (72h window + 5/month) was
+// process-heavy; new copy reads as a calm promise about timing instead of
+// a rules list.
 const STEPS: Step[] = [
   {
     emoji: '📝',
     number: '1',
     title: 'עונים על שאלון עומק',
     body:
-      'השאלון שלנו עוזר לנו להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות. השאלות בנויות סביב עקרונות מוכרים ממחקרי תקשורת וזוגיות — כדי שההתאמה תהיה מבוססת על הבנה אמיתית, לא רק על תמונות.',
+      'השאלון עוזר לנו להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות — כדי שההתאמה תהיה מבוססת על חיבור אמיתי, לא רק על תמונות.',
   },
   {
     emoji: '🎯',
     number: '2',
-    title: 'מקבלים התאמה אחת איכותית',
+    title: 'מסמנים כשפנויים להכיר',
     body:
-      'במקום תור אינסופי של פרופילים, מופיעה לך התאמה אחת בכל פעם — מי שהאלגוריתם מצא כהכי מתאים עבורך כרגע. זה מאפשר להכיר את האדם שלפניך באמת, במקום להחליק על מאות פרופילים.',
+      'ב־UniMatch לא מקבלים עוד התאמה בלחיצה. כשאת/ה באמת פנוי/ה להכיר, מסמנים את זה — ואנחנו נחפש התאמה אחת איכותית ב־3 הימים הקרובים.',
   },
   {
     emoji: '💬',
     number: '3',
-    title: 'נותנים לזה צ׳אנס אמיתי',
-    bullets: [
-      'ברגע שיש התאמה — אפשר לפתוח שיחה ולהכיר.',
-      'אם לא תתחיל/י שיחה תוך 72 שעות, ההתאמה תיסגר ונציע לך את הבאה.',
-      'עד 5 התאמות בחודש — כי אנחנו מאמינים בקצב איטי ומכוון, לא בהחלקה מהירה.',
-    ],
+    title: 'התאמה אחת, בזמן הנכון',
+    body:
+      'כשנמצאת התאמה מתאימה, נפתח לכם חלון להתחיל שיחה. אם השיחה לא מתחילה בזמן, ההתאמה נסגרת — כדי לשמור על חוויה מכוונת ולא עמוסה.',
   },
 ];
 
@@ -133,24 +140,10 @@ export default function HowItWorksScreen() {
                   {step.title}
                 </ThemedText>
 
-                {step.body && (
-                  <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
-                    {step.body}
-                  </ThemedText>
-                )}
-
-                {step.bullets && (
-                  <View style={styles.bullets}>
-                    {step.bullets.map((b, i) => (
-                      <View key={i} style={styles.bulletRow}>
-                        <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.accent }]} />
-                        <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>
-                          {b}
-                        </ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                {/* PR #64 — body is now always present (no bullet branch). */}
+                <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
+                  {step.body}
+                </ThemedText>
               </View>
             </View>
           ))}
@@ -224,35 +217,38 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 24 },
   scroller: { flex: 1 },
   scrollerContent: { alignItems: 'stretch' },
+  // PR #64 — tightened paddings + flex:1 on the cardCell so the card below
+  // can stretch to fill the available vertical space. Previously the card
+  // floated near the top with a lot of empty space below, especially on
+  // tall iPhones — the user reported it looking "small / lost in the
+  // middle". Reduced horizontal/top/bottom padding gives the card more
+  // surface area without losing margin away from screen edges.
   cardCell: {
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 16,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
     justifyContent: 'flex-start',
   },
-  // PR-RTL-POLISH (final, post-review): card.alignItems kept at 'center'
-  // so the emoji circle stays as a centered visual hero — that reads as
-  // a more premium iOS card than a right-shifted decorative icon. Text
-  // right-anchoring is fully achieved INDEPENDENTLY of this value:
-  // every text style below (stepLabel / title / body / bulletText) sets
-  // its own alignSelf:'stretch' + textAlign:'right' + writingDirection:
-  // 'rtl', which overrides the card's cross-axis alignment for those
-  // children. So:
+  // PR-RTL-POLISH (preserved): card.alignItems stays at 'center' so the
+  // emoji circle remains a centered visual hero. Text right-anchoring is
+  // achieved INDEPENDENTLY of this value: every text style below
+  // (stepLabel / title / body) sets its own alignSelf:'stretch' +
+  // textAlign:'right' + writingDirection:'rtl', which overrides the
+  // card's cross-axis alignment for those children.
   //   * emoji circle → centered (no alignSelf override; inherits 'center')
-  //   * stepLabel / title / body / bullets → stretched full-width, text
-  //     right-aligned (their own alignSelf:'stretch' overrides 'center')
-  // Net: premium centered hero icon + fully right-anchored Hebrew text
-  // block. No "centered English layout" feel because all the text reads
-  // from the right edge; the emoji is decorative, not part of the
-  // reading flow.
-  // BATCH-G1 (preserved): restrained polish — padding 28→24, gap 14→12.
-  // Shadow stays at premium-soft 0.06.
+  //   * stepLabel / title / body → stretched full-width, text right-aligned
+  // PR #64 — card.flex:1 so the card stretches to fill the cardCell's
+  // available height (cardCell is now also flex:1). Padding bumped 24→28
+  // and gap 12→16 so the now-larger card breathes with the new content.
+  // Shadow kept at premium-soft 0.06; border + radius unchanged.
   card: {
+    flex: 1,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 24,
+    padding: 28,
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
@@ -320,33 +316,9 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
-  bullets: {
-    gap: 12,
-    alignSelf: 'stretch',
-    marginTop: 4,
-  },
-  // BATCH-G1: TestFlight build 14 showed bullet dots on the LEFT of
-  // each bullet — wrong for Hebrew. JSX is [Dot, Text]; under RTL
-  // with `row` the first JSX child (Dot) sits on the RIGHT and the
-  // text flows leftward from it — natural Hebrew reading order.
-  // The earlier row-reverse pin double-flipped it back to LTR.
-  bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bulletDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  bulletText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 24,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  // PR #64 — removed unused bullet styles (bullets, bulletRow, bulletDot,
+  // bulletText) since card 3 no longer uses a bullet list. All three
+  // cards now render the same body-text shape.
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
