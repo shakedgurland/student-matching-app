@@ -11,9 +11,11 @@
 // / HOW_IT_WORKS_SECONDARY_CTA) — how-it-works doesn't have signup/login
 // CTAs because logged-in users see it from Settings.
 //
-// Content reflects the "אני פנוי/ה להכיר" availability-based matching
-// model (PR #61-#63 backend + PR #65 crash hardening + PR #67 home-tab
-// CTA clarity).
+// Content reflects the automatic-matching model restored in migration 035 +
+// the matching client refresh: matching happens automatically for eligible
+// users, recent-activity is a behind-the-scenes ranking preference (never
+// surfaced to the UI), and the prior "אני פנוי/ה להכיר" opt-in language
+// has been removed.
 
 export type HowItWorksStep = {
   emoji: string;
@@ -26,15 +28,17 @@ export type HowItWorksStep = {
 export const HOW_IT_WORKS_TAGLINE = 'לא עוד אפליקציית החלקות אינסופית';
 
 // Subtitle that explains the product positioning under the headline.
-// Long version per spec — must appear verbatim in both welcome AND
-// how-it-works (no shortening, no paraphrase).
+// Must appear verbatim in both welcome AND how-it-works (no shortening,
+// no paraphrase). Word change vs PR #68: "זמינות" → "פעילות" so the
+// subtitle reflects the activity-based ranking signal that replaced the
+// opt-in availability gate.
 export const HOW_IT_WORKS_SUBTITLE =
-  'UniMatch מחברת בין סטודנטים לפי התאמה אמיתית, זמינות ורצון להכיר — לא לפי עוד גלילה שלא נגמרת.';
+  'UniMatch מחברת בין סטודנטים לפי התאמה אמיתית, פעילות ורצון להכיר — לא לפי עוד גלילה שלא נגמרת.';
 
-// 3-card explainer. Card 2 explicitly covers BOTH outcomes (instant
-// match possible when a peer is also available, AND signal stays
-// up to 3 days otherwise) so the wording doesn't overpromise either
-// instant matching or a guaranteed 3-day wait.
+// 3-card explainer. Card 2 was rewritten to describe automatic matching
+// (no opt-in tap) — the system picks the most-fitting candidate among
+// users who pass the user's required settings. No percentages, no score
+// chip language.
 export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     emoji: '📝',
@@ -46,9 +50,9 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     emoji: '🎯',
     number: '2',
-    title: 'מסמנים כשפנויים להכיר',
+    title: 'התאמה אוטומטית, בלי החלקות',
     body:
-      "כשאת/ה באמת פנוי/ה להכיר, לוחצים על 'אני פנוי/ה להכיר'. אם קיימת התאמה מתאימה, היא יכולה להיפתח גם תוך כמה רגעים. אם לא, הסימון נשאר פעיל עד 3 ימים.",
+      'כשיש משתמשים פעילים שעוברים את הגדרות החובה שלך, UniMatch בוחרת עבורך את ההתאמה המתאימה ביותר מבין האפשרויות — בלי להציג אחוזים ובלי משחקים.',
   },
   {
     emoji: '💬',
