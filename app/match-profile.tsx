@@ -633,12 +633,17 @@ export default function MatchProfileScreen() {
 
   const isClosed = match.status === 'expired' || match.status === 'unmatched';
   const isChatStarted = match.status === 'chat_started';
-  const ctaLabel = fromChat
-    ? 'חזרה לשיחה'
-    : isChatStarted
-      ? 'להמשיך לשיחה'
-      : 'פתח/י צ׳אט';
-  const backLabel = fromChat ? 'חזרה לשיחה' : 'חזרה';
+  // PR-BUILD24-HARDEN: standardized to "חזרה לצ׳אט" for both the
+  // fromChat path AND the chat_started path so users always see the
+  // exact same wording for "back to chat." Build #24 QA reported the
+  // previous mix of "חזרה לשיחה" / "להמשיך לשיחה" was confusing —
+  // they read as two different actions when they should read as one.
+  // "פתח/י צ׳אט" is preserved for the rare path where the user lands
+  // on match-profile with an 'active' (chat-not-yet-started) match,
+  // because at that point the user has never been in chat, so "back"
+  // wouldn't be the right verb.
+  const ctaLabel = (fromChat || isChatStarted) ? 'חזרה לצ׳אט' : 'פתח/י צ׳אט';
+  const backLabel = (fromChat || isChatStarted) ? 'חזרה לצ׳אט' : 'חזרה';
 
   // Display name + initial fallback (peer may be null on terminal match).
   const displayName = (peer?.full_name || peer?.username || 'ההתאמה שלך').trim();

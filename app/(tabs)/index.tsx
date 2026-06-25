@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
@@ -91,6 +91,43 @@ export default function MatchSelectionScreen() {
   // the screen. Fetched once on mount alongside fetchCurrentMatch.
   const [onboardingMode, setOnboardingMode] = useState<string | null>(null);
 
+  // PR-BUILD24-HARDEN: lifecycle / race-safety refs.
+  //
+  // isMountedRef — flipped on mount and on unmount cleanup. All setState
+  //   calls after an await check it. Without this, a button press that
+  //   triggers navigation to /match-result can land setState back on the
+  //   unmounted Home tab, producing native warnings and (under iOS 26)
+  //   contributing to RCTTurboModule SIGABRT chains.
+  //
+  // settingAvailabilityRef — SYNCHRONOUS in-flight guard for the "אני
+  //   פנוי/ה להכיר" button. The previous PR #63 implementation used the
+  //   state value `settingAvailability` directly:
+  //     if (settingAvailability) return;
+  //     setSettingAvailability(true);
+  //   State updates are async, so two taps fired within a single React
+  //   frame both observed `settingAvailability === false` and both
+  //   proceeded. That produced 2× set_matching_availability RPC calls,
+  //   2× findAndCreateBestMatch invocations, and 2× setCurrentMatch
+  //   writes — which fanned out into 2× router.replace from the auto-
+  //   forward useEffect below. iOS 26's stricter UIAlertController /
+  //   navigation timing turned that race into the EXC_CRASH (SIGABRT)
+  //   reported in TestFlight Build #24 (Thread 11, performVoidMethod-
+  //   Invocation). A ref is synchronous and closes the window.
+  //
+  // navigatingToMatchRef — one-shot guard for the auto-forward useEffect.
+  //   Tracks the match-id we've already redirected to so a re-render with
+  //   the same currentMatch doesn't fire router.replace twice. We also
+  //   release it when the match-id genuinely changes.
+  //
+  // alertingRef — serializes Alert.alert calls. iOS will throw NSException
+  //   if two UIAlertControllers are presented in overlapping animation
+  //   frames. Even though this code shouldn't reach two alerts per press,
+  //   defense-in-depth via safeAlert() keeps that path closed.
+  const isMountedRef = useRef(true);
+  const settingAvailabilityRef = useRef(false);
+  const navigatingToMatchRef = useRef<string | null>(null);
+  const alertingRef = useRef(false);
+
   const isDark = colorScheme === 'dark';
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -99,6 +136,16 @@ export default function MatchSelectionScreen() {
     textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255, 255, 255, 0.1)' : UI_COLORS.border,
   };
+
+  // PR-BUILD24-HARDEN: mount tracking. Pairs with isMountedRef.current
+  // checks scattered through the async handlers below. Empty deps → runs
+  // once on mount, cleanup runs once on unmount.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     logScreenView('Home');
@@ -130,10 +177,44 @@ export default function MatchSelectionScreen() {
   useEffect(() => {
     if (loading) return;
     const matchId = currentMatch?.id;
-    if (!matchId) return;
+    if (!matchId) {
+      // No open match — release the guard so a future match resolution
+      // can navigate cleanly.
+      navigatingToMatchRef.current = null;
+      return;
+    }
+    // PR-BUILD24-HARDEN: one-shot per match-id. If state churn re-runs
+    // this effect with the SAME match-id (e.g., fetchCurrentMatch and
+    // handleFindMatch both call setCurrentMatch with the same row), do
+    // not fire a second router.replace. Two router.replace calls in
+    // overlapping frames is one of the suspected vectors for the iOS 26
+    // SIGABRT (Thread 11, RCTTurboModule path).
+    if (navigatingToMatchRef.current === matchId) return;
+    navigatingToMatchRef.current = matchId;
     const target = currentMatch?.status === 'chat_started' ? '/chat' : '/match-result';
     router.replace({ pathname: target as any, params: { match_id: matchId } });
   }, [currentMatch?.id, currentMatch?.status, loading, router]);
+
+  // PR-BUILD24-HARDEN: alert serializer. iOS 26 is stricter about
+  // concurrent UIAlertController presentations — overlapping presentations
+  // can throw NSException from a TurboModule worker thread, which
+  // terminates the process (EXC_CRASH / SIGABRT). This helper drops new
+  // alerts while one is already up. The buttons callback releases the
+  // lock so the next alert can present cleanly. Also short-circuits if
+  // the component is unmounted (e.g., after navigation away).
+  const safeAlert = (title: string, message?: string) => {
+    if (!isMountedRef.current) return;
+    if (alertingRef.current) return;
+    alertingRef.current = true;
+    Alert.alert(title, message, [
+      {
+        text: 'אישור',
+        onPress: () => {
+          alertingRef.current = false;
+        },
+      },
+    ]);
+  };
 
   const fetchCurrentMatch = async () => {
     try {
@@ -393,21 +474,25 @@ export default function MatchSelectionScreen() {
   // path that initiates matching anymore — no more silent auto-searches
   // on home-tab mount.
   const handleSetAvailability = async () => {
-    if (settingAvailability) return;
+    // PR-BUILD24-HARDEN: SYNCHRONOUS ref guard. Replaces the old
+    // state-based `if (settingAvailability) return;` which had a tap
+    // race — two rapid taps both saw `settingAvailability === false`
+    // before either's setSettingAvailability(true) landed, both
+    // proceeded, and fanned out into 2× RPC + 2× setCurrentMatch +
+    // 2× router.replace. iOS 26 turned that race into the
+    // EXC_CRASH (SIGABRT) reported in Build #24.
+    if (settingAvailabilityRef.current) return;
+    settingAvailabilityRef.current = true;
     setSettingAvailability(true);
     try {
       logButtonTap('Home', 'set_availability');
       const result = await setMatchingAvailability();
+      if (!isMountedRef.current) return;
 
       switch (result.status) {
         case 'set':
         case 'already_available':
           setAvailableUntil(result.availableUntil);
-          // (Analytics event for this is intentionally NOT added here —
-          //  EventType union in lib/analytics.ts doesn't include an
-          //  availability event yet, and broadening it is out of scope
-          //  for this PR. logButtonTap('Home', 'set_availability') above
-          //  already captures that the user pressed the button.)
           // User explicitly opted in — run one match search attempt.
           // findAndCreateBestMatch handles its own loading state via
           // setMatching. If it lands a match, the auto-forward useEffect
@@ -415,42 +500,49 @@ export default function MatchSelectionScreen() {
           await handleFindMatch();
           return;
         case 'already_has_active':
-          // The user already has an open match somehow — refresh state
-          // so we redirect to it.
-          fetchCurrentMatch();
+          // PR-BUILD24-HARDEN: await fetchCurrentMatch so the finally
+          // releases the in-flight guard AFTER state has settled. The
+          // previous fire-and-forget call could have setCurrentMatch
+          // resolve AFTER settingAvailability flipped back to false,
+          // re-enabling the button mid-navigation.
+          await fetchCurrentMatch();
           return;
         case 'monthly_cap_reached':
-          setCapReached(true);
-          setAvailableUntil(null);
+          if (isMountedRef.current) {
+            setCapReached(true);
+            setAvailableUntil(null);
+          }
           return;
         case 'incomplete_profile':
-          Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
+          safeAlert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
           return;
         case 'profile_missing':
         case 'unauthorized':
-          Alert.alert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
+          safeAlert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
           return;
         case 'error':
         default:
-          Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+          safeAlert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
           return;
       }
     } catch (e) {
       logError('Home', 'set_availability_failed', e);
-      Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+      safeAlert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
     } finally {
-      setSettingAvailability(false);
+      settingAvailabilityRef.current = false;
+      if (isMountedRef.current) setSettingAvailability(false);
     }
   };
 
   const handleFindMatch = async (userId?: string, silent: boolean = false) => {
     try {
-      setMatching(true);
+      if (isMountedRef.current) setMatching(true);
       logEvent('match_search_started');
       const targetUserId = userId || (await supabase.auth.getUser()).data.user?.id;
       if (!targetUserId) return;
 
       const newMatch = await findAndCreateBestMatch(targetUserId);
+      if (!isMountedRef.current) return;
 
       if (newMatch && 'matchId' in newMatch) {
         // Success path: backend returned 'created'. Set currentMatch
@@ -484,13 +576,17 @@ export default function MatchSelectionScreen() {
             break;
           case 'monthly_cap_reached':
             // Drives the cap empty-state copy below.
-            setCapReached(true);
-            setAvailableUntil(null);
+            if (isMountedRef.current) {
+              setCapReached(true);
+              setAvailableUntil(null);
+            }
             break;
           case 'already_has_active':
             // Caller already has an active match — re-fetch state so
             // the auto-forward useEffect routes them to /match-result.
-            fetchCurrentMatch();
+            // PR-BUILD24-HARDEN: awaited so callers (e.g.,
+            // handleSetAvailability) settle state before their finally.
+            await fetchCurrentMatch();
             break;
           case 'not_available':
             // PR #63: caller has no live availability window. This
@@ -501,19 +597,13 @@ export default function MatchSelectionScreen() {
             await fetchAvailabilityAndCapState(targetUserId);
             break;
           case 'incomplete_profile':
-            if (!silent) {
-              Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
-            }
+            if (!silent) safeAlert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
             break;
           case 'unauthorized':
-            if (!silent) {
-              Alert.alert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
-            }
+            if (!silent) safeAlert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
             break;
           case 'error':
-            if (!silent) {
-              Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
-            }
+            if (!silent) safeAlert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
             break;
         }
         return;
@@ -522,14 +612,12 @@ export default function MatchSelectionScreen() {
       // Defensive: malformed response shape. Should not happen with the
       // current Edge Function contract.
       logEvent('match_not_found');
-      if (!silent) {
-        Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
-      }
+      if (!silent) safeAlert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
     } catch (error) {
       logError('Home', 'match_search_failed', error);
       console.error('Error in finding match:', error);
     } finally {
-      setMatching(false);
+      if (isMountedRef.current) setMatching(false);
     }
   };
 
