@@ -703,15 +703,24 @@ export default function MatchSelectionScreen() {
             </View>
           ) : availableUntil ? (
             // 3. Availability live — calm waiting state, no button.
+            // PR-CTA-CLARITY: title + body rewritten for honesty. The
+            // previous "מחפשים לך התאמה איכותית" + "נעדכן ברגע שנמצא"
+            // implied an active background matcher running on the
+            // user's behalf. The code does NOT have one: the only cron
+            // job is expire_stale_matches (migration 024). Matching
+            // for this user happens when (a) they tap the button (one
+            // attempt right then), or (b) another user taps and the
+            // algorithm picks this user. New copy reflects that
+            // accurately so the experience doesn't overpromise.
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconContainer}>
                 <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
               </View>
               <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
-                מחפשים לך התאמה איכותית
+                את/ה פנוי/ה להכיר
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
-                סימנת שאת/ה פנוי/ה להכיר. נעדכן ברגע שנמצא התאמה שמתאימה לשאלון שלך.
+                הסימון שלך פעיל. כשמשתמש/ת מתאים/ה נוסף/ת יסמן/תסמן שגם הוא/היא פנוי/ה להכיר, נבדוק אם יש התאמה.
               </ThemedText>
               <ThemedText style={[styles.availabilityCountdown, { color: dynamicColors.textLight }]}>
                 {formatAvailabilityCountdown(availableUntil)}
@@ -726,8 +735,14 @@ export default function MatchSelectionScreen() {
               <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
                 מוכנ/ה להכיר מישהו חדש?
               </ThemedText>
+              {/* PR-CTA-CLARITY: helper text rewritten. The previous
+                  "ל־3 הימים הקרובים ונחפש" implied the search runs for
+                  3 days; reality is one immediate attempt now + a
+                  "stay available" window of up to 3 days. New copy is
+                  explicit about both phases and uses "עד 3 ימים" (up
+                  to) instead of a hard 3-day promise. */}
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
-                נסמן שאת/ה פנוי/ה להכיר ל־3 הימים הקרובים ונחפש התאמה אחת איכותית.
+                נסמן שאת/ה פנוי/ה להכיר ונחפש התאמה איכותית. אם לא נמצאה התאמה מתאימה עכשיו, הסימון יישאר פעיל עד 3 ימים.
               </ThemedText>
               <TouchableOpacity
                 style={[
