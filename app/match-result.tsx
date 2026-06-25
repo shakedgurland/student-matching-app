@@ -448,11 +448,16 @@ export default function MatchResultScreen() {
     return 'אם אף אחד לא שולח הודעה בזמן — ההתאמה תיסגר';
   })();
 
-  // CTA copy — "להמשיך לשיחה" once any messages exist or chat started,
-  // otherwise the initiating "להתחיל שיחה". Disabled visual is handled
-  // separately; copy doesn't change for disabled state (iOS convention).
+  // CTA copy — PR-BUILD24-HARDEN: standardized to "חזרה לצ׳אט" once
+  // chat_started or any message exists, so the wording is consistent
+  // with match-profile's same CTA. Previously "להמשיך לשיחה" here vs
+  // "חזרה לשיחה" / "להמשיך לשיחה" on match-profile read as two
+  // different actions. "להתחיל שיחה" stays for fresh active matches
+  // (no chat yet — "start chat" is the right verb).
+  // Disabled visual is handled separately; copy doesn't change for
+  // disabled state (iOS convention).
   const ctaLabel = (isChatStarted || iSent || peerSent)
-    ? 'להמשיך לשיחה'
+    ? 'חזרה לצ׳אט'
     : 'להתחיל שיחה';
 
   return (
