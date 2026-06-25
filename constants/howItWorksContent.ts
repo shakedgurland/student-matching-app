@@ -5,61 +5,80 @@
 //   * app/welcome.tsx — first-launch onboarding screen
 //   * app/how-it-works.tsx — Settings-accessed explainer
 //
-// Keeping the content in one place prevents copy drift between the two
-// surfaces. Both screens render the SAME headline + subtitle + 3 cards.
-// Only the welcome screen renders the auth buttons (HOW_IT_WORKS_PRIMARY_CTA
-// / HOW_IT_WORKS_SECONDARY_CTA) — how-it-works doesn't have signup/login
-// CTAs because logged-in users see it from Settings.
+// Both screens render the SAME headline + subtitle + 3 cards. Only
+// welcome renders the auth buttons (HOW_IT_WORKS_PRIMARY_CTA /
+// HOW_IT_WORKS_SECONDARY_CTA); how-it-works is reached from Settings
+// for already-logged-in users.
 //
-// Content reflects the automatic-matching model restored in migration 035 +
-// the matching client refresh: matching happens automatically for eligible
-// users, recent-activity is a behind-the-scenes ranking preference (never
-// surfaced to the UI), and the prior "אני פנוי/ה להכיר" opt-in language
-// has been removed.
+// Copy reflects the current 3-tab product (Match / Chat / Profile)
+// and the automatic-matching model. No score percentages, no opt-in
+// "אני פנוי/ה להכיר" surface, no "last seen" surface, no
+// implementation-internal language.
+
+// Names below are SF Symbols mapped in components/ui/icon-symbol.tsx.
+// Adding a new value here requires extending that mapping.
+type IconName =
+  | 'person.text.rectangle.fill'
+  | 'sparkles'
+  | 'bubble.left.fill';
 
 export type HowItWorksStep = {
-  emoji: string;
+  /** SF Symbol name rendered in a soft tinted circle on the card. */
+  iconName: IconName;
+  /** Step number shown as eyebrow ("שלב 1" / "שלב 2" / "שלב 3"). */
   number: string;
+  /** Hebrew title, right-aligned RTL. */
   title: string;
+  /** Hebrew body, right-aligned RTL. */
   body: string;
+  /**
+   * Per-card warm accent background for the icon circle. Three tasteful
+   * summery tints (soft peach, light coral, warm cream) sourced locally
+   * so the screens get a happy-bright per-step distinction without
+   * inventing app-wide color tokens. Scoped to onboarding/how-it-works.
+   */
+  accentSurface: string;
 };
 
-// Hero tagline used as the main headline above the cards.
+// Hero tagline used as the small pill above the subtitle. Kept terse;
+// the subtitle below carries the substance.
 export const HOW_IT_WORKS_TAGLINE = 'לא עוד אפליקציית החלקות אינסופית';
 
-// Subtitle that explains the product positioning under the headline.
-// Must appear verbatim in both welcome AND how-it-works (no shortening,
-// no paraphrase). Word change vs PR #68: "זמינות" → "פעילות" so the
-// subtitle reflects the activity-based ranking signal that replaced the
-// opt-in availability gate.
+// Main subtitle — current product framing. Hard requirement: identical
+// verbatim in both welcome AND how-it-works.
 export const HOW_IT_WORKS_SUBTITLE =
-  'UniMatch מחברת בין סטודנטים לפי התאמה אמיתית, פעילות ורצון להכיר — לא לפי עוד גלילה שלא נגמרת.';
+  'UniMatch מחברת בין סטודנטים לפי שאלון התאמה, הגדרות חובה ורצון אמיתי להכיר — בלי החלקות אינסופיות.';
 
-// 3-card explainer. Card 2 was rewritten to describe automatic matching
-// (no opt-in tap) — the system picks the most-fitting candidate among
-// users who pass the user's required settings. No percentages, no score
-// chip language.
+// 3-card explainer. Icons mirror the 3 bottom tabs the user lives in:
+//   1. questionnaire icon ↔ profile-setup phase
+//   2. sparkles ↔ Match tab
+//   3. chat bubble ↔ Chat tab
+// Per-card accent surfaces give a gentle peach → coral → cream gradient
+// across the pager — premium and warm without competing with brand.
 export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
-    emoji: '📝',
+    iconName: 'person.text.rectangle.fill',
     number: '1',
-    title: 'שאלון התאמה אמיתי',
+    title: 'שאלון שמכיר אותך באמת',
     body:
-      'במקום להסתמך רק על תמונות, עונים פעם אחת על שאלון שעוזר להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות.',
+      'עונים פעם אחת על שאלון התאמה שמבין מה חשוב לך בקשר: סגנון תקשורת, קצב, כוונות, ערכים והגדרות חובה. זה הבסיס להתאמה מדויקת יותר.',
+    accentSurface: '#FFF0EA',
   },
   {
-    emoji: '🎯',
+    iconName: 'sparkles',
     number: '2',
-    title: 'התאמה אוטומטית, בלי החלקות',
+    title: 'התאמה אחת בכל פעם',
     body:
-      'כשיש משתמשים פעילים שעוברים את הגדרות החובה שלך, UniMatch בוחרת עבורך את ההתאמה המתאימה ביותר מבין האפשרויות — בלי להציג אחוזים ובלי משחקים.',
+      'UniMatch מתאימה לך מועמד או מועמדת שמתאימים לך באמת. מציגה התאמה אחת איכותית. עד 5 התאמות בחודש — כדי לשמור על חוויה מדויקת בלי עומס.',
+    accentSurface: '#FFE9EB',
   },
   {
-    emoji: '💬',
+    iconName: 'bubble.left.fill',
     number: '3',
-    title: 'התאמה אחת, בזמן הנכון',
+    title: 'צ׳אט שנפתח כשיש התאמה',
     body:
-      'ב־UniMatch מקבלים עד 5 התאמות בחודש, אחת בכל פעם. כשנמצאת התאמה, יש לכם 72 שעות להתחיל שיחה הדדית. אם השיחה לא מתחילה בזמן, ההתאמה נסגרת — כדי לשמור על חוויה מכוונת ולא עמוסה.',
+      'כשיש התאמה פעילה, הצ׳אט מחכה בטאב שלו. יש לכם 72 שעות להתחיל שיחה; אם זה לא קורה, ההתאמה נסגרת והמערכת חוזרת לחפש את ההתאמה הבאה.',
+    accentSurface: '#FFF5E0',
   },
 ];
 

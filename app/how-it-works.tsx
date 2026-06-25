@@ -109,33 +109,43 @@ export default function HowItWorksScreen() {
           style={styles.scroller}
           contentContainerStyle={styles.scrollerContent}
         >
-          {STEPS.map((step) => (
-            <View key={step.number} style={[styles.cardCell, { width: SCREEN_WIDTH }]}>
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
-                ]}
-              >
-                <View style={[styles.emojiCircle, { backgroundColor: dynamicColors.surface }]}>
-                  <ThemedText style={styles.emoji}>{step.emoji}</ThemedText>
+          {STEPS.map((step) => {
+            // Dark-mode tints: tone the per-card accent down so the
+            // bright peach/coral/cream don't fight a dark card surface.
+            // Light mode uses the warm tint verbatim from constants.
+            const iconBg = isDark
+              ? 'rgba(255, 138, 0, 0.18)'
+              : step.accentSurface;
+            return (
+              <View key={step.number} style={[styles.cardCell, { width: SCREEN_WIDTH }]}>
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+                  ]}
+                >
+                  {/* Per-card warm tinted icon circle. Same icon set as
+                      app/welcome.tsx so onboarding and "איך זה עובד"
+                      stay visually identical. */}
+                  <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
+                    <IconSymbol name={step.iconName} size={40} color={UI_COLORS.branding} />
+                  </View>
+
+                  <ThemedText style={[styles.stepLabel, { color: UI_COLORS.branding }]}>
+                    שלב {step.number}
+                  </ThemedText>
+
+                  <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
+                    {step.title}
+                  </ThemedText>
+
+                  <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
+                    {step.body}
+                  </ThemedText>
                 </View>
-
-                <ThemedText style={[styles.stepLabel, { color: UI_COLORS.branding }]}>
-                  שלב {step.number}
-                </ThemedText>
-
-                <ThemedText style={[styles.title, { color: dynamicColors.text }]}>
-                  {step.title}
-                </ThemedText>
-
-                {/* PR #66 — body always present (bullet branch removed). */}
-                <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
-                  {step.body}
-                </ThemedText>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
 
         <View style={styles.dotsRow}>
@@ -262,17 +272,16 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 4,
   },
-  emojiCircle: {
+  // Renamed from emojiCircle — now hosts an SF Symbol via IconSymbol.
+  // Per-card accent surface is supplied inline (peach / coral / cream)
+  // for a happy summery progression across the pager.
+  iconCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
-  },
-  emoji: {
-    fontSize: 42,
-    lineHeight: 50,
   },
   // PR-RTL-POLISH (preserved): right-aligned + stretched to span card width.
   stepLabel: {

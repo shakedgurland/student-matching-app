@@ -31,6 +31,8 @@ const MAPPING = {
   'envelope.fill': 'email',
   'person.text.rectangle.fill': 'contact-page',
   'checkmark.shield.fill': 'verified-user',
+  // 3-tab restructure — Chat tab icon.
+  'bubble.left.fill': 'chat',
 } as IconMapping;
 
 /**
