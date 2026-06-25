@@ -12,12 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 // PR #66 — shared 3-card content. Same source of truth as
 // app/how-it-works.tsx so the first-launch onboarding and the
 // Settings explainer cannot drift apart.
-// PR-LONG-COPY: imported subtitle + button labels so the exact same
-// long-form headline + subtitle render in both screens, and the
-// primary CTA wording stays in one place.
 import {
   HOW_IT_WORKS_PRIMARY_CTA,
   HOW_IT_WORKS_SECONDARY_CTA,
@@ -152,8 +150,14 @@ export default function WelcomeScreen() {
           {HOW_IT_WORKS_STEPS.map((step) => (
             <View key={step.number} style={[styles.cardCell, { width: SCREEN_WIDTH }]}>
               <View style={[styles.card, { backgroundColor: UI_COLORS.card, borderColor: UI_COLORS.border }]}>
-                <View style={[styles.emojiCircle, { backgroundColor: UI_COLORS.surface }]}>
-                  <ThemedText style={styles.emoji}>{step.emoji}</ThemedText>
+                {/* Per-card warm tinted icon circle. Surface color is
+                    scoped per-step (peach → coral → cream) so the pager
+                    has a gentle summery progression. Icon uses brand
+                    coral on top of the soft surface — premium, not
+                    childish, and consistent with the rest of the app's
+                    icon language. */}
+                <View style={[styles.iconCircle, { backgroundColor: step.accentSurface }]}>
+                  <IconSymbol name={step.iconName} size={36} color={UI_COLORS.branding} />
                 </View>
                 <ThemedText style={[styles.stepLabel, { color: UI_COLORS.branding }]}>
                   שלב {step.number}
@@ -298,17 +302,17 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 3,
   },
-  emojiCircle: {
+  // Renamed from emojiCircle — now hosts an SF Symbol via IconSymbol
+  // (PR #66's emoji rendering was removed; emojis are no longer used
+  // in app copy). Soft per-card accent surface is supplied inline so
+  // the three cards have a gentle peach → coral → cream progression.
+  iconCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
-  },
-  emoji: {
-    fontSize: 38,
-    lineHeight: 46,
   },
   stepLabel: {
     fontSize: 13,
