@@ -76,7 +76,21 @@ const OUTCOME_OPTIONS: { label: string; value: OutcomeStatus }[] = [
 
 export default function MatchFeedbackScreen() {
   const router = useRouter();
-  const { matchId, stage } = useLocalSearchParams<{ matchId: string; stage: string }>();
+  // PR #70 follow-up — accept BOTH route-param naming conventions and
+  // normalize to a single internal `matchId`. Historically this screen
+  // read only `matchId` (camelCase), but every actual caller in the app
+  // (match-result, MatchResultContent) pushed `match_id` (snake_case),
+  // which silently produced `matchId === undefined` and short-circuited
+  // submit. The fix is backwards-compatible: any caller passing either
+  // shape now resolves correctly. Missing both still safely no-ops
+  // (handleSubmit's `if (!matchId) return;` continues to guard).
+  const params = useLocalSearchParams<{
+    matchId?: string;
+    match_id?: string;
+    stage?: string;
+  }>();
+  const matchId = params.matchId ?? params.match_id;
+  const stage = params.stage;
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
 

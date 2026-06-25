@@ -74,7 +74,14 @@ export default function ChatTabScreen() {
         if (isMountedRef.current) setLoading(true);
         try {
           const { data: { user } } = await supabase.auth.getUser();
-          if (cancelled || !user) {
+          // PR #70 follow-up — split the previously-combined cancellation
+          // and unauthenticated branches. A `cancelled` flag means the
+          // tab simply lost focus mid-resolve; we must NOT clear
+          // openMatchId / loading in that case (it caused a brief
+          // empty-state flash on rapid tab tap-and-return). Only an
+          // actually-missing user warrants resetting state.
+          if (cancelled) return;
+          if (!user) {
             if (isMountedRef.current) {
               setOpenMatchId(null);
               setLoading(false);
@@ -99,6 +106,7 @@ export default function ChatTabScreen() {
             setLoading(false);
           }
         } catch (err) {
+          if (cancelled) return;
           console.error('Chat tab — match resolve failed:', err);
           if (isMountedRef.current) {
             setOpenMatchId(null);

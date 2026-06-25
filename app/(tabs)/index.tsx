@@ -438,9 +438,17 @@ export default function MatchSelectionScreen() {
   // bottom tab bar persists. onOpenChat switches to the Chat tab
   // (router.navigate is the Expo Router primitive for tab navigation —
   // it does not push a duplicate stack route).
+  //
+  // PR #70 follow-up — `key={currentMatch.id}` forces a full unmount +
+  // remount of MatchResultContent if the user's active match id ever
+  // changes while the Match tab stays mounted. Defense-in-depth: the
+  // component's internal loadMatch() also resets local state on every
+  // matchId change, so this is belt-and-suspenders rather than load-
+  // bearing — but the explicit key makes the lifecycle obviously safe.
   if (currentMatch?.id) {
     return (
       <MatchResultContent
+        key={currentMatch.id}
         matchId={currentMatch.id}
         onOpenChat={() => router.navigate('/(tabs)/chat' as any)}
       />
