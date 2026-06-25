@@ -15,8 +15,14 @@ import { ThemedView } from '@/components/themed-view';
 // PR #66 — shared 3-card content. Same source of truth as
 // app/how-it-works.tsx so the first-launch onboarding and the
 // Settings explainer cannot drift apart.
+// PR-LONG-COPY: imported subtitle + button labels so the exact same
+// long-form headline + subtitle render in both screens, and the
+// primary CTA wording stays in one place.
 import {
+  HOW_IT_WORKS_PRIMARY_CTA,
+  HOW_IT_WORKS_SECONDARY_CTA,
   HOW_IT_WORKS_STEPS,
+  HOW_IT_WORKS_SUBTITLE,
   HOW_IT_WORKS_TAGLINE,
 } from '@/constants/howItWorksContent';
 
@@ -118,12 +124,18 @@ export default function WelcomeScreen() {
           </ThemedText>
         </View>
 
-        {/* Tagline badge — frames the product before the cards. */}
+        {/* PR-LONG-COPY: headline + subtitle pulled from the shared
+            content file so welcome and how-it-works show the EXACT
+            same text. Headline reads as the lead; subtitle expands
+            the product positioning in one sentence. */}
         <View style={[styles.badge, { backgroundColor: UI_COLORS.surface, borderColor: UI_COLORS.branding + '20' }]}>
           <ThemedText style={[styles.badgeText, { color: UI_COLORS.branding }]}>
             {HOW_IT_WORKS_TAGLINE}
           </ThemedText>
         </View>
+        <ThemedText style={[styles.subtitle, { color: UI_COLORS.textLight }]}>
+          {HOW_IT_WORKS_SUBTITLE}
+        </ThemedText>
 
         {/* PR #66 — 3-card horizontal pager mirroring app/how-it-works.tsx.
             Same content (HOW_IT_WORKS_STEPS), same card shape, same RTL
@@ -174,21 +186,25 @@ export default function WelcomeScreen() {
           })}
         </View>
 
-        {/* Auth actions — signup primary, login secondary. Routing
-            preserved verbatim from the previous welcome screen. */}
+        {/* Auth actions — primary "להתחיל" (signup), secondary
+            "כבר יש לי חשבון" (login). PR-LONG-COPY: button labels
+            sourced from shared content so wording stays consistent.
+            Routing preserved verbatim from the previous welcome
+            screen — primary still navigates to /signup, secondary
+            still navigates to /login. */}
         <View style={styles.buttonSection}>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: UI_COLORS.primary }]}
             activeOpacity={0.85}
             onPress={() => router.push('/signup')}>
-            <ThemedText style={styles.primaryButtonText}>הרשמה</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>{HOW_IT_WORKS_PRIMARY_CTA}</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.secondaryButton, { borderColor: UI_COLORS.border, backgroundColor: '#FFFFFF' }]}
             onPress={() => router.push('/login')}>
             <ThemedText style={[styles.secondaryButtonText, { color: UI_COLORS.text }]}>
-              כבר יש לי חשבון
+              {HOW_IT_WORKS_SECONDARY_CTA}
             </ThemedText>
           </TouchableOpacity>
 
@@ -239,6 +255,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     writingDirection: 'rtl',
+  },
+  // PR-LONG-COPY: subtitle under the tagline badge. Same string also
+  // rendered by app/how-it-works.tsx. Center-aligned because it reads
+  // as a hero subtitle, not as in-card prose (cards keep their
+  // right-anchored text styles separately).
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    paddingHorizontal: 24,
+    marginTop: 8,
+    marginBottom: 4,
   },
   // Pager fills the middle of the screen. Same approach as
   // app/how-it-works.tsx so both surfaces feel identical.

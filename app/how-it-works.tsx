@@ -16,7 +16,14 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 // PR #66 — shared 3-card content. Same source of truth as
 // app/welcome.tsx so onboarding and how-it-works can't drift.
-import { HOW_IT_WORKS_STEPS } from '@/constants/howItWorksContent';
+// PR-LONG-COPY: also import the headline tagline + subtitle so this
+// screen shows the EXACT same hero text as welcome.tsx — no
+// drift between the two surfaces.
+import {
+  HOW_IT_WORKS_STEPS,
+  HOW_IT_WORKS_SUBTITLE,
+  HOW_IT_WORKS_TAGLINE,
+} from '@/constants/howItWorksContent';
 
 const UI_COLORS = {
   bg: '#FFF9F6',
@@ -75,6 +82,22 @@ export default function HowItWorksScreen() {
             איך זה עובד?
           </ThemedText>
           <View style={styles.headerSpacer} />
+        </View>
+
+        {/* PR-LONG-COPY: headline + subtitle block under the iOS
+            screen header. Same strings rendered by app/welcome.tsx so
+            the two surfaces show identical hero text. The iOS-style
+            screen header above ("איך זה עובד?") stays for navigation;
+            the headline below it is the product positioning. */}
+        <View style={styles.heroBlock}>
+          <View style={[styles.heroBadge, { backgroundColor: dynamicColors.surface, borderColor: UI_COLORS.branding + '20' }]}>
+            <ThemedText style={[styles.heroBadgeText, { color: UI_COLORS.branding }]}>
+              {HOW_IT_WORKS_TAGLINE}
+            </ThemedText>
+          </View>
+          <ThemedText style={[styles.heroSubtitle, { color: dynamicColors.textLight }]}>
+            {HOW_IT_WORKS_SUBTITLE}
+          </ThemedText>
         </View>
 
         <ScrollView
@@ -176,6 +199,36 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   headerSpacer: { width: 24 },
+  // PR-LONG-COPY: hero block sits between the iOS header and the
+  // pager. Same content as welcome.tsx so the two surfaces present
+  // the identical hero. Center-aligned because it's product-level
+  // framing, not in-card prose — the cards themselves still
+  // right-align their Hebrew text via per-style overrides.
+  heroBlock: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 4,
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.2,
+  },
+  heroBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
   scroller: { flex: 1 },
   scrollerContent: { alignItems: 'stretch' },
   // PR #66 — full-screen card feel. cardCell + card both flex:1 so the

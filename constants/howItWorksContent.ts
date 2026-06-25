@@ -1,16 +1,19 @@
 // constants/howItWorksContent.ts
 //
-// Single source of truth for the 3-card "איך זה עובד" explainer.
+// Single source of truth for the onboarding / "איך זה עובד" content.
 // Consumed by:
-//   * app/welcome.tsx — first-launch onboarding pager
+//   * app/welcome.tsx — first-launch onboarding screen
 //   * app/how-it-works.tsx — Settings-accessed explainer
 //
 // Keeping the content in one place prevents copy drift between the two
-// surfaces. If you want to update the message, update it here.
+// surfaces. Both screens render the SAME headline + subtitle + 3 cards.
+// Only the welcome screen renders the auth buttons (HOW_IT_WORKS_PRIMARY_CTA
+// / HOW_IT_WORKS_SECONDARY_CTA) — how-it-works doesn't have signup/login
+// CTAs because logged-in users see it from Settings.
 //
 // Content reflects the "אני פנוי/ה להכיר" availability-based matching
-// model that became live with PR #61-#63 and was crash-hardened in
-// PR #65 (Build #25).
+// model (PR #61-#63 backend + PR #65 crash hardening + PR #67 home-tab
+// CTA clarity).
 
 export type HowItWorksStep = {
   emoji: string;
@@ -19,20 +22,33 @@ export type HowItWorksStep = {
   body: string;
 };
 
+// Hero tagline used as the main headline above the cards.
+export const HOW_IT_WORKS_TAGLINE = 'לא עוד אפליקציית החלקות אינסופית';
+
+// Subtitle that explains the product positioning under the headline.
+// Long version per spec — must appear verbatim in both welcome AND
+// how-it-works (no shortening, no paraphrase).
+export const HOW_IT_WORKS_SUBTITLE =
+  'UniMatch מחברת בין סטודנטים לפי התאמה אמיתית, זמינות ורצון להכיר — לא לפי עוד גלילה שלא נגמרת.';
+
+// 3-card explainer. Card 2 explicitly covers BOTH outcomes (instant
+// match possible when a peer is also available, AND signal stays
+// up to 3 days otherwise) so the wording doesn't overpromise either
+// instant matching or a guaranteed 3-day wait.
 export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     emoji: '📝',
     number: '1',
     title: 'שאלון התאמה אמיתי',
     body:
-      'במקום החלקות אינסופיות, עונים פעם אחת על שאלון שעוזר להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות.',
+      'במקום להסתמך רק על תמונות, עונים פעם אחת על שאלון שעוזר להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות.',
   },
   {
     emoji: '🎯',
     number: '2',
     title: 'מסמנים כשפנויים להכיר',
     body:
-      "כשאת/ה באמת פנוי/ה להכיר, לוחצים על 'אני פנוי/ה להכיר'. הסימון תקף ל־3 ימים, ובזמן הזה נחפש התאמה אחת איכותית.",
+      "כשאת/ה באמת פנוי/ה להכיר, לוחצים על 'אני פנוי/ה להכיר'. אם קיימת התאמה מתאימה, היא יכולה להיפתח גם תוך כמה רגעים. אם לא, הסימון נשאר פעיל עד 3 ימים.",
   },
   {
     emoji: '💬',
@@ -43,6 +59,7 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   },
 ];
 
-// Optional hero tagline. Used by welcome.tsx as the badge above the pager.
-// Kept here so the wording stays consistent with the cards' tone.
-export const HOW_IT_WORKS_TAGLINE = 'לא עוד אפליקציית החלקות אינסופית';
+// Auth CTAs — only used by app/welcome.tsx. Defined here so the wording
+// stays in one place even though how-it-works doesn't render them.
+export const HOW_IT_WORKS_PRIMARY_CTA = 'להתחיל';
+export const HOW_IT_WORKS_SECONDARY_CTA = 'כבר יש לי חשבון';
