@@ -14,6 +14,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+// PR #66 — shared 3-card content. Same source of truth as
+// app/welcome.tsx so onboarding and how-it-works can't drift.
+import { HOW_IT_WORKS_STEPS } from '@/constants/howItWorksContent';
 
 const UI_COLORS = {
   bg: '#FFF9F6',
@@ -30,40 +33,10 @@ const UI_COLORS = {
 // Pager snaps to full screen width. Cards are full-width cells with internal padding.
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-type Step = {
-  emoji: string;
-  number: string;
-  title: string;
-  body?: string;
-  bullets?: string[];
-};
-
-const STEPS: Step[] = [
-  {
-    emoji: '📝',
-    number: '1',
-    title: 'עונים על שאלון עומק',
-    body:
-      'השאלון שלנו עוזר לנו להבין מה באמת חשוב לך: סגנון תקשורת, קצב בקשר, ערכים וציפיות. השאלות בנויות סביב עקרונות מוכרים ממחקרי תקשורת וזוגיות — כדי שההתאמה תהיה מבוססת על הבנה אמיתית, לא רק על תמונות.',
-  },
-  {
-    emoji: '🎯',
-    number: '2',
-    title: 'מקבלים התאמה אחת איכותית',
-    body:
-      'במקום תור אינסופי של פרופילים, מופיעה לך התאמה אחת בכל פעם — מי שהאלגוריתם מצא כהכי מתאים עבורך כרגע. זה מאפשר להכיר את האדם שלפניך באמת, במקום להחליק על מאות פרופילים.',
-  },
-  {
-    emoji: '💬',
-    number: '3',
-    title: 'נותנים לזה צ׳אנס אמיתי',
-    bullets: [
-      'ברגע שיש התאמה — אפשר לפתוח שיחה ולהכיר.',
-      'אם לא תתחיל/י שיחה תוך 72 שעות, ההתאמה תיסגר ונציע לך את הבאה.',
-      'עד 5 התאמות בחודש — כי אנחנו מאמינים בקצב איטי ומכוון, לא בהחלקה מהירה.',
-    ],
-  },
-];
+// PR #66 — STEPS imported from constants/howItWorksContent.ts so this
+// screen and welcome.tsx render the exact same explainer. The Step type
+// was simplified there: body is now required (no bullet branch).
+const STEPS = HOW_IT_WORKS_STEPS;
 
 export default function HowItWorksScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -133,24 +106,10 @@ export default function HowItWorksScreen() {
                   {step.title}
                 </ThemedText>
 
-                {step.body && (
-                  <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
-                    {step.body}
-                  </ThemedText>
-                )}
-
-                {step.bullets && (
-                  <View style={styles.bullets}>
-                    {step.bullets.map((b, i) => (
-                      <View key={i} style={styles.bulletRow}>
-                        <View style={[styles.bulletDot, { backgroundColor: UI_COLORS.accent }]} />
-                        <ThemedText style={[styles.bulletText, { color: dynamicColors.text }]}>
-                          {b}
-                        </ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                {/* PR #66 — body always present (bullet branch removed). */}
+                <ThemedText style={[styles.body, { color: dynamicColors.textLight }]}>
+                  {step.body}
+                </ThemedText>
               </View>
             </View>
           ))}
@@ -206,14 +165,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
   },
-  // PR-RTL-POLISH: textAlign 'right' → 'center'. The previous right-
-  // alignment pinned the title against the back chevron (chevron on the
-  // physical right under RTL + title right-aligned in the flex:1 middle
-  // container = title visually crowding the chevron). Centering matches
-  // the standard iOS Hebrew header pattern (chevron right, title
-  // optically centered between chevron and matching-width spacer).
-  // flex: 1 + matching headerSpacer width: 24 stay, so the title
-  // centers in the row.
+  // PR-RTL-POLISH (preserved): textAlign 'center' so the title sits
+  // optically centered between the back chevron and the matching-width
+  // spacer (standard iOS Hebrew header).
   headerTitle: {
     flex: 1,
     fontSize: 18,
@@ -224,45 +178,37 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 24 },
   scroller: { flex: 1 },
   scrollerContent: { alignItems: 'stretch' },
+  // PR #66 — full-screen card feel. cardCell + card both flex:1 so the
+  // card fills the available area between header and pagination dots
+  // instead of floating near the top with empty space below. Tightened
+  // paddings give the card more width without losing screen-edge margin.
   cardCell: {
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 16,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 12,
     justifyContent: 'flex-start',
   },
-  // PR-RTL-POLISH (final, post-review): card.alignItems kept at 'center'
-  // so the emoji circle stays as a centered visual hero — that reads as
-  // a more premium iOS card than a right-shifted decorative icon. Text
-  // right-anchoring is fully achieved INDEPENDENTLY of this value:
-  // every text style below (stepLabel / title / body / bulletText) sets
-  // its own alignSelf:'stretch' + textAlign:'right' + writingDirection:
-  // 'rtl', which overrides the card's cross-axis alignment for those
-  // children. So:
-  //   * emoji circle → centered (no alignSelf override; inherits 'center')
-  //   * stepLabel / title / body / bullets → stretched full-width, text
-  //     right-aligned (their own alignSelf:'stretch' overrides 'center')
-  // Net: premium centered hero icon + fully right-anchored Hebrew text
-  // block. No "centered English layout" feel because all the text reads
-  // from the right edge; the emoji is decorative, not part of the
-  // reading flow.
-  // BATCH-G1 (preserved): restrained polish — padding 28→24, gap 14→12.
-  // Shadow stays at premium-soft 0.06.
+  // PR-RTL-POLISH (preserved): card.alignItems stays 'center' — the
+  // emoji circle inherits center (premium hero). Text styles below
+  // (stepLabel/title/body) override with alignSelf:'stretch' +
+  // textAlign:'right' so Hebrew text right-anchors. Net: centered hero
+  // + right-anchored Hebrew block.
+  // PR #66 — card.flex:1 so it stretches to fill the cardCell. Padding
+  // 24→28 + gap 12→16 so the larger card breathes with the new content.
   card: {
+    flex: 1,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 24,
+    padding: 28,
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
     elevation: 4,
   },
-  // BATCH-G1: emoji circle 96→80, emoji 52→42. Original size read as
-  // a hero illustration; smaller circle balances the now-right-aligned
-  // title and leaves room for the body without scrolling on small
-  // iPhones. Still a clear visual anchor.
   emojiCircle: {
     width: 80,
     height: 80,
@@ -275,17 +221,7 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 50,
   },
-  // PR #59 → PR-RTL-POLISH (final): stepLabel uses
-  // alignSelf:'stretch' + textAlign:'right'. The stretch overrides the
-  // card's alignItems:'center', so the label spans full card width and
-  // the text right-aligns inside it. This pattern is repeated on title,
-  // body, and bulletText — every text element opts out of the card's
-  // center alignment in favor of its own right-anchored stretch. That
-  // way the emoji circle (no alignSelf) stays centered as a premium
-  // hero while the Hebrew reading flow runs cleanly from the right.
-  // BATCH-G1 (preserved): letterSpacing 1 → 0.5. Wider tracking felt
-  // marketing-poster heavy; 0.5 keeps the all-caps rhythm without
-  // shouting.
+  // PR-RTL-POLISH (preserved): right-aligned + stretched to span card width.
   stepLabel: {
     fontSize: 13,
     fontWeight: '800',
@@ -294,13 +230,6 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
-  // BATCH-G1: title switched from centered to right-aligned.
-  // TestFlight build 14 review found that a centered Hebrew title
-  // above a right-aligned body created visual whiplash — the eye
-  // jumped from a centered headline to a right-anchored paragraph.
-  // Right-aligning both pins them to the same axis and reads as a
-  // cohesive Hebrew block. Small badge ("שלב N") stays centered
-  // as the visual anchor / step indicator.
   title: {
     fontSize: 24,
     fontWeight: '800',
@@ -309,10 +238,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignSelf: 'stretch',
   },
-  // BATCH-C: body now stretches full card width. Previously the card's
-  // alignItems: 'center' collapsed the body into a content-width
-  // centered box, so the right-aligned text appeared to "float" in
-  // the middle of the card instead of pinning to its right edge.
   body: {
     fontSize: 16,
     lineHeight: 26,
@@ -320,33 +245,7 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
-  bullets: {
-    gap: 12,
-    alignSelf: 'stretch',
-    marginTop: 4,
-  },
-  // BATCH-G1: TestFlight build 14 showed bullet dots on the LEFT of
-  // each bullet — wrong for Hebrew. JSX is [Dot, Text]; under RTL
-  // with `row` the first JSX child (Dot) sits on the RIGHT and the
-  // text flows leftward from it — natural Hebrew reading order.
-  // The earlier row-reverse pin double-flipped it back to LTR.
-  bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bulletDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  bulletText: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 24,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  // PR #66 — removed unused bullet styles. All cards now render body only.
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
