@@ -464,20 +464,32 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
               <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
                 למה זו התאמה טובה
               </ThemedText>
+              {/* PR #70 follow-up polish — replaced the legacy outlined
+                  card + red vertical stripe with a soft warm pill row
+                  per reason. Background reuses the existing surfaceRose
+                  token (already in this screen's palette for the
+                  icebreaker card), no border, no shadow. A small
+                  sparkles glyph on the leading edge keeps brand presence
+                  as an accent, not a block. Reason calculation,
+                  evidence ordering, and copy are untouched. */}
               <View style={styles.reasonsList}>
                 {evidenceCards.map((card) => (
                   <View
                     key={card.key}
                     style={[
-                      styles.reasonCard,
-                      { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border },
+                      styles.reasonRow,
+                      { backgroundColor: dynamicColors.surfaceRose },
                     ]}>
-                    <View style={[styles.reasonStrip, { backgroundColor: UI_COLORS.branding }]} />
-                    <View style={styles.reasonTextWrap}>
-                      <ThemedText style={[styles.reasonText, { color: dynamicColors.text }]}>
-                        {card.text}
-                      </ThemedText>
+                    <View style={styles.reasonIcon}>
+                      <IconSymbol
+                        name="sparkles"
+                        size={16}
+                        color={UI_COLORS.branding}
+                      />
                     </View>
+                    <ThemedText style={[styles.reasonText, { color: dynamicColors.text }]}>
+                      {card.text}
+                    </ThemedText>
                   </View>
                 ))}
               </View>
@@ -652,27 +664,38 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 2,
   },
-  reasonsList: { gap: 10 },
-  reasonCard: {
+  // PR #70 follow-up polish — softer, premium native-iOS reason rows.
+  // Tighter vertical gap so the list feels integrated into the screen
+  // instead of stacked like slide content.
+  reasonsList: { gap: 8 },
+  // Soft warm pill row. No border, no shadow — the surfaceRose tint
+  // alone carries the card feel. JSX order [icon, text] under
+  // flexDirection 'row' renders the icon on the physical right
+  // (RTL leading edge) for Hebrew readers, mirroring the prior
+  // stripe-on-the-right anchor without the heavy block.
+  reasonRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-    minHeight: 52,
-  },
-  reasonStrip: { width: 3 },
-  reasonTextWrap: {
-    flex: 1,
+    alignItems: 'flex-start',
+    gap: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  // Small fixed-width slot for the sparkles glyph so multi-line reason
+  // text wraps cleanly under itself instead of around the icon.
+  reasonIcon: {
+    width: 20,
+    height: 22,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 2,
   },
   reasonText: {
+    flex: 1,
     fontSize: 15,
     lineHeight: 22,
+    textAlign: 'right',
     writingDirection: 'rtl',
-    alignSelf: 'flex-start',
   },
 
   icebreakerCard: {
