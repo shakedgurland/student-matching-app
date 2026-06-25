@@ -36,6 +36,13 @@ export type MatchStatus =
   | 'monthly_cap_reached'
   | 'already_has_active'
   | 'incomplete_profile'
+  // PR #62 — caller does not have a live matching_availability row.
+  // The user must explicitly opt into the 3-day "אני פנוי/ה להכיר"
+  // window via the future client button (PR #63) before any match
+  // can be created. The UI for this status is intentionally NOT wired
+  // in PR #62 — the home-tab switch falls through silently for now;
+  // PR #63 will add a proper state + CTA.
+  | 'not_available'
   | 'unauthorized'
   | 'error';
 
@@ -108,6 +115,7 @@ export async function findAndCreateBestMatch(
     status === 'monthly_cap_reached' ||
     status === 'already_has_active' ||
     status === 'incomplete_profile' ||
+    status === 'not_available' ||
     status === 'unauthorized'
   ) {
     return { status };

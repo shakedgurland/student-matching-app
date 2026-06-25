@@ -240,6 +240,58 @@ async function fetchCandidateIdsWithActive(
   return blocked
 }
 
+// PR #62 — For a list of candidate user ids, return the subset that
+// currently has a LIVE matching_availability row (available_until > now()).
+// Only users who have explicitly opted into the 3-day window via
+// public.set_matching_availability() appear here. Row absence OR
+// available_until <= now() means "not available" — those candidates are
+// filtered OUT of the eligible pool.
+//
+// Read-only — no DML on matching_availability from the Edge Function.
+// Writes are exclusively the caller-RPC set_matching_availability and the
+// atomic DELETE inside create_authorized_match (migration 034 section m).
+//
+// Defense-in-depth: even if a candidate slips through this filter (e.g.,
+// their availability expires between this query and the RPC call), the
+// migration-034 availability gate inside create_authorized_match returns
+// 'candidate_unavailable' with reason 'winner_not_available', which the
+// retry loop below already handles transparently.
+async function fetchAvailableCandidateIds(
+  admin: SupabaseClient,
+  candidateIds: string[],
+): Promise<Set<string>> {
+  if (candidateIds.length === 0) return new Set()
+  const nowIso = new Date().toISOString()
+  const { data, error } = await admin
+    .from('matching_availability')
+    .select('user_id')
+    .gt('available_until', nowIso)
+    .in('user_id', candidateIds)
+  if (error) throw error
+  return new Set((data ?? []).map((r) => r.user_id as string))
+}
+
+// PR #62 — Whether the caller currently has a live matching_availability
+// row. Used by the caller pre-flight check to short-circuit with
+// 'not_available' before any candidate-pool work happens. Mirrors the
+// defense-in-depth check inside create_authorized_match (migration 034
+// section l) so we avoid spending Edge Function CPU on a caller who
+// can't be matched anyway.
+async function callerHasLiveAvailability(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const nowIso = new Date().toISOString()
+  const { data, error } = await admin
+    .from('matching_availability')
+    .select('available_until')
+    .eq('user_id', userId)
+    .gt('available_until', nowIso)
+    .maybeSingle()
+  if (error) throw error
+  return !!data
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -311,6 +363,26 @@ serve(async (req) => {
       return jsonResponse({ status: 'already_has_active', match_id: callerActiveId })
     }
 
+    // 5b. PR #62 — Caller matching-availability pre-flight.
+    //
+    //     A user must have explicitly opted into the 3-day window via
+    //     public.set_matching_availability() (migration 033) before any
+    //     match can be created for them. Short-circuit here so we don't
+    //     waste candidate-pool fetches + scoring on a caller who can't
+    //     receive a match. create_authorized_match (migration 034
+    //     section l) re-checks this with FOR UPDATE locking as
+    //     defense-in-depth.
+    //
+    //     ⚠ RELEASE WARNING ⚠ This pre-flight + the RPC gate together
+    //     mean NO match can be created until the client UI (PR #63) is
+    //     deployed. Without UI, no one can set availability, every
+    //     caller hits this branch, every candidate is filtered out, the
+    //     app appears "broken." This Edge Function update must NOT be
+    //     deployed before PR #63 ships.
+    if (!(await callerHasLiveAvailability(admin, callerId))) {
+      return jsonResponse({ status: 'not_available' })
+    }
+
     // 6. Caller's questionnaire answers (required by scoring).
     const { data: callerAnswersRow, error: ansErr } = await admin
       .from('questionnaire_answers')
@@ -347,14 +419,24 @@ serve(async (req) => {
     const afterPastFilter = rawCandidates.filter((c) => !pastPeers.has(c.id))
     if (afterPastFilter.length === 0) return jsonResponse({ status: 'no_candidate' })
 
-    // 9. Exclude capped and active-holding candidates (bi-directional rules).
+    // 9. Exclude capped, active-holding, and unavailable candidates
+    //    (bi-directional rules + PR #62 availability gate).
+    //
+    //    PR #62 added `available` — the set of candidate ids that have a
+    //    live matching_availability row (available_until > now()). Only
+    //    candidates who have explicitly opted into the 3-day window are
+    //    eligible. The migration-034 availability gate inside
+    //    create_authorized_match re-checks each candidate atomically as
+    //    defense-in-depth (handles the race where a candidate's window
+    //    expires between this pre-filter and the RPC call).
     const candidateIds = afterPastFilter.map((c) => c.id as string)
-    const [capped, withActive] = await Promise.all([
+    const [capped, withActive, available] = await Promise.all([
       fetchCappedCandidateIds(admin, candidateIds),
       fetchCandidateIdsWithActive(admin, candidateIds),
+      fetchAvailableCandidateIds(admin, candidateIds),
     ])
     const eligible = afterPastFilter.filter(
-      (c) => !capped.has(c.id) && !withActive.has(c.id),
+      (c) => !capped.has(c.id) && !withActive.has(c.id) && available.has(c.id),
     )
     if (eligible.length === 0) return jsonResponse({ status: 'no_candidate' })
 
@@ -404,15 +486,24 @@ serve(async (req) => {
     //
     //     The RPC re-verifies every invariant atomically (caller +
     //     winner onboarding, gender, height must_have, no-rematch,
-    //     both-sides monthly cap, both-sides active match). Only
-    //     'candidate_unavailable' triggers a retry — that status
-    //     signals a race condition (a candidate became capped/active
-    //     in the gap between our pre-filter and the RPC's re-check).
+    //     both-sides monthly cap, both-sides active match, AND PR #62's
+    //     both-sides matching availability with FOR UPDATE locking).
+    //     Only 'candidate_unavailable' triggers a retry — that status
+    //     signals a race condition (a candidate became capped/active/
+    //     unavailable in the gap between our pre-filter and the RPC's
+    //     re-check). The PR #62 winner-availability gate uses the same
+    //     'candidate_unavailable' envelope with reason
+    //     'winner_not_available' specifically so this retry path
+    //     transparently moves to the next candidate.
     //     All other statuses stop the loop immediately:
     //       'created'              → success, returned verbatim
     //       'monthly_cap_reached'  → caller-side; retry can't help
     //       'already_has_active'   → caller-side; retry would race
     //       'incomplete_profile'   → caller-side
+    //       'not_available'        → caller-side (PR #62); retry can't
+    //                                help (caller hasn't opted into
+    //                                availability — only set_matching_
+    //                                availability can fix it)
     //       'error'                → likely structural; do not retry
     //     A transport-level rpcErr also stops the loop.
     //
