@@ -125,3 +125,72 @@ export async function findAndCreateBestMatch(
   // shows a non-leaking Hebrew alert.
   return { status: 'error' };
 }
+
+// =============================================================================
+// PR #63 — Matching availability opt-in helper.
+//
+// Thin wrapper around the public.set_matching_availability() RPC (added by
+// migration 033). The client passes NO arguments; the 3-day window is
+// computed server-side from now() — there is no surface for the client to
+// inject a date. The server re-checks every gate (onboarding, monthly cap,
+// active match) and short-circuits with 'already_available' if a live window
+// already exists, so repeat taps cannot extend a window indefinitely.
+//
+// The UI calls this on the "אני פנוי/ה להכיר" tap. On a 'set' or
+// 'already_available' response the UI should then call findAndCreateBestMatch
+// once — that explicit-opt-in-followed-by-search flow is the new entry point
+// for matching. Silent auto-searches on app open are removed in PR #63.
+// =============================================================================
+
+/** Stable shape returned to the UI from setMatchingAvailability(). */
+export type SetAvailabilityResult =
+  | { status: 'set'; availableUntil: string }
+  | { status: 'already_available'; availableUntil: string }
+  | { status: 'already_has_active' }
+  | { status: 'monthly_cap_reached' }
+  | { status: 'incomplete_profile' }
+  | { status: 'profile_missing' }
+  | { status: 'unauthorized' }
+  | { status: 'error' };
+
+/**
+ * Opt the current user into a 3-day matching-availability window. Server-
+ * controlled date — the client cannot pass a timestamp. Idempotent while a
+ * window is live (returns 'already_available' with the existing date, never
+ * extends).
+ */
+export async function setMatchingAvailability(): Promise<SetAvailabilityResult> {
+  const { data, error } = await supabase.rpc('set_matching_availability');
+
+  if (error || !data || typeof data !== 'object') {
+    return { status: 'error' };
+  }
+
+  const payload = data as Record<string, unknown>;
+  const status = payload.status;
+  const availableUntilRaw = payload.available_until;
+  const availableUntil =
+    typeof availableUntilRaw === 'string' ? availableUntilRaw : null;
+
+  if (status === 'set' || status === 'already_available') {
+    // The RPC must return an ISO timestamp on these two statuses. Defend
+    // against a malformed envelope by falling through to 'error' rather
+    // than handing the UI a state it can't render.
+    if (!availableUntil) return { status: 'error' };
+    return { status, availableUntil };
+  }
+
+  if (
+    status === 'already_has_active' ||
+    status === 'monthly_cap_reached' ||
+    status === 'incomplete_profile' ||
+    status === 'profile_missing' ||
+    status === 'unauthorized'
+  ) {
+    return { status };
+  }
+
+  // Unknown / missing status — generic error so the UI can show a safe
+  // Hebrew alert without leaking internal detail.
+  return { status: 'error' };
+}

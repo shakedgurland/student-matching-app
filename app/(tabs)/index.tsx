@@ -14,8 +14,8 @@ import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
-import { findAndCreateBestMatch } from '@/lib/matching';
-import { logScreenView, logEvent, logError } from '@/lib/analytics';
+import { findAndCreateBestMatch, setMatchingAvailability } from '@/lib/matching';
+import { logScreenView, logEvent, logError, logButtonTap } from '@/lib/analytics';
 
 // Design Constants
 const UI_COLORS = {
@@ -36,6 +36,30 @@ const UI_COLORS = {
 // removed intermediate active-match card. match-profile / chat /
 // match-result keep their own copies of the same 300s TTL.
 
+// PR #63 — Friendly Hebrew countdown for the availability waiting state.
+// Always rounds UP so the user never sees "0 שעות" while still technically
+// available. Singular form ("יום" / "שעה") used at exactly 1; otherwise
+// plural ({N} ימים / {N} שעות). Below an hour we collapse to a single
+// "פחות משעה" line so the user isn't watching minutes tick down.
+function formatAvailabilityCountdown(availableUntilIso: string): string {
+  const diffMs = new Date(availableUntilIso).getTime() - Date.now();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return '';
+  const diffHours = diffMs / (1000 * 60 * 60);
+  if (diffHours >= 24) {
+    const days = Math.ceil(diffHours / 24);
+    return days === 1
+      ? 'פנוי/ה להכיר עוד יום'
+      : `פנוי/ה להכיר עוד ${days} ימים`;
+  }
+  if (diffHours >= 1) {
+    const hours = Math.ceil(diffHours);
+    return hours === 1
+      ? 'פנוי/ה להכיר עוד שעה'
+      : `פנוי/ה להכיר עוד ${hours} שעות`;
+  }
+  return 'פנוי/ה להכיר עוד פחות משעה';
+}
+
 export default function MatchSelectionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
@@ -47,12 +71,22 @@ export default function MatchSelectionScreen() {
   // PR #57. The Match tab no longer renders peer details; it auto-
   // forwards to /match-result (or /chat for chat_started) where the
   // peer is loaded fresh with the right column set.
-  // Set to true when the backend returns { status: 'monthly_cap_reached' }.
-  // Drives the empty-state copy so the user sees a clear cap message instead
-  // of a "still searching..." text that would never resolve. Reset on every
-  // fetchCurrentMatch so a returning user (new month / new session) sees the
-  // default empty state again.
+  // Set to true when the user has reached the 5/month cap. Computed
+  // proactively in fetchCurrentMatch (count of this user's matches this
+  // calendar month ≥ 5) AND set reactively if a button-press flow returns
+  // 'monthly_cap_reached'. Drives the cap copy and hides the availability
+  // CTA. Reset on every fetchCurrentMatch so a returning user (new month
+  // / new session) sees the right state.
   const [capReached, setCapReached] = useState(false);
+  // PR #63 — Current user's matching_availability.available_until, if a
+  // live row exists. Null means "not available" (row missing or expired).
+  // RLS scopes the read to the caller's own row only — peers cannot see
+  // this. Drives the waiting state vs the CTA state under "no open match
+  // && not capped".
+  const [availableUntil, setAvailableUntil] = useState<string | null>(null);
+  // PR #63 — True while the "אני פנוי/ה להכיר" button-press RPC is in
+  // flight. Used to disable the button + show a spinner.
+  const [settingAvailability, setSettingAvailability] = useState(false);
   // 'fast' | 'deep' | null. Drives the fast-only tip card at the bottom of
   // the screen. Fetched once on mount alongside fetchCurrentMatch.
   const [onboardingMode, setOnboardingMode] = useState<string | null>(null);
@@ -178,10 +212,14 @@ export default function MatchSelectionScreen() {
             }
 
             if (updated && updated.length > 0) {
-              // Confirmed: row was 'active' && expires_at < now() at UPDATE
-              // time and we successfully flipped it to 'expired'. Safe to
-              // fetch the next match.
-              handleFindMatch(user.id, true);
+              // PR #63: do NOT auto-search after passive expiry. The
+              // matching_availability rows for both participants were
+              // cleared atomically when this match was created
+              // (migration 034 section m), so the user is already
+              // not-available. They must explicitly tap "אני פנוי/ה
+              // להכיר" to opt in again. Load the availability + cap
+              // state so the state-driven render shows the CTA.
+              await fetchAvailabilityAndCapState(user.id);
               return;
             }
 
@@ -200,14 +238,16 @@ export default function MatchSelectionScreen() {
 
             if (!refetched) {
               // Row not visible (deleted or RLS no longer permits read).
-              // Treat as no open match and look for the next one.
-              handleFindMatch(user.id, true);
+              // PR #63: do NOT auto-search. Load availability + cap
+              // state so the CTA / waiting render shows.
+              await fetchAvailabilityAndCapState(user.id);
               return;
             }
 
             if (refetched.status === 'expired' || refetched.status === 'unmatched') {
-              // Terminal — server cron beat us. Move on.
-              handleFindMatch(user.id, true);
+              // Terminal — server cron beat us. PR #63: do NOT auto-
+              // search. Load availability + cap state.
+              await fetchAvailabilityAndCapState(user.id);
               return;
             }
 
@@ -256,10 +296,12 @@ export default function MatchSelectionScreen() {
           // Peer profile missing — peer was deleted and the cascade
           // either has already removed this match row or will momentarily.
           // Do NOT setCurrentMatch (avoids auto-forward to a broken
-          // /match-result). Treat as "no open match" and trigger the
-          // same auto-search path the empty branch below uses.
+          // /match-result). PR #63: do NOT auto-search either. Load
+          // the availability + cap state so the user sees the calm
+          // CTA / waiting render and decides for themselves when to
+          // opt in again.
           logEvent('home_peer_profile_missing', { metadata: { matchId: openMatch.id } });
-          handleFindMatch(user.id, true);
+          await fetchAvailabilityAndCapState(user.id);
           return;
         }
 
@@ -275,13 +317,129 @@ export default function MatchSelectionScreen() {
         // triggers the auto-forward useEffect.
         setCurrentMatch(openMatch);
       } else {
-        // Automatically try to find a match if none exists
-        handleFindMatch(user.id, true);
+        // PR #63: NO automatic match search on home-tab mount. Per the
+        // new product model, matching is opt-in only — the user must
+        // explicitly tap "אני פנוי/ה להכיר" to open a 3-day window.
+        // Just load the availability + cap state so the render shows
+        // the right empty state (CTA / waiting / cap copy).
+        await fetchAvailabilityAndCapState(user.id);
       }
     } catch (error) {
       console.error('Error fetching match:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // PR #63 — Load the caller's matching_availability + monthly cap so the
+  // render can show CTA / waiting / cap. Called from every fall-through
+  // path in fetchCurrentMatch (no open match, passive expiry, peer
+  // missing). Does NOT trigger a match search — that only happens after
+  // an explicit button tap.
+  //
+  // Both queries are scoped to the caller:
+  //   * matching_availability — RLS allows self-SELECT only (migration 033)
+  //   * matches — bi-directional caller filter via .or()
+  // No peer data is read here; we never expose another user's availability.
+  const fetchAvailabilityAndCapState = async (userId: string) => {
+    const nowIso = new Date().toISOString();
+    const startOfMonth = (() => {
+      const d = new Date();
+      d.setUTCDate(1);
+      d.setUTCHours(0, 0, 0, 0);
+      return d.toISOString();
+    })();
+
+    const [availRes, capRes] = await Promise.all([
+      supabase
+        .from('matching_availability')
+        .select('available_until')
+        .eq('user_id', userId)
+        .gt('available_until', nowIso)
+        .maybeSingle(),
+      supabase
+        .from('matches')
+        .select('id', { count: 'exact', head: true })
+        .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+        .gte('created_at', startOfMonth),
+    ]);
+
+    if (capRes.error) {
+      // Cap query failed — log and fall through to "not capped" so the
+      // CTA still renders. The set_matching_availability RPC re-checks
+      // the cap server-side, so this defensive fallback can't permit
+      // a real over-cap match.
+      logError('Home', 'cap_count_failed', capRes.error);
+    }
+    const monthlyMatchCount = capRes.count ?? 0;
+    if (monthlyMatchCount >= 5) {
+      setCapReached(true);
+      setAvailableUntil(null);
+      return;
+    }
+
+    if (availRes.error) {
+      logError('Home', 'availability_read_failed', availRes.error);
+    }
+    const until = typeof availRes.data?.available_until === 'string'
+      ? availRes.data.available_until
+      : null;
+    setAvailableUntil(until);
+  };
+
+  // PR #63 — Button handler for "אני פנוי/ה להכיר". Sets a 3-day
+  // availability window server-side via set_matching_availability RPC,
+  // then triggers ONE explicit match search. This is the only client
+  // path that initiates matching anymore — no more silent auto-searches
+  // on home-tab mount.
+  const handleSetAvailability = async () => {
+    if (settingAvailability) return;
+    setSettingAvailability(true);
+    try {
+      logButtonTap('Home', 'set_availability');
+      const result = await setMatchingAvailability();
+
+      switch (result.status) {
+        case 'set':
+        case 'already_available':
+          setAvailableUntil(result.availableUntil);
+          // (Analytics event for this is intentionally NOT added here —
+          //  EventType union in lib/analytics.ts doesn't include an
+          //  availability event yet, and broadening it is out of scope
+          //  for this PR. logButtonTap('Home', 'set_availability') above
+          //  already captures that the user pressed the button.)
+          // User explicitly opted in — run one match search attempt.
+          // findAndCreateBestMatch handles its own loading state via
+          // setMatching. If it lands a match, the auto-forward useEffect
+          // redirects to /match-result.
+          await handleFindMatch();
+          return;
+        case 'already_has_active':
+          // The user already has an open match somehow — refresh state
+          // so we redirect to it.
+          fetchCurrentMatch();
+          return;
+        case 'monthly_cap_reached':
+          setCapReached(true);
+          setAvailableUntil(null);
+          return;
+        case 'incomplete_profile':
+          Alert.alert('פרופיל לא הושלם', 'יש להשלים את השאלון כדי לקבל התאמות.');
+          return;
+        case 'profile_missing':
+        case 'unauthorized':
+          Alert.alert('שגיאת זיהוי', 'אנא היכנס/י מחדש.');
+          return;
+        case 'error':
+        default:
+          Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+          return;
+      }
+    } catch (e) {
+      logError('Home', 'set_availability_failed', e);
+      Alert.alert('שגיאה', 'אירעה שגיאה. נסה/י שוב מאוחר יותר.');
+    } finally {
+      setSettingAvailability(false);
     }
   };
 
@@ -318,18 +476,29 @@ export default function MatchSelectionScreen() {
         logEvent('match_not_found', { metadata: { reason: newMatch.status } });
         switch (newMatch.status) {
           case 'no_candidate':
-            // Legitimate empty state — default empty-state copy already
-            // covers this. No Alert.
+            // Legitimate empty state. PR #63: if availability is live,
+            // the waiting state already covers this; no Alert. If
+            // availability is NOT live (shouldn't happen post-PR-#63
+            // since we only call handleFindMatch right after setting
+            // availability), the CTA empty state shows.
             break;
           case 'monthly_cap_reached':
-            // Drives the cap-aware empty-state copy below.
+            // Drives the cap empty-state copy below.
             setCapReached(true);
+            setAvailableUntil(null);
             break;
           case 'already_has_active':
-            // Caller already has an active match (shouldn't normally fire
-            // because fetchCurrentMatch would have shown it). Re-fetch as
-            // a safety net so the user sees the existing one.
+            // Caller already has an active match — re-fetch state so
+            // the auto-forward useEffect routes them to /match-result.
             fetchCurrentMatch();
+            break;
+          case 'not_available':
+            // PR #63: caller has no live availability window. This
+            // shouldn't normally fire because handleFindMatch is only
+            // called right after a successful set_matching_availability,
+            // but if a race consumed the window in between, re-fetch
+            // the availability state so the CTA renders again.
+            await fetchAvailabilityAndCapState(targetUserId);
             break;
           case 'incomplete_profile':
             if (!silent) {
@@ -418,35 +587,83 @@ export default function MatchSelectionScreen() {
             <View style={{ width: 32 }} />
           </View>
 
-          {/* PR-MATCH-FLOW (PR #57): the redundant "התאמה פעילה / הכירו
-              את / צפייה בהתאמה" intermediate card was removed entirely.
-              The Match tab now renders only:
-                * searchingHero — while loading OR while a background
-                  find-and-create is in flight OR briefly between
-                  currentMatch being set and the auto-forward useEffect
-                  redirecting to /match-result | /chat
-                * emptyState   — when there is no active/chat_started
-                  match and no search is in flight */}
+          {/* PR #63 — Render order:
+                1. searchingHero — currentMatch resolved OR a button-press
+                   search is in flight (the auto-forward useEffect redirects
+                   to /match-result | /chat when currentMatch lands).
+                2. Cap state — user hit 5/month; no availability CTA shown.
+                3. Waiting state — availability live, no open match yet.
+                4. CTA state — availability missing/expired, no open match.
+              PR-MATCH-FLOW (PR #57): no intermediate "התאמה פעילה / צפייה
+              בהתאמה" card. PR-FINAL-UI (PR #60): no score percentage.
+              PR #63: NO silent auto-search on mount — matching is opt-in
+              only via the "אני פנוי/ה להכיר" CTA below. */}
           {(currentMatch || matching) ? (
             searchingHero
-          ) : (
+          ) : capReached ? (
+            // 2. Cap reached.
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconContainer}>
                 <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
               </View>
               <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
-                {capReached ? 'הגעת ל-5 ההתאמות החודשיות' : 'אין התאמה חדשה כרגע'}
+                הגעת ל-5 ההתאמות החודשיות
               </ThemedText>
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
-                {capReached
-                  ? 'בתחילת החודש הבא נוכל להציע לך התאמות חדשות.'
-                  : 'זה לא אומר שאין התאמה טובה — פשוט אין כרגע התאמה שעומדת בתנאים שלך.'}
+                בתחילת החודש הבא נוכל להציע לך התאמות חדשות.
               </ThemedText>
-              {!capReached && (
-                <ThemedText style={[styles.emptyHint, { color: dynamicColors.textLight }]}>
-                  נעדכן כשנמצא התאמה מתאימה יותר.
-                </ThemedText>
-              )}
+            </View>
+          ) : availableUntil ? (
+            // 3. Availability live — calm waiting state, no button.
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
+                מחפשים לך התאמה איכותית
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
+                סימנת שאת/ה פנוי/ה להכיר. נעדכן ברגע שנמצא התאמה שמתאימה לשאלון שלך.
+              </ThemedText>
+              <ThemedText style={[styles.availabilityCountdown, { color: dynamicColors.textLight }]}>
+                {formatAvailabilityCountdown(availableUntil)}
+              </ThemedText>
+            </View>
+          ) : (
+            // 4. Not available — CTA to opt in.
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <IconSymbol name="sparkles" size={64} color={UI_COLORS.accent} />
+              </View>
+              <ThemedText style={[styles.emptyTitle, { color: dynamicColors.text }]}>
+                מוכנ/ה להכיר מישהו חדש?
+              </ThemedText>
+              <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
+                נסמן שאת/ה פנוי/ה להכיר ל־3 הימים הקרובים ונחפש התאמה אחת איכותית.
+              </ThemedText>
+              <TouchableOpacity
+                style={[
+                  styles.primaryCtaButton,
+                  {
+                    backgroundColor: settingAvailability
+                      ? dynamicColors.textLight
+                      : UI_COLORS.primary,
+                  },
+                ]}
+                onPress={handleSetAvailability}
+                disabled={settingAvailability}
+                activeOpacity={0.85}
+                accessibilityLabel="אני פנוי/ה להכיר"
+                accessibilityState={{ disabled: settingAvailability }}
+              >
+                {settingAvailability ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.primaryCtaButtonText}>
+                    אני פנוי/ה להכיר
+                  </ThemedText>
+                )}
+              </TouchableOpacity>
             </View>
           )}
 
@@ -529,6 +746,35 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 20,
     marginTop: -8,
+  },
+  // PR #63 — Soft countdown under the waiting state's subtitle. Calmer
+  // than the body copy above so it reads as a small status line, not a
+  // hero element.
+  availabilityCountdown: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: 4,
+  },
+  // PR #63 — Primary CTA for "אני פנוי/ה להכיר". 52pt height matches
+  // the rest of the app's primary buttons (above iOS 44pt min tap
+  // target). 24pt horizontal padding so the text breathes; full-width
+  // would feel heavier than the calm tone the screen needs.
+  primaryCtaButton: {
+    minHeight: 52,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    alignSelf: 'stretch',
+  },
+  primaryCtaButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    writingDirection: 'rtl',
   },
   // BATCH-H6: premium searching hero shared by the initial load and the
   // in-flight findAndCreate path. Intentionally centered (hero pattern)
