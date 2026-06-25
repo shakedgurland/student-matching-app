@@ -2,13 +2,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { I18nManager, View, ActivityIndicator } from 'react-native';
+import { AppState, I18nManager, View, ActivityIndicator } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { installNotificationHandlers } from '@/lib/push';
+import { bumpLastActive } from '@/lib/matching';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -51,6 +52,24 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { mode } = useGlobalSearchParams<{ mode: string }>();
+
+  // Migration 035 — behind-the-scenes activity ping. Updates the caller's
+  // profiles.last_active_at on cold start (after session is known) and on
+  // every OS foreground transition. Throttled in-memory to once per 60s
+  // inside lib/matching.ts so rapid foreground churn won't hammer the
+  // RPC. The Edge Function uses last_active_at as a soft ranking
+  // preference (prefer users active in last 7 days) — the value is never
+  // shown in the UI. No "last seen" surface exists.
+  useEffect(() => {
+    if (!session) return;
+    // Cold-start / fresh-session ping.
+    bumpLastActive();
+    // Foreground transition pings.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') bumpLastActive();
+    });
+    return () => sub.remove();
+  }, [session?.user.id]);
 
   // PR-PUSH-D1: install notification handlers once per app session.
   // Foreground suppression (no double-beep when user is inside the

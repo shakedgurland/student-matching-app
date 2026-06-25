@@ -17,6 +17,12 @@
 //     that way — do not re-introduce a fallback that inserts from the client.
 //   • No service-role key in the client bundle. The function secret lives
 //     only on Supabase Edge Functions runtime.
+//
+// Migration 035 reverted the matching model from opt-in availability to
+// automatic matching. The `setMatchingAvailability` helper + 'not_available'
+// status were removed at the same time. The Edge Function no longer requires
+// a matching_availability row on either side and no longer returns
+// 'not_available' for the caller.
 // =============================================================================
 
 import { supabase } from './supabase';
@@ -36,13 +42,6 @@ export type MatchStatus =
   | 'monthly_cap_reached'
   | 'already_has_active'
   | 'incomplete_profile'
-  // PR #62 — caller does not have a live matching_availability row.
-  // The user must explicitly opt into the 3-day "אני פנוי/ה להכיר"
-  // window via the future client button (PR #63) before any match
-  // can be created. The UI for this status is intentionally NOT wired
-  // in PR #62 — the home-tab switch falls through silently for now;
-  // PR #63 will add a proper state + CTA.
-  | 'not_available'
   | 'unauthorized'
   | 'error';
 
@@ -115,7 +114,6 @@ export async function findAndCreateBestMatch(
     status === 'monthly_cap_reached' ||
     status === 'already_has_active' ||
     status === 'incomplete_profile' ||
-    status === 'not_available' ||
     status === 'unauthorized'
   ) {
     return { status };
@@ -127,70 +125,32 @@ export async function findAndCreateBestMatch(
 }
 
 // =============================================================================
-// PR #63 — Matching availability opt-in helper.
+// Behind-the-scenes activity ping.
 //
-// Thin wrapper around the public.set_matching_availability() RPC (added by
-// migration 033). The client passes NO arguments; the 3-day window is
-// computed server-side from now() — there is no surface for the client to
-// inject a date. The server re-checks every gate (onboarding, monthly cap,
-// active match) and short-circuits with 'already_available' if a live window
-// already exists, so repeat taps cannot extend a window indefinitely.
+// Calls public.bump_last_active() (migration 035) so the caller's
+// profiles.last_active_at is updated to now(). The Edge Function reads this
+// column when ranking candidates and prefers users active in the last
+// 7 days — but it is NEVER exposed to the UI. There is no "last seen" or
+// "active recently" surface anywhere in the app.
 //
-// The UI calls this on the "אני פנוי/ה להכיר" tap. On a 'set' or
-// 'already_available' response the UI should then call findAndCreateBestMatch
-// once — that explicit-opt-in-followed-by-search flow is the new entry point
-// for matching. Silent auto-searches on app open are removed in PR #63.
+// Fire-and-forget: any failure is swallowed silently. The next bump (on
+// the next foreground transition or cold start) will retry. Throttled
+// in-memory to once per BUMP_THROTTLE_MS so repeated foreground events
+// don't hammer the RPC.
 // =============================================================================
 
-/** Stable shape returned to the UI from setMatchingAvailability(). */
-export type SetAvailabilityResult =
-  | { status: 'set'; availableUntil: string }
-  | { status: 'already_available'; availableUntil: string }
-  | { status: 'already_has_active' }
-  | { status: 'monthly_cap_reached' }
-  | { status: 'incomplete_profile' }
-  | { status: 'profile_missing' }
-  | { status: 'unauthorized' }
-  | { status: 'error' };
+let lastBumpAtMs = 0;
+const BUMP_THROTTLE_MS = 60_000;
 
-/**
- * Opt the current user into a 3-day matching-availability window. Server-
- * controlled date — the client cannot pass a timestamp. Idempotent while a
- * window is live (returns 'already_available' with the existing date, never
- * extends).
- */
-export async function setMatchingAvailability(): Promise<SetAvailabilityResult> {
-  const { data, error } = await supabase.rpc('set_matching_availability');
-
-  if (error || !data || typeof data !== 'object') {
-    return { status: 'error' };
+export async function bumpLastActive(): Promise<void> {
+  const now = Date.now();
+  if (now - lastBumpAtMs < BUMP_THROTTLE_MS) return;
+  lastBumpAtMs = now;
+  try {
+    await supabase.rpc('bump_last_active');
+  } catch {
+    // Swallow. Activity ping is best-effort and must never block the UI
+    // or surface an error to the user. The next foreground transition
+    // will retry.
   }
-
-  const payload = data as Record<string, unknown>;
-  const status = payload.status;
-  const availableUntilRaw = payload.available_until;
-  const availableUntil =
-    typeof availableUntilRaw === 'string' ? availableUntilRaw : null;
-
-  if (status === 'set' || status === 'already_available') {
-    // The RPC must return an ISO timestamp on these two statuses. Defend
-    // against a malformed envelope by falling through to 'error' rather
-    // than handing the UI a state it can't render.
-    if (!availableUntil) return { status: 'error' };
-    return { status, availableUntil };
-  }
-
-  if (
-    status === 'already_has_active' ||
-    status === 'monthly_cap_reached' ||
-    status === 'incomplete_profile' ||
-    status === 'profile_missing' ||
-    status === 'unauthorized'
-  ) {
-    return { status };
-  }
-
-  // Unknown / missing status — generic error so the UI can show a safe
-  // Hebrew alert without leaking internal detail.
-  return { status: 'error' };
 }

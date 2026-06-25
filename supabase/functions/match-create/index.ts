@@ -1,6 +1,12 @@
 // supabase/functions/match-create/index.ts
 //
-// Phase 1B-4 — backend-authoritative match creation with retry.
+// Backend-authoritative match creation with retry. Migration 035 restored
+// automatic matching: no availability gate, no opt-in required. The
+// Edge Function now uses profiles.last_active_at as a soft behind-the-
+// scenes ranking preference — candidates active in the last 7 days are
+// tried first, then everyone else. The preference is invisible to the
+// client; only the chosen candidate id / score / reasons / depth are
+// returned.
 //
 // Flow:
 //   1. CORS preflight.
@@ -11,17 +17,18 @@
 //   5. Fetch caller's past peers (no-rematch exclusion).
 //   6. Fetch candidate pool via service role.
 //   7. Filter out capped candidates and candidates with active matches.
-//   8. Run scoring → rankCandidates (top-N ranked by score desc).
-//   9. Retry loop: call create_authorized_match RPC (service-role
-//      only) for the top MIN(ranked.length, MAX_ATTEMPTS) candidates.
-//      The RPC re-verifies every invariant — cap on both sides,
-//      active match on both sides, no-rematch, gender bi-directional,
-//      height must_have bi-directional. Only the race-condition
-//      status `candidate_unavailable` triggers a retry; all other
-//      statuses ('created' / 'monthly_cap_reached' / 'already_has_active'
-//      / 'incomplete_profile' / 'error') stop and pass through verbatim.
-//      If every attempt returns `candidate_unavailable`, the response
-//      is collapsed to `no_candidate`.
+//   8. Bulk-fetch last_active_at for the eligible pool + AI traits.
+//   9. Run scoring → rankCandidates (sorted by score desc).
+//  10. Partition ranked list: candidates active in last 7 days first,
+//      then dormant/unknown — score order preserved within each bucket.
+//  11. Retry loop: call create_authorized_match RPC for the first
+//      MIN(orderedForAttempts.length, MAX_ATTEMPTS) candidates.
+//      Only the race-condition status `candidate_unavailable` triggers
+//      a retry; all other statuses ('created' / 'monthly_cap_reached'
+//      / 'already_has_active' / 'incomplete_profile' / 'error') stop
+//      and pass through verbatim. If every attempt returns
+//      `candidate_unavailable`, the response is collapsed to
+//      `no_candidate`.
 //
 // SECURITY:
 //   - The only trusted user identifier is admin.auth.getUser(jwt).id.
@@ -240,56 +247,38 @@ async function fetchCandidateIdsWithActive(
   return blocked
 }
 
-// PR #62 — For a list of candidate user ids, return the subset that
-// currently has a LIVE matching_availability row (available_until > now()).
-// Only users who have explicitly opted into the 3-day window via
-// public.set_matching_availability() appear here. Row absence OR
-// available_until <= now() means "not available" — those candidates are
-// filtered OUT of the eligible pool.
+// Migration 035 — Bulk-fetch profiles.last_active_at for a list of
+// candidate user ids. Returns a Map of user_id → epoch ms (or null when
+// the row has no value). The Edge Function uses this to partition the
+// ranked candidate list into an "active in last 7 days" bucket and a
+// dormant/unknown bucket, preferring active candidates without entirely
+// blocking inactive ones. The map is consumed once per request; failure
+// returns an empty map (every candidate falls into the dormant bucket,
+// score order intact).
 //
-// Read-only — no DML on matching_availability from the Edge Function.
-// Writes are exclusively the caller-RPC set_matching_availability and the
-// atomic DELETE inside create_authorized_match (migration 034 section m).
-//
-// Defense-in-depth: even if a candidate slips through this filter (e.g.,
-// their availability expires between this query and the RPC call), the
-// migration-034 availability gate inside create_authorized_match returns
-// 'candidate_unavailable' with reason 'winner_not_available', which the
-// retry loop below already handles transparently.
-async function fetchAvailableCandidateIds(
+// The last_active_at value is NEVER returned to the client — it is read,
+// used to order RPC attempts, then discarded.
+async function fetchLastActiveAtMap(
   admin: SupabaseClient,
   candidateIds: string[],
-): Promise<Set<string>> {
-  if (candidateIds.length === 0) return new Set()
-  const nowIso = new Date().toISOString()
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>()
+  if (candidateIds.length === 0) return out
   const { data, error } = await admin
-    .from('matching_availability')
-    .select('user_id')
-    .gt('available_until', nowIso)
-    .in('user_id', candidateIds)
-  if (error) throw error
-  return new Set((data ?? []).map((r) => r.user_id as string))
-}
-
-// PR #62 — Whether the caller currently has a live matching_availability
-// row. Used by the caller pre-flight check to short-circuit with
-// 'not_available' before any candidate-pool work happens. Mirrors the
-// defense-in-depth check inside create_authorized_match (migration 034
-// section l) so we avoid spending Edge Function CPU on a caller who
-// can't be matched anyway.
-async function callerHasLiveAvailability(
-  admin: SupabaseClient,
-  userId: string,
-): Promise<boolean> {
-  const nowIso = new Date().toISOString()
-  const { data, error } = await admin
-    .from('matching_availability')
-    .select('available_until')
-    .eq('user_id', userId)
-    .gt('available_until', nowIso)
-    .maybeSingle()
-  if (error) throw error
-  return !!data
+    .from('profiles')
+    .select('id, last_active_at')
+    .in('id', candidateIds)
+  if (error || !data) return out
+  for (const row of data) {
+    const raw = (row as Record<string, unknown>).last_active_at
+    if (typeof raw === 'string') {
+      const ms = new Date(raw).getTime()
+      out.set(row.id as string, Number.isFinite(ms) ? ms : null)
+    } else {
+      out.set(row.id as string, null)
+    }
+  }
+  return out
 }
 
 serve(async (req) => {
@@ -363,25 +352,12 @@ serve(async (req) => {
       return jsonResponse({ status: 'already_has_active', match_id: callerActiveId })
     }
 
-    // 5b. PR #62 — Caller matching-availability pre-flight.
-    //
-    //     A user must have explicitly opted into the 3-day window via
-    //     public.set_matching_availability() (migration 033) before any
-    //     match can be created for them. Short-circuit here so we don't
-    //     waste candidate-pool fetches + scoring on a caller who can't
-    //     receive a match. create_authorized_match (migration 034
-    //     section l) re-checks this with FOR UPDATE locking as
-    //     defense-in-depth.
-    //
-    //     ⚠ RELEASE WARNING ⚠ This pre-flight + the RPC gate together
-    //     mean NO match can be created until the client UI (PR #63) is
-    //     deployed. Without UI, no one can set availability, every
-    //     caller hits this branch, every candidate is filtered out, the
-    //     app appears "broken." This Edge Function update must NOT be
-    //     deployed before PR #63 ships.
-    if (!(await callerHasLiveAvailability(admin, callerId))) {
-      return jsonResponse({ status: 'not_available' })
-    }
+    // Migration 035 — The caller-side availability pre-flight from
+    // PR #62 is removed. Automatic matching no longer requires an opt-in
+    // row; eligibility is determined by onboarding + monthly cap +
+    // open-match state (already checked above) + hard filters (rechecked
+    // inside the RPC). The matching_availability table is left in place
+    // as an inert artifact (see migration 035 notes).
 
     // 6. Caller's questionnaire answers (required by scoring).
     const { data: callerAnswersRow, error: ansErr } = await admin
@@ -419,24 +395,17 @@ serve(async (req) => {
     const afterPastFilter = rawCandidates.filter((c) => !pastPeers.has(c.id))
     if (afterPastFilter.length === 0) return jsonResponse({ status: 'no_candidate' })
 
-    // 9. Exclude capped, active-holding, and unavailable candidates
-    //    (bi-directional rules + PR #62 availability gate).
-    //
-    //    PR #62 added `available` — the set of candidate ids that have a
-    //    live matching_availability row (available_until > now()). Only
-    //    candidates who have explicitly opted into the 3-day window are
-    //    eligible. The migration-034 availability gate inside
-    //    create_authorized_match re-checks each candidate atomically as
-    //    defense-in-depth (handles the race where a candidate's window
-    //    expires between this pre-filter and the RPC call).
+    // 9. Exclude capped and active-holding candidates (bi-directional
+    //    rules). Migration 035 removed the availability filter; the
+    //    candidate pool is now every past-peer-excluded, non-capped,
+    //    non-active candidate.
     const candidateIds = afterPastFilter.map((c) => c.id as string)
-    const [capped, withActive, available] = await Promise.all([
+    const [capped, withActive] = await Promise.all([
       fetchCappedCandidateIds(admin, candidateIds),
       fetchCandidateIdsWithActive(admin, candidateIds),
-      fetchAvailableCandidateIds(admin, candidateIds),
     ])
     const eligible = afterPastFilter.filter(
-      (c) => !capped.has(c.id) && !withActive.has(c.id) && available.has(c.id),
+      (c) => !capped.has(c.id) && !withActive.has(c.id),
     )
     if (eligible.length === 0) return jsonResponse({ status: 'no_candidate' })
 
@@ -457,15 +426,19 @@ serve(async (req) => {
       }
     })
 
-    // 10b. AI traits (PR-AUDIT-D PR 2). Fetch caller's row and bulk-fetch
-    //      every eligible candidate's row in parallel. Each is optional —
-    //      missing rows degrade gracefully to score-contribution 0 in
-    //      scoring.ts. Failure of either fetch is non-fatal: matching
-    //      still proceeds without the AI complement.
+    // 10b. AI traits (PR-AUDIT-D PR 2) + last_active_at (migration 035).
+    //      Bulk-fetch caller traits, candidate traits, and candidate
+    //      activity in parallel. Each is optional / failure-tolerant:
+    //        * Missing AI traits → score-contribution 0 in scoring.ts.
+    //        * Missing last_active_at → candidate falls into the dormant
+    //          bucket (still eligible, just not preferred).
+    //      The activity map is consumed locally to partition the ranked
+    //      list; it never leaves the function.
     const candidateUserIds = candidatesForScoring.map((c) => c.id)
-    const [callerAiTraits, candidateAiMap] = await Promise.all([
+    const [callerAiTraits, candidateAiMap, lastActiveMap] = await Promise.all([
       fetchAiTraitsForUser(admin, callerId),
       fetchAiTraitsForUsers(admin, candidateUserIds),
+      fetchLastActiveAtMap(admin, candidateUserIds),
     ])
     for (const c of candidatesForScoring) {
       c.aiTraits = candidateAiMap.get(c.id) ?? null
@@ -474,54 +447,67 @@ serve(async (req) => {
     // 11. Rank eligible candidates by score (descending). Each candidate
     //     has already passed pre-filters (no-rematch, not-capped, no
     //     active match) so this pass adds only the hard-filter +
-    //     scoring layer. AI traits enter as a capped ±8 soft complement
-    //     (scoring.ts § aiTraitContribution); zero when either side
-    //     lacks an AI traits row.
+    //     scoring layer. AI traits enter as a capped ±8 soft complement;
+    //     zero when either side lacks an AI traits row.
     const ranked = rankCandidates(callerProfile, callerAnswers, callerAiTraits, candidatesForScoring)
     if (ranked.length === 0) return jsonResponse({ status: 'no_candidate' })
 
-    // 12. Retry loop: try the top MIN(ranked.length, MAX_ATTEMPTS)
-    //     candidates until the RPC accepts one or terminates with a
-    //     non-retryable status.
+    // 11b. Activity partition (migration 035). Stable-partition the
+    //      ranked list into "active in last 7 days" (recent) and
+    //      "dormant / unknown" buckets, preferring active candidates
+    //      WITHOUT entirely blocking inactive ones. Score order is
+    //      preserved within each bucket — so the chosen winner is
+    //      always the HIGHEST-scoring recent candidate when any exists,
+    //      and only falls back to dormant/unknown candidates when
+    //      there are no recent ones.
+    //
+    //      Soft preference, not a hard filter: a missing or stale
+    //      last_active_at simply demotes a candidate; it does not
+    //      remove them. This signal is read here and discarded — it
+    //      never enters the response payload or the RPC arguments.
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+    const activeCutoffMs = Date.now() - SEVEN_DAYS_MS
+    const recentBucket: typeof ranked = []
+    const dormantBucket: typeof ranked = []
+    for (const candidate of ranked) {
+      const lastMs = lastActiveMap.get(candidate.candidateId) ?? null
+      if (lastMs !== null && lastMs >= activeCutoffMs) {
+        recentBucket.push(candidate)
+      } else {
+        dormantBucket.push(candidate)
+      }
+    }
+    const orderedForAttempts = [...recentBucket, ...dormantBucket]
+
+    // 12. Retry loop: try the top MIN(orderedForAttempts.length,
+    //     MAX_ATTEMPTS) candidates until the RPC accepts one or
+    //     terminates with a non-retryable status.
     //
     //     The RPC re-verifies every invariant atomically (caller +
     //     winner onboarding, gender, height must_have, no-rematch,
-    //     both-sides monthly cap, both-sides active match, AND PR #62's
-    //     both-sides matching availability with FOR UPDATE locking).
-    //     Only 'candidate_unavailable' triggers a retry — that status
-    //     signals a race condition (a candidate became capped/active/
-    //     unavailable in the gap between our pre-filter and the RPC's
-    //     re-check). The PR #62 winner-availability gate uses the same
-    //     'candidate_unavailable' envelope with reason
-    //     'winner_not_available' specifically so this retry path
-    //     transparently moves to the next candidate.
-    //     All other statuses stop the loop immediately:
+    //     both-sides monthly cap, both-sides active match). Migration
+    //     035 removed the availability gate, so the RPC no longer
+    //     rejects with 'not_available' / 'winner_not_available' for
+    //     availability reasons. Race-condition handling stays — the
+    //     RPC can still return 'candidate_unavailable' for winner-side
+    //     races (e.g., gender/height/active-match/cap flipped between
+    //     our pre-filter and the RPC re-check), and the retry loop
+    //     handles those transparently.
+    //
+    //     Status branches:
     //       'created'              → success, returned verbatim
+    //       'candidate_unavailable'→ race on the winner side; retry
     //       'monthly_cap_reached'  → caller-side; retry can't help
     //       'already_has_active'   → caller-side; retry would race
     //       'incomplete_profile'   → caller-side
-    //       'not_available'        → caller-side (PR #62); retry can't
-    //                                help (caller hasn't opted into
-    //                                availability — only set_matching_
-    //                                availability can fix it)
     //       'error'                → likely structural; do not retry
     //     A transport-level rpcErr also stops the loop.
     //
-    //     The RPC params are entirely server-derived per attempt:
-    //       p_user_id   = callerId (from verified JWT)
-    //       p_winner_id = ranked[i].candidateId (server scoring)
-    //       p_score     = ranked[i].score      (server-clamped)
-    //       p_reasons   = ranked[i].reasons    (server Hebrew)
-    //       p_depth     = ranked[i].depth      ('fast' | 'deep')
-    //     Nothing here is sourced from the request body.
-    //
-    //     The internal 'reason' field on 'candidate_unavailable' is
-    //     consumed locally to decide whether to continue, then
-    //     discarded — never forwarded to the client. Rejected
-    //     candidate IDs likewise never leave the function.
-    const attempts = Math.min(ranked.length, MAX_ATTEMPTS)
+    //     RPC params are entirely server-derived per attempt — nothing
+    //     comes from the request body.
+    const attempts = Math.min(orderedForAttempts.length, MAX_ATTEMPTS)
     for (let i = 0; i < attempts; i++) {
-      const candidate = ranked[i]
+      const candidate = orderedForAttempts[i]
       const { data: rpcResult, error: rpcErr } = await admin.rpc(
         'create_authorized_match',
         {
