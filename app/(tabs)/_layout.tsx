@@ -1,47 +1,35 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, Platform, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { fetchUnreadSummary } from '@/lib/unread';
 import { registerPushTokenIfPermitted } from '@/lib/push';
 
+// 3-tab restructure — icons-only premium iOS tab bar.
+// RTL order (with I18nManager.forceRTL(true) from app/_layout.tsx):
+//   • declaration order in this file controls visual order;
+//   • first declared = far right in RTL = "התאמה" (Match);
+//   • second = center = "צ׳אט" (Chat);
+//   • third = far left = "הפרופיל שלי" (Profile).
+// Compact height, no text labels, subtle active tint.
+const TAB_BAR_HEIGHT = 52;
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
+  const isDark = colorScheme === 'dark';
 
-  // PR-PUSH-A: live unread badge for the matching tab.
-  // Sources of truth that move the count:
-  //   • A new peer message lands (postgres_changes INSERT on messages)
-  //   • The caller (this device, or another device of theirs) updates
-  //     conversation_reads via mark_conversation_read
-  // Realtime subscriptions cover both; an initial fetch on mount seeds
-  // the value. RLS makes the messages subscription only deliver events
-  // for conversations the caller participates in, so a recompute on
-  // every INSERT is cheap. The unread RPC excludes terminal matches.
+  // Unread badge — moved from Match → Chat in the 3-tab restructure.
+  // Chats are now their own tab, so the unread indicator belongs there.
   const [unreadTotal, setUnreadTotal] = useState(0);
 
   // PR-PUSH-B: register the device's Expo push token for the authenticated +
-  // onboarded user. This layout only renders for users who passed the
-  // routing gates in app/_layout.tsx (session + profile.onboarding_completed),
-  // so calling here guarantees we never prompt on welcome/login/signup
-  // or before the questionnaire is done. The helper is idempotent and
-  // self-guarded — repeated mounts within a single session no-op.
-  //
-  // HOTFIX P0: defer until interactions/animations settle. When this
-  // layout mounts immediately after the questionnaire's router.replace,
-  // the navigation transition is still in flight. Synchronous calls
-  // into native (OS permission dialog, getExpoPushTokenAsync) racing
-  // the unmount/mount transition were a plausible contributor to the
-  // Hermes EXC_BAD_ACCESS observed in TestFlight build 12.
-  // InteractionManager.runAfterInteractions schedules the call once the
-  // RN frame scheduler is idle — typically tens to a few hundred ms
-  // later — well within the user's attention window for permission ask.
-  // The helper itself is still self-guarded (alreadyAttempted flag),
-  // so deferral cannot cause duplicate prompts.
+  // onboarded user. Deferred until interactions settle (HOTFIX P0).
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       registerPushTokenIfPermitted();
@@ -85,35 +73,88 @@ export default function TabLayout() {
     };
   }, []);
 
+  const activeTint = '#FF3D57';
+  const inactiveTint = isDark ? '#98A2B3' : '#9CA3AF';
+  const barBackground = isDark ? '#1D2939' : '#FFFFFF';
+  const barBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: activeTint,
+        tabBarInactiveTintColor: inactiveTint,
+        // Compact, premium iOS bar. Height stays small; safe-area inset
+        // pads the bottom on devices with a home indicator. No top
+        // border on iOS to avoid a hairline that competes with the
+        // active-tab tint; a very subtle border on Android for affordance.
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: TAB_BAR_HEIGHT + insets.bottom,
+            paddingBottom: insets.bottom,
+            backgroundColor: barBackground,
+            borderTopColor: barBorder,
+            borderTopWidth: Platform.OS === 'ios' ? StyleSheet.hairlineWidth : 0.5,
+          },
+        ],
+        tabBarItemStyle: styles.tabItem,
       }}>
+      {/* 1. Match — far right in RTL. Default landing tab.
+            tabBarBadge intentionally NOT set here anymore — the unread
+            count tracks chats, not matches, so the badge now lives on
+            the Chat tab below. */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'התאמה',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles" color={color} />,
-          // Numeric badge when > 0; undefined hides the badge entirely.
-          // The RPC excludes terminal matches, so stale unread never
-          // accumulates on this badge after expired/unmatched.
+          tabBarAccessibilityLabel: 'התאמה',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 28 : 26} name="sparkles" color={color} />
+          ),
+        }}
+      />
+
+      {/* 2. Chat — center.
+            tabBarBadge: numeric unread count when > 0; undefined hides
+            the badge. Same RPC semantics as before (excludes terminal
+            matches), just relocated. */}
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'צ׳אט',
+          tabBarAccessibilityLabel: 'צ׳אט',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 28 : 26} name="bubble.left.fill" color={color} />
+          ),
           tabBarBadge: unreadTotal > 0 ? unreadTotal : undefined,
         }}
       />
+
+      {/* 3. Profile — far left in RTL. Previously hidden behind a header
+            icon (href: null); now a first-class destination. */}
       <Tabs.Screen
         name="my-profile"
         options={{
-          // Route stays registered so router.push('/(tabs)/my-profile') and the
-          // top profile icon on the matching tab continue to work. href: null
-          // only hides the tab button itself from the bottom bar.
-          href: null,
-          title: 'פרופיל',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          title: 'הפרופיל שלי',
+          tabBarAccessibilityLabel: 'הפרופיל שלי',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 28 : 26} name="person.fill" color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  tabItem: {
+    paddingTop: 6,
+  },
+});

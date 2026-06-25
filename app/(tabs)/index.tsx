@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
-  TouchableOpacity,
   View,
   ScrollView,
   SafeAreaView,
@@ -16,6 +15,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
 import { findAndCreateBestMatch } from '@/lib/matching';
 import { logScreenView, logEvent, logError } from '@/lib/analytics';
+import { MatchResultContent } from '@/components/match-result/MatchResultContent';
 
 // Design Constants
 const UI_COLORS = {
@@ -62,6 +62,11 @@ export default function MatchSelectionScreen() {
   // True after an auto-search attempt has resolved with 'no_candidate'.
   // Drives the calm "no match yet" empty state copy.
   const [noMatchFound, setNoMatchFound] = useState(false);
+  // 3-tab restructure — drives the "נותרו לך עוד N התאמות החודש" line in
+  // the calm searching/empty states. Null until the cap check resolves
+  // (suppresses a flash of the wrong number on cold start). 0 hides the
+  // line because the cap-reached branch renders its own copy.
+  const [monthlyRemaining, setMonthlyRemaining] = useState<number | null>(null);
 
   // PR-BUILD24-HARDEN: lifecycle / race-safety refs (preserved verbatim).
   //
@@ -75,19 +80,19 @@ export default function MatchSelectionScreen() {
   //                           could both observe `matching === false`
   //                           between an await and the setMatching(true)
   //                           call landing.
-  //   navigatingToMatchRef  — one-shot guard for the auto-forward effect.
-  //                           Tracks the match-id we've already redirected
-  //                           to so a re-render with the same currentMatch
-  //                           doesn't fire router.replace twice.
   //   alertingRef           — serializes Alert.alert calls (iOS 26
   //                           UIAlertController crash defense).
   //   autoSearchedRef       — one-shot for the on-mount auto-match
   //                           attempt. Without this, React 18 strict mode
   //                           / a re-mount after auth state change could
   //                           fire the auto-search twice.
+  //
+  // 3-tab restructure — the prior navigatingToMatchRef was deleted along
+  // with the auto-forward useEffect. The Match tab no longer redirects
+  // to /match-result; it renders <MatchResultContent /> inline when an
+  // active match exists, so the persistent bottom tab bar stays visible.
   const isMountedRef = useRef(true);
   const findMatchInFlightRef = useRef(false);
-  const navigatingToMatchRef = useRef<string | null>(null);
   const alertingRef = useRef(false);
   const autoSearchedRef = useRef(false);
 
@@ -114,29 +119,12 @@ export default function MatchSelectionScreen() {
     fetchCurrentMatch();
   }, []);
 
-  // Auto-forward to the actual match screen whenever an active match is
-  // resolved. The Match tab is purely a router — it never renders an
-  // intermediate "active match" card.
-  //
-  // Status branching:
-  //   - 'active'        → /match-result (no chat yet; preview is right)
-  //   - 'chat_started'  → /chat (conversation is live; skip the preview)
-  //   - terminal (expired/unmatched) → never reaches this point;
-  //     fetchCurrentMatch filters them out via .in('status',
-  //     ['active', 'chat_started']) so currentMatch stays null and
-  //     the home empty/searching state renders.
-  useEffect(() => {
-    if (loading) return;
-    const matchId = currentMatch?.id;
-    if (!matchId) {
-      navigatingToMatchRef.current = null;
-      return;
-    }
-    if (navigatingToMatchRef.current === matchId) return;
-    navigatingToMatchRef.current = matchId;
-    const target = currentMatch?.status === 'chat_started' ? '/chat' : '/match-result';
-    router.replace({ pathname: target as any, params: { match_id: matchId } });
-  }, [currentMatch?.id, currentMatch?.status, loading, router]);
+  // 3-tab restructure — the prior auto-forward useEffect was deleted.
+  // The Match tab is now the Match experience itself: when an open match
+  // exists, the render branch below mounts <MatchResultContent /> inline
+  // (and the user is then in the Chat tab if they tap "open chat", via
+  // the onOpenChat callback). The bottom tab bar stays visible the whole
+  // time.
 
   // PR-BUILD24-HARDEN: alert serializer. iOS 26 throws NSException from
   // a TurboModule worker when two UIAlertControllers present in
@@ -320,8 +308,15 @@ export default function MatchSelectionScreen() {
 
     const monthlyMatchCount = count ?? 0;
     if (monthlyMatchCount >= 5) {
-      if (isMountedRef.current) setCapReached(true);
+      if (isMountedRef.current) {
+        setCapReached(true);
+        setMonthlyRemaining(0);
+      }
       return;
+    }
+
+    if (isMountedRef.current) {
+      setMonthlyRemaining(Math.max(0, 5 - monthlyMatchCount));
     }
 
     // One-shot per mount. Subsequent re-renders / re-runs do not retry.
@@ -397,29 +392,30 @@ export default function MatchSelectionScreen() {
     }
   };
 
-  const handleProfile = () => {
-    router.push('/(tabs)/my-profile');
-  };
+  // 3-tab restructure — premium searching hero shared by the initial load
+  // and the in-flight findAndCreate path. Centered, sparkles icon, calm
+  // copy that frames the Match tab as the home of "next match".
+  // Renders the monthly-remaining line only after the cap check resolves
+  // (suppresses a flash of the wrong count on cold start).
+  const remainingLine =
+    monthlyRemaining !== null && monthlyRemaining > 0
+      ? `נותרו לך עוד ${monthlyRemaining} ${monthlyRemaining === 1 ? 'התאמה' : 'התאמות'} החודש`
+      : null;
 
-  // BATCH-H6: premium searching hero shared by the initial load and the
-  // in-flight findAndCreate path. Centered, sparkles icon, same visual
-  // language as the empty state so "looking" feels continuous with
-  // "still looking."
   const searchingHero = (
     <View style={styles.searchingHero}>
       <View style={styles.searchingIconCircle}>
         <IconSymbol name="sparkles" size={56} color={UI_COLORS.accent} />
       </View>
       <ThemedText style={[styles.searchingTitle, { color: dynamicColors.text }]}>
-        מחפשים התאמה שמתאימה לך באמת
-      </ThemedText>
-      <ThemedText style={[styles.searchingBody, { color: dynamicColors.textLight }]}>
-        אנחנו בודקים התאמות לפי השאלון שלך, ולא לפי החלקה מהירה.
+        מחפשים את ההתאמה הבאה שלך…
       </ThemedText>
       <ActivityIndicator size="small" color={UI_COLORS.primary} style={{ marginTop: 4 }} />
-      <ThemedText style={[styles.searchingNote, { color: dynamicColors.textLight }]}>
-        זה יכול לקחת רגע.
-      </ThemedText>
+      {remainingLine && (
+        <ThemedText style={[styles.searchingNote, { color: dynamicColors.textLight }]}>
+          {remainingLine}
+        </ThemedText>
+      )}
     </View>
   );
 
@@ -428,9 +424,7 @@ export default function MatchSelectionScreen() {
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
         <SafeAreaView style={{ flex: 1 }}>
           <View style={styles.header}>
-            <View style={{ width: 32 }} />
             <ThemedText style={[styles.logo, { color: UI_COLORS.branding }]}>UniMatch</ThemedText>
-            <View style={{ width: 32 }} />
           </View>
           {searchingHero}
         </SafeAreaView>
@@ -438,29 +432,44 @@ export default function MatchSelectionScreen() {
     );
   }
 
+  // 3-tab restructure — render the existing Match Result experience
+  // inline when an open match exists. The component is the same one the
+  // /match-result stack route renders, just hosted in the tab so the
+  // bottom tab bar persists. onOpenChat switches to the Chat tab
+  // (router.navigate is the Expo Router primitive for tab navigation —
+  // it does not push a duplicate stack route).
+  if (currentMatch?.id) {
+    return (
+      <MatchResultContent
+        matchId={currentMatch.id}
+        onOpenChat={() => router.navigate('/(tabs)/chat' as any)}
+      />
+    );
+  }
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          {/* 3-tab restructure — removed the top-right profile icon
+              shortcut; "הפרופיל שלי" is now a first-class tab in the
+              bottom bar. Header centers the brand mark. */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={handleProfile}>
-               <IconSymbol name="person.crop.circle" size={32} color={UI_COLORS.branding} />
-            </TouchableOpacity>
             <ThemedText style={[styles.logo, { color: UI_COLORS.branding }]}>UniMatch</ThemedText>
-            <View style={{ width: 32 }} />
           </View>
 
-          {/* Render order (migration 035 — automatic matching restored):
-                1. searchingHero — currentMatch resolved OR an auto/manual
-                   search is in flight (the auto-forward useEffect
-                   redirects to /match-result | /chat when currentMatch
-                   lands).
+          {/* Render order (3-tab restructure — Match tab is the Match
+              experience itself):
+                * currentMatch with id → handled by the early return
+                  above (renders <MatchResultContent />); never reaches
+                  this JSX.
+                1. searchingHero — auto/manual search in flight.
                 2. Cap state — user hit 5/month; auto-search suppressed.
-                3. No-match-found state — auto-search returned no_candidate.
-                   Calm empty copy, no buttons.
+                3. No-match-found state — auto-search returned
+                   no_candidate. Calm empty copy, no buttons.
               No score percentage. No "אני פנוי/ה להכיר" CTA. No "last
               seen" surface. */}
-          {(currentMatch || matching) ? (
+          {matching ? (
             searchingHero
           ) : capReached ? (
             <View style={styles.emptyContainer}>
@@ -490,6 +499,11 @@ export default function MatchSelectionScreen() {
               <ThemedText style={[styles.emptySubtitle, { color: dynamicColors.textLight }]}>
                 נמשיך לבדוק כשיהיו משתמשים פעילים שמתאימים להגדרות שלך.
               </ThemedText>
+              {remainingLine && (
+                <ThemedText style={[styles.searchingNote, { color: dynamicColors.textLight }]}>
+                  {remainingLine}
+                </ThemedText>
+              )}
             </View>
           )}
 
@@ -516,9 +530,11 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 32,
   },
+  // 3-tab restructure — header now hosts only the brand mark
+  // (profile icon moved to its own tab). Center-justified for symmetry.
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 10,
   },
