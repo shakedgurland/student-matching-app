@@ -4,7 +4,6 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   TextInput,
@@ -18,6 +17,10 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so the Profile tab can opt out of the bottom inset (the tab
+// bar already covers the home-indicator safe area).
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -464,7 +467,7 @@ export default function MyProfileScreen() {
       style={{ flex: 1 }}
     >
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -832,7 +835,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 24,
     gap: 32,
-    paddingBottom: 40,
+    // PR #71-follow-up polish — was 40, reduced to 16 to avoid the
+    // double bottom safe-area stacking with the persistent tab bar
+    // (which already covers the home-indicator inset). Content still
+    // scrolls cleanly above the tab bar.
+    paddingBottom: 16,
   },
   header: {
     flexDirection: 'row',

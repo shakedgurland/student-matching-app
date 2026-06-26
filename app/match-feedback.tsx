@@ -308,8 +308,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
-    paddingBottom: 40,
-    gap: 32,
+    // PR #71-follow-up polish — paddingBottom 40 → 24, gap 32 → 24
+    // tightens the scroll area so the submit button doesn't have a
+    // huge dead zone underneath it on iPhone. SafeAreaView still
+    // covers the home-indicator safe area (this is a stack screen
+    // pushed above the tabs, not a tab-hosted screen).
+    paddingBottom: 24,
+    gap: 24,
   },
   header: {
     alignItems: 'center',

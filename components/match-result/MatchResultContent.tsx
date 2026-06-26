@@ -4,11 +4,19 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so we can opt out of the bottom inset via `edges` when this
+// component is hosted inside a tab (where the tab bar already covers
+// the home-indicator safe area). The drop-in API is identical for
+// every other prop.
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+  type Edge,
+} from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -91,13 +99,36 @@ function formatRemainingChip(msRemaining: number): string {
 export interface MatchResultContentProps {
   matchId?: string;
   onOpenChat?: (matchId: string) => void;
+  /**
+   * When true, this component is rendered inside a Tab screen (the
+   * Match tab). The bottom tab bar already covers the home-indicator
+   * safe area, so:
+   *   • SafeAreaView opts out of the bottom edge (no double padding).
+   *   • Sticky footer uses a small fixed bottom padding instead of
+   *     adding insets.bottom (which would compound the wasted gap).
+   * Defaults to false so the legacy /match-result stack-route wrapper
+   * keeps full safe-area handling unchanged.
+   */
+  hostedInTab?: boolean;
 }
 
-export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentProps) {
+export function MatchResultContent({
+  matchId,
+  onOpenChat,
+  hostedInTab = false,
+}: MatchResultContentProps) {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
+
+  // SafeAreaView edges + sticky-footer bottom padding are both
+  // gated on hostedInTab. Tab-hosted: drop bottom inset everywhere
+  // (the tab bar provides it). Standalone: full safe-area behavior.
+  const safeEdges: readonly Edge[] = hostedInTab
+    ? ['top', 'left', 'right']
+    : ['top', 'left', 'right', 'bottom'];
+  const stickyFooterBottomPad = hostedInTab ? 8 : Math.max(insets.bottom, 4);
 
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -292,7 +323,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={[styles.center, { flex: 1, gap: 14 }]}>
+        <SafeAreaView edges={safeEdges} style={[styles.center, { flex: 1, gap: 14 }]}>
           <ActivityIndicator size="large" color={UI_COLORS.primary} />
           <ThemedText style={[styles.loadingNote, { color: dynamicColors.textLight }]}>
             טוען את ההתאמה שלך…
@@ -305,7 +336,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
   if (errorMsg || !match || !peer) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
           <View style={styles.header}>
             <View style={styles.headerSlot} />
             <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
@@ -396,7 +427,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
         <View style={styles.header}>
           {/* 3-tab restructure — the top-right profile shortcut was
               removed; "הפרופיל שלי" is now a first-class tab in the
@@ -551,7 +582,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
             {
               backgroundColor: dynamicColors.bg,
               borderTopColor: dynamicColors.border,
-              paddingBottom: Math.max(insets.bottom, 4),
+              paddingBottom: stickyFooterBottomPad,
             },
           ]}>
           <TouchableOpacity

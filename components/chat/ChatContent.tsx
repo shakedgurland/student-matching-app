@@ -4,7 +4,6 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  SafeAreaView,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +11,12 @@ import {
   Image,
   Alert,
 } from 'react-native';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so we can opt out of the bottom inset via `edges` when this
+// component is hosted inside the Chat tab (where the bottom tab bar
+// already covers the home-indicator safe area). Drop-in for every
+// other prop.
+import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -83,12 +88,27 @@ function formatTime(ts: string): string {
 
 export interface ChatContentProps {
   matchId?: string;
+  /**
+   * When true, this component is rendered inside the Chat tab. The
+   * bottom tab bar already covers the home-indicator safe area, so
+   * SafeAreaView opts out of the bottom edge — otherwise the chat
+   * input bar sits ~34pt above the tab bar with dead space below it.
+   * Defaults to false so the legacy /chat stack-route wrapper (used
+   * for push-notification deep links) keeps full safe-area handling.
+   */
+  hostedInTab?: boolean;
 }
 
-export function ChatContent({ matchId }: ChatContentProps) {
+export function ChatContent({ matchId, hostedInTab = false }: ChatContentProps) {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+
+  // SafeAreaView edges gated on hostedInTab. Tab-hosted: drop bottom
+  // (tab bar covers home indicator). Standalone: full safe-area.
+  const safeEdges: readonly Edge[] = hostedInTab
+    ? ['top', 'left', 'right']
+    : ['top', 'left', 'right', 'bottom'];
 
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -506,7 +526,7 @@ export function ChatContent({ matchId }: ChatContentProps) {
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={[styles.center, { flex: 1 }]}>
+        <SafeAreaView edges={safeEdges} style={[styles.center, { flex: 1 }]}>
           <ActivityIndicator size="large" color={UI_COLORS.branding} />
         </SafeAreaView>
       </ThemedView>
@@ -516,7 +536,7 @@ export function ChatContent({ matchId }: ChatContentProps) {
   if (errorMsg || !conversationId || !meId) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
           <View
             style={[
               styles.header,
@@ -545,7 +565,7 @@ export function ChatContent({ matchId }: ChatContentProps) {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}

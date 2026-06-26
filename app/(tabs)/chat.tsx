@@ -1,5 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so the Chat tab can opt out of the bottom inset (the tab
+// bar already covers the home-indicator safe area).
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ChatContent } from '@/components/chat/ChatContent';
@@ -126,7 +130,7 @@ export default function ChatTabScreen() {
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={styles.center}>
+        <SafeAreaView edges={['top', 'left', 'right']} style={styles.center}>
           <ActivityIndicator size="small" color={UI_COLORS.primary} />
         </SafeAreaView>
       </ThemedView>
@@ -140,7 +144,7 @@ export default function ChatTabScreen() {
     // is pushed onto the stack. key={openMatchId} forces a clean
     // remount if the user's open match changes (rare — match-create
     // doesn't usually replace an open match — but defensive).
-    return <ChatContent key={openMatchId} matchId={openMatchId} />;
+    return <ChatContent key={openMatchId} matchId={openMatchId} hostedInTab />;
   }
 
   // Empty state — no open match.
