@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   Dimensions,
+  I18nManager,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
@@ -49,6 +50,17 @@ export default function HowItWorksScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
   const isDark = colorScheme === 'dark';
+  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
+  // header row (back-button + title + trailing spacer) and the footer
+  // row (privacy / separator / terms) produce the same physical layout
+  // regardless of whether `forceRTL(true)` (called once on first
+  // launch in app/_layout.tsx) has actually taken effect at layout
+  // time. Without this, a `flexDirection: 'row'` row that DEPENDED on
+  // the auto-flip rendered LTR on the first session and the back
+  // chevron appeared on the LEFT (wrong for a Hebrew RTL screen) and
+  // privacy/terms order flipped. See JSX inline for explicit
+  // flexDirection choice.
+  const isRTL = I18nManager.isRTL;
 
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -70,7 +82,13 @@ export default function HowItWorksScreen() {
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={[styles.header, { borderBottomColor: dynamicColors.border }]}>
+        {/* Build-#30-QA-hotfix — inline flexDirection. Under isRTL active
+            'row' lays right-to-left so the back button (first child)
+            sits on the right; under !isRTL 'row-reverse' achieves the
+            same physical layout by reversing LTR. Identical visual
+            order in both states: back-on-right, title-centered,
+            spacer-on-left. */}
+        <View style={[styles.header, { borderBottomColor: dynamicColors.border, flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -164,7 +182,11 @@ export default function HowItWorksScreen() {
           })}
         </View>
 
-        <View style={[styles.footer, { borderTopColor: dynamicColors.border }]}>
+        {/* Build-#30-QA-hotfix — inline flexDirection so the [privacy,
+            separator, terms] order renders consistently as
+            [privacy-right, separator-middle, terms-left] under both
+            RTL-effective and pre-flip states. */}
+        <View style={[styles.footer, { borderTopColor: dynamicColors.border, flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
           <TouchableOpacity
             onPress={() => router.push('/privacy-policy' as any)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
