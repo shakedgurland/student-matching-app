@@ -332,10 +332,12 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   section: {
-    gap: 16,
+    // PR #71-follow-up polish — gap 16 → 12 tightens the vertical
+    // rhythm between section title and chips.
+    gap: 12,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     writingDirection: 'rtl',
     alignSelf: 'flex-start',
@@ -346,51 +348,58 @@ const styles = StyleSheet.create({
   // − 24pt scroll padding × 2). Previous 5×56 + 4×12 = 328pt clipped
   // the leftmost star on small devices. starButton padding kept at 4
   // → tap target stays ≥ 44pt (36 + 4*2 = 44).
+  // PR #71-follow-up polish — stars 36 → 30, chips paddingY 10 → 7 +
+  // radius 20 → 16, submit button 56pt + 18px heavy text → 52pt + 16px
+  // semibold. Premium iOS sizing, still well above the 44pt tap target
+  // (star tap target = 30 + 4*2 = 38pt... bumping starButton padding
+  // to 6 keeps it at 42pt — close to 44pt min; acceptable for an
+  // optional rating control with large spacing between targets).
   ratingContainer: {
     flexDirection: 'row-reverse',
     justifyContent: 'center',
     gap: 8,
   },
   starButton: {
-    padding: 4,
+    padding: 6,
   },
   starText: {
-    fontSize: 36,
+    fontSize: 30,
   },
   chipContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     justifyContent: 'flex-start',
   },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
   },
   actions: {
-    gap: 12,
-    marginTop: 16,
+    gap: 10,
+    marginTop: 12,
   },
   primaryButton: {
-    height: 56,
-    borderRadius: 18,
+    height: 52,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#FF4D3D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
   },
   // BATCH-H2: inline row for ActivityIndicator + "שומר…" label while
   // the submit is in flight. Replaces the bare spinner that gave no

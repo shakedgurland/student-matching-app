@@ -647,26 +647,38 @@ export default function MyProfileScreen() {
               <View style={styles.settingsSection}>
                 <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>הגדרות וחוקיות</ThemedText>
                 <View style={[styles.settingsCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
-                  {/* PR-FINAL-UI: added chevron.left disclosure on each
-                      navigable row. Under forceRTL, flexDirection:'row'
-                      + justifyContent:'space-between' on settingsRow
-                      puts the text (flex:1) on the physical right and
-                      the chevron on the physical left — the standard
-                      iOS Hebrew settings-row layout. The destructive
-                      delete-account row below stays without a chevron
-                      per iOS convention (destructive actions don't
-                      have disclosure indicators). */}
+                  {/* PR #71-follow-up RTL polish — added a small tinted
+                      leading icon to each navigable row so the row
+                      anchors visually on the physical right (Hebrew
+                      leading edge), matching native iPhone Settings
+                      convention. Under forceRTL flexDirection:'row',
+                      JSX order [leadingIcon, text, chevron] renders as
+                      [icon-on-right, text-in-middle, chevron-on-left].
+                      The destructive delete-account row below stays
+                      without an icon AND without a chevron per iOS
+                      convention (destructive actions are unanchored).
+                      Icon colors reuse existing UI_COLORS.branding +
+                      UI_COLORS.surface — no new color tokens. */}
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
+                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
+                      <IconSymbol name="sparkles" size={16} color={UI_COLORS.branding} />
+                    </View>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>איך זה עובד?</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
+                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
+                      <IconSymbol name="checkmark.shield.fill" size={16} color={UI_COLORS.branding} />
+                    </View>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
                   <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
+                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
+                      <IconSymbol name="person.text.rectangle.fill" size={16} color={UI_COLORS.branding} />
+                    </View>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
@@ -1063,8 +1075,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // PR #71-follow-up RTL polish — `gap: 12` cleanly separates the
+    // new leading icon, the text (flex:1), and the trailing chevron
+    // without per-side margin hacks.
+    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  // PR #71-follow-up RTL polish — small tinted leading icon (28×28
+  // soft peach circle, branded SF Symbol) per navigable row. Anchors
+  // the row visually on the Hebrew leading edge (physical right under
+  // forceRTL).
+  settingsRowIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // PR-RTL-FIX: flex: 1 + textAlign: 'right' added so each settings row's
   // text container grows to fill the row width and the text pins to the
