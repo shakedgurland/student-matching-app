@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Dimensions,
-  I18nManager,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -105,14 +104,6 @@ const BrandMark = ({ size = 40, showSpark = true }: { size?: number; showSpark?:
 export default function WelcomeScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time. The
-  // trust section ([dot, "מיועד לסטודנטים מאומתים בלבד"]) was hardcoded
-  // to `flexDirection: 'row-reverse'`, which renders dot-on-right when
-  // forceRTL has NOT yet taken effect (first session on a non-Hebrew
-  // device — the common tester case) but flips to dot-on-left once
-  // RTL is active. Pick explicitly below so the dot always sits on
-  // the physical right (Hebrew leading edge) regardless of state.
-  const isRTL = I18nManager.isRTL;
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
@@ -221,17 +212,9 @@ export default function WelcomeScreen() {
             </ThemedText>
           </TouchableOpacity>
 
-          {/* Build-#30-QA-hotfix — inline flexDirection so dot always
-              sits on the physical right regardless of forceRTL state.
-              JSX [dot, text]: isRTL active → 'row' (start = right);
-              !isRTL → 'row-reverse' (reversed LTR puts first child
-              on right). */}
-          <View style={[styles.trustSection, { flexDirection: isRTL ? 'row' : 'row-reverse' }]}>
-            <View style={[styles.trustDot, { backgroundColor: UI_COLORS.branding }]} />
-            <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>
-              מיועד לסטודנטים מאומתים בלבד
-            </ThemedText>
-          </View>
+          <ThemedText style={[styles.trustNote, { color: UI_COLORS.textLight }]}>
+            מיועד לסטודנטים מאומתים בלבד
+          </ThemedText>
         </View>
       </SafeAreaView>
     </ThemedView>
@@ -401,23 +384,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     writingDirection: 'rtl',
   },
-  // Build-#30-QA-hotfix — flexDirection moved inline (picked from
-  // isRTL) so the dot anchors on the physical right regardless of
-  // forceRTL effective state. The shared style keeps only the
-  // direction-independent bits.
-  trustSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  trustDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
   trustNote: {
     fontSize: 12,
     fontWeight: '500',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    marginTop: 4,
   },
 });

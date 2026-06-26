@@ -8,7 +8,6 @@ import {
   Alert,
   TextInput,
   Image,
-  I18nManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -110,16 +109,15 @@ export default function MyProfileScreen() {
   };
 
   const isDark = colorScheme === 'dark';
-  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
-  // settings-row layout produces the same visual order regardless of
-  // whether `I18nManager.forceRTL(true)` (called once on first launch
-  // in app/_layout.tsx) has actually taken effect at layout time. On a
-  // fresh install on a non-Hebrew device the forceRTL preference is
-  // saved but the layout engine does not flip until the next JS bundle
-  // reload — so an `flexDirection: 'row'` row that DEPENDED on the
-  // auto-flip rendered LTR on the first session and only corrected
-  // itself after restart. We pick row vs row-reverse explicitly below.
-  const isRTL = I18nManager.isRTL;
+  // Build-#31-QA-hotfix — removed the I18nManager.isRTL read +
+  // associated `flexDirection: isRTL ? 'row' : 'row-reverse'` toggles
+  // from PR #73. Device QA proved the toggle did not fix the visible
+  // problem (the proven-working privacy-policy.tsx uses plain
+  // `flexDirection: 'row'` and renders correctly, confirming forceRTL
+  // IS effective on device). The real bug was the 3-child row with a
+  // leading icon + flex:1 text, which is now reverted to a simple
+  // 2-child [text, chevron] row matching native iOS Settings in
+  // Hebrew. See JSX below for the pattern.
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
     card: isDark ? '#1D2939' : UI_COLORS.card,
@@ -670,34 +668,32 @@ export default function MyProfileScreen() {
                       convention (destructive actions are unanchored).
                       Icon colors reuse existing UI_COLORS.branding +
                       UI_COLORS.surface — no new color tokens. */}
-                  {/* Build-#30-QA-hotfix — inline `flexDirection` chosen
-                      from `isRTL` so the [icon, text, chevron] JSX order
-                      always renders as physical [icon-right, text-middle,
-                      chevron-left] regardless of whether the I18nManager
-                      flip has actually taken effect at layout time. RTL
-                      active → 'row' (start=right under RTL); RTL not yet
-                      active → 'row-reverse' (start=right under reversed
-                      LTR). Either way: same visual order. */}
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/how-it-works' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="sparkles" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  {/* Build-#31-QA-hotfix — reverted to the simple 2-child
+                      row (text + chevron) that worked pre-PR-#72. The
+                      leading icon + flex:1 text combo from PR #72/#73
+                      caused short Hebrew titles to read as "floating
+                      mid-row" because the text container filled the
+                      whole space between icon and chevron, leaving an
+                      empty band before the chevron. The simpler layout
+                      below puts the text against the right edge
+                      (textAlign:'right' + flex:1 + writingDirection
+                      'rtl' under the device's effective RTL) with the
+                      chevron at the far left — exactly matching native
+                      iOS Settings rows in Hebrew. No isRTL toggle: the
+                      working privacy-policy.tsx header uses the same
+                      plain `flexDirection: 'row'` and renders correctly
+                      on device, proving forceRTL IS effective. */}
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>איך זה עובד?</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/privacy-policy' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="checkmark.shield.fill" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/terms-of-use' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="person.text.rectangle.fill" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
@@ -1090,27 +1086,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  // Build-#31-QA-hotfix — simple 2-child row [text(flex:1), chevron].
+  // `justifyContent: 'space-between'` puts text-block at start (right
+  // under device RTL) and chevron at end (left under device RTL). The
+  // text glyphs anchor right via the text style's textAlign + RTL.
+  // Same pattern as the working privacy-policy.tsx header. No leading
+  // icon, no isRTL toggle. Renders correctly on the device's effective
+  // RTL state.
   settingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // PR #71-follow-up RTL polish — `gap: 12` cleanly separates the
-    // new leading icon, the text (flex:1), and the trailing chevron
-    // without per-side margin hacks.
-    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-  },
-  // PR #71-follow-up RTL polish — small tinted leading icon (28×28
-  // soft peach circle, branded SF Symbol) per navigable row. Anchors
-  // the row visually on the Hebrew leading edge (physical right under
-  // forceRTL).
-  settingsRowIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // PR-RTL-FIX: flex: 1 + textAlign: 'right' added so each settings row's
   // text container grows to fill the row width and the text pins to the

@@ -5,7 +5,6 @@ import {
   View,
   ScrollView,
   ActivityIndicator,
-  I18nManager,
   Image,
 } from 'react-native';
 // PR #71-follow-up polish — swap RN's SafeAreaView for the context
@@ -122,16 +121,6 @@ export function MatchResultContent({
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
-  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
-  // reason-row layout produces the same physical [badge-right,
-  // text-left-of-badge] order regardless of whether `forceRTL(true)`
-  // has actually taken effect at layout time. Without this, a row
-  // declared as `flexDirection: 'row'` relied on the auto-flip; on
-  // first session on a non-Hebrew device the flip hasn't applied yet
-  // and badge ended up physically on the LEFT (LTR) with text floating
-  // away from the right edge. Picking row vs row-reverse explicitly
-  // below makes the visual layout identical in both states.
-  const isRTL = I18nManager.isRTL;
 
   // SafeAreaView edges + sticky-footer bottom padding are both
   // gated on hostedInTab. Tab-hosted: drop bottom inset everywhere
@@ -511,36 +500,14 @@ export function MatchResultContent({
               <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
                 למה זו התאמה טובה
               </ThemedText>
-              {/* PR #71-follow-up polish — bumped from a pale soft-pill
-                  row to a vivid premium row: warmer rose surface (#FFE9EB
-                  vs the prior #FFF3F4), small filled brand-coral badge
-                  on the leading edge with a white sparkles glyph, and a
-                  delicate coral-tinted shadow for elevation. Tinder/
-                  Instagram energy on a soft field — bold accent, calm
-                  background, compact spacing. Reason calculation,
-                  evidence ordering, and copy are untouched. */}
               <View style={styles.reasonsList}>
                 {evidenceCards.map((card) => (
                   <View
                     key={card.key}
                     style={[
                       styles.reasonRow,
-                      {
-                        backgroundColor: dynamicColors.reasonRowBg,
-                        // Build-#30-QA-hotfix — inline flexDirection
-                        // (see isRTL comment above). Guarantees badge
-                        // physically on right + text physically to its
-                        // left regardless of forceRTL effective state.
-                        flexDirection: isRTL ? 'row' : 'row-reverse',
-                      },
+                      { backgroundColor: dynamicColors.reasonRowBg },
                     ]}>
-                    <View style={[styles.reasonBadge, { backgroundColor: UI_COLORS.branding }]}>
-                      <IconSymbol
-                        name="sparkles"
-                        size={12}
-                        color="#FFFFFF"
-                      />
-                    </View>
                     <ThemedText style={[styles.reasonText, { color: dynamicColors.text }]}>
                       {card.text}
                     </ThemedText>
@@ -710,61 +677,24 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
 
-  section: { gap: 10 },
-  // Build-#30-QA-hotfix — section title was using `alignSelf: 'flex-start'`
-  // which is RTL-axis-dependent: under forceRTL flex-start = physical
-  // right (correct), but when forceRTL has not yet taken effect at
-  // layout time, flex-start = physical left and the Hebrew title pinned
-  // to the left of the screen. Switching to `alignSelf: 'stretch'` +
-  // explicit `textAlign: 'right'` makes the title right-anchored
-  // regardless of the RTL flip state. `textAlign: 'right'` is honored
-  // independently of layout direction in RN.
+  section: { gap: 10, alignSelf: 'stretch' },
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
     writingDirection: 'rtl',
-    textAlign: 'right',
-    alignSelf: 'stretch',
-    marginBottom: 2,
+    alignSelf: 'flex-start',
   },
-  // PR #71-follow-up polish — vivid premium reason rows. Tighter gap
-  // (8pt) plus a brand-coral filled badge instead of a bare glyph.
   reasonsList: { gap: 8 },
-  // Warmer rose background + delicate coral-tinted shadow for
-  // elevation. JSX order [badge, text] under flexDirection 'row'
-  // renders the badge on the physical right (RTL leading edge) so
-  // Hebrew readers see the accent immediately.
   reasonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 16,
-    shadowColor: '#FF3D57',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  // Filled brand-coral badge — small (28×28), the sparkles glyph
-  // rendered in white inside. Tinder-style anchor; bold without being
-  // garish, since the badge stays compact and the background field is
-  // soft. Background color is applied inline (UI_COLORS.branding) so
-  // dark/light modes share the same vivid coral.
-  reasonBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   reasonText: {
-    flex: 1,
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'flex-start',
   },
 
   icebreakerCard: {
