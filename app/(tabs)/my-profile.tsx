@@ -8,7 +8,6 @@ import {
   Alert,
   TextInput,
   Image,
-  I18nManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -40,7 +39,7 @@ import { labelFor } from '@/lib/profile-labels';
 
 // Design Constants
 const UI_COLORS = {
-  bg: '#FFF9F6',
+  bg: '#FFFFFF',
   primary: '#FF4D3D',
   accent: '#FF8A00',
   branding: '#FF3D57',
@@ -110,16 +109,6 @@ export default function MyProfileScreen() {
   };
 
   const isDark = colorScheme === 'dark';
-  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
-  // settings-row layout produces the same visual order regardless of
-  // whether `I18nManager.forceRTL(true)` (called once on first launch
-  // in app/_layout.tsx) has actually taken effect at layout time. On a
-  // fresh install on a non-Hebrew device the forceRTL preference is
-  // saved but the layout engine does not flip until the next JS bundle
-  // reload — so an `flexDirection: 'row'` row that DEPENDED on the
-  // auto-flip rendered LTR on the first session and only corrected
-  // itself after restart. We pick row vs row-reverse explicitly below.
-  const isRTL = I18nManager.isRTL;
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
     card: isDark ? '#1D2939' : UI_COLORS.card,
@@ -658,46 +647,17 @@ export default function MyProfileScreen() {
               <View style={styles.settingsSection}>
                 <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>הגדרות וחוקיות</ThemedText>
                 <View style={[styles.settingsCard, { backgroundColor: dynamicColors.card, borderColor: dynamicColors.border }]}>
-                  {/* PR #71-follow-up RTL polish — added a small tinted
-                      leading icon to each navigable row so the row
-                      anchors visually on the physical right (Hebrew
-                      leading edge), matching native iPhone Settings
-                      convention. Under forceRTL flexDirection:'row',
-                      JSX order [leadingIcon, text, chevron] renders as
-                      [icon-on-right, text-in-middle, chevron-on-left].
-                      The destructive delete-account row below stays
-                      without an icon AND without a chevron per iOS
-                      convention (destructive actions are unanchored).
-                      Icon colors reuse existing UI_COLORS.branding +
-                      UI_COLORS.surface — no new color tokens. */}
-                  {/* Build-#30-QA-hotfix — inline `flexDirection` chosen
-                      from `isRTL` so the [icon, text, chevron] JSX order
-                      always renders as physical [icon-right, text-middle,
-                      chevron-left] regardless of whether the I18nManager
-                      flip has actually taken effect at layout time. RTL
-                      active → 'row' (start=right under RTL); RTL not yet
-                      active → 'row-reverse' (start=right under reversed
-                      LTR). Either way: same visual order. */}
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/how-it-works' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="sparkles" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>איך זה עובד?</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/privacy-policy' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="checkmark.shield.fill" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>מדיניות פרטיות</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/terms-of-use' as any)}>
-                    <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
-                      <IconSymbol name="person.text.rectangle.fill" size={16} color={UI_COLORS.branding} />
-                    </View>
+                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
                     <ThemedText style={[styles.settingsRowText, { color: dynamicColors.text }]}>תנאי שימוש</ThemedText>
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
@@ -1094,32 +1054,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // PR #71-follow-up RTL polish — `gap: 12` cleanly separates the
-    // new leading icon, the text (flex:1), and the trailing chevron
-    // without per-side margin hacks.
-    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  // PR #71-follow-up RTL polish — small tinted leading icon (28×28
-  // soft peach circle, branded SF Symbol) per navigable row. Anchors
-  // the row visually on the Hebrew leading edge (physical right under
-  // forceRTL).
-  settingsRowIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // PR-RTL-FIX: flex: 1 + textAlign: 'right' added so each settings row's
-  // text container grows to fill the row width and the text pins to the
-  // physical right under Hebrew RTL. Without these, the row's
-  // 'space-between' had nothing to space (single child) and the text sat
-  // at its natural width without explicit right-alignment — TestFlight
-  // reported it reading visually left/center. Applies to all four rows
-  // that share this style (how-it-works, privacy-policy, terms-of-use,
-  // delete-account); identical fix per row.
   settingsRowText: {
     flex: 1,
     fontSize: 15,
