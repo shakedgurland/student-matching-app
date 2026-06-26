@@ -4,11 +4,19 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so we can opt out of the bottom inset via `edges` when this
+// component is hosted inside a tab (where the tab bar already covers
+// the home-indicator safe area). The drop-in API is identical for
+// every other prop.
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+  type Edge,
+} from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -91,13 +99,36 @@ function formatRemainingChip(msRemaining: number): string {
 export interface MatchResultContentProps {
   matchId?: string;
   onOpenChat?: (matchId: string) => void;
+  /**
+   * When true, this component is rendered inside a Tab screen (the
+   * Match tab). The bottom tab bar already covers the home-indicator
+   * safe area, so:
+   *   • SafeAreaView opts out of the bottom edge (no double padding).
+   *   • Sticky footer uses a small fixed bottom padding instead of
+   *     adding insets.bottom (which would compound the wasted gap).
+   * Defaults to false so the legacy /match-result stack-route wrapper
+   * keeps full safe-area handling unchanged.
+   */
+  hostedInTab?: boolean;
 }
 
-export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentProps) {
+export function MatchResultContent({
+  matchId,
+  onOpenChat,
+  hostedInTab = false,
+}: MatchResultContentProps) {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
+
+  // SafeAreaView edges + sticky-footer bottom padding are both
+  // gated on hostedInTab. Tab-hosted: drop bottom inset everywhere
+  // (the tab bar provides it). Standalone: full safe-area behavior.
+  const safeEdges: readonly Edge[] = hostedInTab
+    ? ['top', 'left', 'right']
+    : ['top', 'left', 'right', 'bottom'];
+  const stickyFooterBottomPad = hostedInTab ? 8 : Math.max(insets.bottom, 4);
 
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
@@ -106,6 +137,11 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
     textLight: isDark ? '#98A2B3' : UI_COLORS.textLight,
     border: isDark ? 'rgba(255,255,255,0.10)' : UI_COLORS.border,
     surfaceRose: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surfaceRose,
+    // PR #71-follow-up polish — stronger warm coral tint just for the
+    // "למה זו התאמה טובה" rows. Slightly more vivid than surfaceRose
+    // (#FFF3F4) so the cards read as alive without leaving the existing
+    // warm palette. Dark mode keeps the same translucent accent.
+    reasonRowBg: isDark ? 'rgba(255, 138, 0, 0.18)' : '#FFE9EB',
   };
 
   const [loading, setLoading] = useState(true);
@@ -292,7 +328,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={[styles.center, { flex: 1, gap: 14 }]}>
+        <SafeAreaView edges={safeEdges} style={[styles.center, { flex: 1, gap: 14 }]}>
           <ActivityIndicator size="large" color={UI_COLORS.primary} />
           <ThemedText style={[styles.loadingNote, { color: dynamicColors.textLight }]}>
             טוען את ההתאמה שלך…
@@ -305,7 +341,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
   if (errorMsg || !match || !peer) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
           <View style={styles.header}>
             <View style={styles.headerSlot} />
             <ThemedText style={[styles.headerTitle, { color: dynamicColors.text }]}>
@@ -396,7 +432,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView edges={safeEdges} style={{ flex: 1 }}>
         <View style={styles.header}>
           {/* 3-tab restructure — the top-right profile shortcut was
               removed; "הפרופיל שלי" is now a first-class tab in the
@@ -464,13 +500,13 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
               <ThemedText style={[styles.sectionTitle, { color: dynamicColors.text }]}>
                 למה זו התאמה טובה
               </ThemedText>
-              {/* PR #70 follow-up polish — replaced the legacy outlined
-                  card + red vertical stripe with a soft warm pill row
-                  per reason. Background reuses the existing surfaceRose
-                  token (already in this screen's palette for the
-                  icebreaker card), no border, no shadow. A small
-                  sparkles glyph on the leading edge keeps brand presence
-                  as an accent, not a block. Reason calculation,
+              {/* PR #71-follow-up polish — bumped from a pale soft-pill
+                  row to a vivid premium row: warmer rose surface (#FFE9EB
+                  vs the prior #FFF3F4), small filled brand-coral badge
+                  on the leading edge with a white sparkles glyph, and a
+                  delicate coral-tinted shadow for elevation. Tinder/
+                  Instagram energy on a soft field — bold accent, calm
+                  background, compact spacing. Reason calculation,
                   evidence ordering, and copy are untouched. */}
               <View style={styles.reasonsList}>
                 {evidenceCards.map((card) => (
@@ -478,13 +514,13 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
                     key={card.key}
                     style={[
                       styles.reasonRow,
-                      { backgroundColor: dynamicColors.surfaceRose },
+                      { backgroundColor: dynamicColors.reasonRowBg },
                     ]}>
-                    <View style={styles.reasonIcon}>
+                    <View style={[styles.reasonBadge, { backgroundColor: UI_COLORS.branding }]}>
                       <IconSymbol
                         name="sparkles"
-                        size={16}
-                        color={UI_COLORS.branding}
+                        size={12}
+                        color="#FFFFFF"
                       />
                     </View>
                     <ThemedText style={[styles.reasonText, { color: dynamicColors.text }]}>
@@ -551,7 +587,7 @@ export function MatchResultContent({ matchId, onOpenChat }: MatchResultContentPr
             {
               backgroundColor: dynamicColors.bg,
               borderTopColor: dynamicColors.border,
-              paddingBottom: Math.max(insets.bottom, 4),
+              paddingBottom: stickyFooterBottomPad,
             },
           ]}>
           <TouchableOpacity
@@ -664,31 +700,37 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 2,
   },
-  // PR #70 follow-up polish — softer, premium native-iOS reason rows.
-  // Tighter vertical gap so the list feels integrated into the screen
-  // instead of stacked like slide content.
+  // PR #71-follow-up polish — vivid premium reason rows. Tighter gap
+  // (8pt) plus a brand-coral filled badge instead of a bare glyph.
   reasonsList: { gap: 8 },
-  // Soft warm pill row. No border, no shadow — the surfaceRose tint
-  // alone carries the card feel. JSX order [icon, text] under
-  // flexDirection 'row' renders the icon on the physical right
-  // (RTL leading edge) for Hebrew readers, mirroring the prior
-  // stripe-on-the-right anchor without the heavy block.
+  // Warmer rose background + delicate coral-tinted shadow for
+  // elevation. JSX order [badge, text] under flexDirection 'row'
+  // renders the badge on the physical right (RTL leading edge) so
+  // Hebrew readers see the accent immediately.
   reasonRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+    alignItems: 'center',
+    gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 14,
+    borderRadius: 16,
+    shadowColor: '#FF3D57',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  // Small fixed-width slot for the sparkles glyph so multi-line reason
-  // text wraps cleanly under itself instead of around the icon.
-  reasonIcon: {
-    width: 20,
-    height: 22,
+  // Filled brand-coral badge — small (28×28), the sparkles glyph
+  // rendered in white inside. Tinder-style anchor; bold without being
+  // garish, since the badge stays compact and the background field is
+  // soft. Background color is applied inline (UI_COLORS.branding) so
+  // dark/light modes share the same vivid coral.
+  reasonBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 2,
   },
   reasonText: {
     flex: 1,

@@ -3,10 +3,13 @@ import {
   StyleSheet,
   View,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+// PR #71-follow-up polish — swap RN's SafeAreaView for the context
+// version so the Match tab can opt out of the bottom inset (the tab
+// bar already covers the home-indicator safe area).
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -422,7 +425,7 @@ export default function MatchSelectionScreen() {
   if (loading) {
     return (
       <ThemedView style={[styles.container, { backgroundColor: dynamicColors.bg }]}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
           <View style={styles.header}>
             <ThemedText style={[styles.logo, { color: UI_COLORS.branding }]}>UniMatch</ThemedText>
           </View>
@@ -450,6 +453,7 @@ export default function MatchSelectionScreen() {
       <MatchResultContent
         key={currentMatch.id}
         matchId={currentMatch.id}
+        hostedInTab
         onOpenChat={() => router.navigate('/(tabs)/chat' as any)}
       />
     );
