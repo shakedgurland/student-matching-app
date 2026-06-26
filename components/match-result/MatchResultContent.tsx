@@ -5,6 +5,7 @@ import {
   View,
   ScrollView,
   ActivityIndicator,
+  I18nManager,
   Image,
 } from 'react-native';
 // PR #71-follow-up polish — swap RN's SafeAreaView for the context
@@ -121,6 +122,16 @@ export function MatchResultContent({
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
+  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
+  // reason-row layout produces the same physical [badge-right,
+  // text-left-of-badge] order regardless of whether `forceRTL(true)`
+  // has actually taken effect at layout time. Without this, a row
+  // declared as `flexDirection: 'row'` relied on the auto-flip; on
+  // first session on a non-Hebrew device the flip hasn't applied yet
+  // and badge ended up physically on the LEFT (LTR) with text floating
+  // away from the right edge. Picking row vs row-reverse explicitly
+  // below makes the visual layout identical in both states.
+  const isRTL = I18nManager.isRTL;
 
   // SafeAreaView edges + sticky-footer bottom padding are both
   // gated on hostedInTab. Tab-hosted: drop bottom inset everywhere
@@ -514,7 +525,14 @@ export function MatchResultContent({
                     key={card.key}
                     style={[
                       styles.reasonRow,
-                      { backgroundColor: dynamicColors.reasonRowBg },
+                      {
+                        backgroundColor: dynamicColors.reasonRowBg,
+                        // Build-#30-QA-hotfix — inline flexDirection
+                        // (see isRTL comment above). Guarantees badge
+                        // physically on right + text physically to its
+                        // left regardless of forceRTL effective state.
+                        flexDirection: isRTL ? 'row' : 'row-reverse',
+                      },
                     ]}>
                     <View style={[styles.reasonBadge, { backgroundColor: UI_COLORS.branding }]}>
                       <IconSymbol
@@ -693,11 +711,20 @@ const styles = StyleSheet.create({
   },
 
   section: { gap: 10 },
+  // Build-#30-QA-hotfix — section title was using `alignSelf: 'flex-start'`
+  // which is RTL-axis-dependent: under forceRTL flex-start = physical
+  // right (correct), but when forceRTL has not yet taken effect at
+  // layout time, flex-start = physical left and the Hebrew title pinned
+  // to the left of the screen. Switching to `alignSelf: 'stretch'` +
+  // explicit `textAlign: 'right'` makes the title right-anchored
+  // regardless of the RTL flip state. `textAlign: 'right'` is honored
+  // independently of layout direction in RN.
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
     writingDirection: 'rtl',
-    alignSelf: 'flex-start',
+    textAlign: 'right',
+    alignSelf: 'stretch',
     marginBottom: 2,
   },
   // PR #71-follow-up polish — vivid premium reason rows. Tighter gap

@@ -8,6 +8,7 @@ import {
   Alert,
   TextInput,
   Image,
+  I18nManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -109,6 +110,16 @@ export default function MyProfileScreen() {
   };
 
   const isDark = colorScheme === 'dark';
+  // Build-#30-QA-hotfix — read I18nManager.isRTL at render time so the
+  // settings-row layout produces the same visual order regardless of
+  // whether `I18nManager.forceRTL(true)` (called once on first launch
+  // in app/_layout.tsx) has actually taken effect at layout time. On a
+  // fresh install on a non-Hebrew device the forceRTL preference is
+  // saved but the layout engine does not flip until the next JS bundle
+  // reload — so an `flexDirection: 'row'` row that DEPENDED on the
+  // auto-flip rendered LTR on the first session and only corrected
+  // itself after restart. We pick row vs row-reverse explicitly below.
+  const isRTL = I18nManager.isRTL;
   const dynamicColors = {
     bg: isDark ? '#101828' : UI_COLORS.bg,
     card: isDark ? '#1D2939' : UI_COLORS.card,
@@ -659,7 +670,15 @@ export default function MyProfileScreen() {
                       convention (destructive actions are unanchored).
                       Icon colors reuse existing UI_COLORS.branding +
                       UI_COLORS.surface — no new color tokens. */}
-                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/how-it-works' as any)}>
+                  {/* Build-#30-QA-hotfix — inline `flexDirection` chosen
+                      from `isRTL` so the [icon, text, chevron] JSX order
+                      always renders as physical [icon-right, text-middle,
+                      chevron-left] regardless of whether the I18nManager
+                      flip has actually taken effect at layout time. RTL
+                      active → 'row' (start=right under RTL); RTL not yet
+                      active → 'row-reverse' (start=right under reversed
+                      LTR). Either way: same visual order. */}
+                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/how-it-works' as any)}>
                     <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
                       <IconSymbol name="sparkles" size={16} color={UI_COLORS.branding} />
                     </View>
@@ -667,7 +686,7 @@ export default function MyProfileScreen() {
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/privacy-policy' as any)}>
+                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/privacy-policy' as any)}>
                     <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
                       <IconSymbol name="checkmark.shield.fill" size={16} color={UI_COLORS.branding} />
                     </View>
@@ -675,7 +694,7 @@ export default function MyProfileScreen() {
                     <IconSymbol name="chevron.left" size={16} color={dynamicColors.textLight} />
                   </TouchableOpacity>
                   <View style={[styles.settingsDivider, { backgroundColor: dynamicColors.border }]} />
-                  <TouchableOpacity style={styles.settingsRow} onPress={() => router.push('/terms-of-use' as any)}>
+                  <TouchableOpacity style={[styles.settingsRow, { flexDirection: isRTL ? 'row' : 'row-reverse' }]} onPress={() => router.push('/terms-of-use' as any)}>
                     <View style={[styles.settingsRowIcon, { backgroundColor: isDark ? 'rgba(255, 138, 0, 0.18)' : UI_COLORS.surface }]}>
                       <IconSymbol name="person.text.rectangle.fill" size={16} color={UI_COLORS.branding} />
                     </View>
